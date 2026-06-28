@@ -42,6 +42,7 @@ fun CallScreen(vm: KlicViewModel, call: CallSession, peerName: String, onEnd: ()
     val remoteVideo by manager.remoteVideoTrack.collectAsState()
     val localVideo by manager.localVideoTrack.collectAsState()
     val isVideo = call.kind == "VIDEO"
+    val shouldShowVideo = cameraEnabled || localVideo != null || remoteVideo != null
 
     LaunchedEffect(call.callId) {
         runCatching {
@@ -54,7 +55,7 @@ fun CallScreen(vm: KlicViewModel, call: CallSession, peerName: String, onEnd: ()
     }
 
     Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-        if (isVideo && remoteVideo != null) {
+        if (shouldShowVideo && remoteVideo != null) {
             LiveKitVideo(manager.room, remoteVideo, Modifier.fillMaxSize())
         }
 
@@ -64,7 +65,7 @@ fun CallScreen(vm: KlicViewModel, call: CallSession, peerName: String, onEnd: ()
             verticalArrangement = Arrangement.SpaceBetween,
         ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                if (!(isVideo && remoteVideo != null)) {
+                if (!(shouldShowVideo && remoteVideo != null)) {
                     Box(
                         Modifier.size(120.dp).background(MaterialTheme.colorScheme.surfaceVariant, CircleShape),
                         contentAlignment = Alignment.Center,
@@ -106,7 +107,7 @@ fun CallScreen(vm: KlicViewModel, call: CallSession, peerName: String, onEnd: ()
             }
         }
 
-        if (isVideo && cameraEnabled && localVideo != null) {
+        if (shouldShowVideo && cameraEnabled && localVideo != null) {
             LiveKitVideo(
                 manager.room, localVideo,
                 Modifier.padding(20.dp).size(110.dp, 160.dp).clip(RoundedCornerShape(18.dp))
