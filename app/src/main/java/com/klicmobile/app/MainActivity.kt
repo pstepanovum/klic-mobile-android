@@ -17,6 +17,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
@@ -34,6 +37,7 @@ import com.klicmobile.app.calling.CallSignalingService
 import com.klicmobile.app.calling.IncomingCallActivity
 import com.klicmobile.app.feature.KlicViewModel
 import com.klicmobile.app.feature.auth.AuthScreen
+import com.klicmobile.app.feature.auth.WelcomeScreen
 import com.klicmobile.app.feature.call.CallDialScreen
 import com.klicmobile.app.feature.call.CallScreen
 import com.klicmobile.app.feature.chat.ChatScreen
@@ -86,8 +90,13 @@ class MainActivity : ComponentActivity() {
             LaunchedEffect(isAuthed) {
                 if (isAuthed) CallSignalingService.start(context) else CallSignalingService.stop(context)
             }
+            var showWelcome by remember { mutableStateOf(true) }
             KlicTheme(isDark = isDark) {
-                if (!isAuthed) AuthScreen(vm) else Home(vm)
+                when {
+                    isAuthed       -> Home(vm)
+                    showWelcome    -> WelcomeScreen { showWelcome = false }
+                    else           -> AuthScreen(vm)
+                }
             }
         }
     }

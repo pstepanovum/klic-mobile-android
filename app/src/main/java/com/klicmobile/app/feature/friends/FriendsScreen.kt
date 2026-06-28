@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -31,10 +32,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.klicmobile.app.data.FriendRequest
 import com.klicmobile.app.data.User
 import com.klicmobile.app.feature.KlicViewModel
+import com.klicmobile.app.ui.components.KlicLottieView
 import com.klicmobile.app.ui.components.KlicTextField
 import com.klicmobile.app.ui.theme.KlicIcons
 
@@ -104,6 +107,26 @@ fun FriendsScreen(vm: KlicViewModel, onOpenConversation: (String) -> Unit) {
         items(friends) { friend ->
             FriendRow(friend) {
                 vm.openConversationWith(friend.id) { convo -> onOpenConversation(convo.id) }
+            }
+        }
+        item {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 8.dp, bottom = 16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                KlicLottieView(
+                    name = "01",
+                    modifier = Modifier.fillMaxWidth().height(180.dp),
+                )
+                Text(
+                    "Your people, all in one place.",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(top = 6.dp),
+                )
             }
         }
     }

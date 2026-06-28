@@ -9,8 +9,10 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
@@ -18,19 +20,30 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.klicmobile.app.feature.KlicViewModel
+import com.klicmobile.app.ui.components.KlicLottieView
 
 @Composable
 fun SettingsScreen(vm: KlicViewModel) {
     val user by vm.currentUser.collectAsState()
     val isDark by vm.isDark.collectAsState()
+    val context = LocalContext.current
+    val versionName = remember {
+        try { context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: "1.0" }
+        catch (e: Exception) { "1.0" }
+    }
 
     Column(
         Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
+            .verticalScroll(rememberScrollState())
             .padding(20.dp),
     ) {
         Text(
@@ -92,6 +105,20 @@ fun SettingsScreen(vm: KlicViewModel) {
         ) {
             Text("Log out", modifier = Modifier.padding(vertical = 6.dp))
         }
+
+        Spacer(Modifier.height(20.dp))
+
+        KlicLottieView(
+            name = "07",
+            modifier = Modifier.fillMaxWidth().height(140.dp),
+        )
+        Text(
+            "Version $versionName",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth().padding(top = 6.dp, bottom = 8.dp),
+        )
     }
 }
 
