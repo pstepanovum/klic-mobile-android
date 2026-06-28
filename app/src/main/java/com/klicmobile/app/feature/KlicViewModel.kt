@@ -112,8 +112,9 @@ class KlicViewModel(
             callPeerId.value = userId
             runCatching {
                 val convo = repo.openConversation(userId)
-                repo.startCall(convo.id, kind)
-            }.onSuccess { session ->
+                convo.id to repo.startCall(convo.id, kind)
+            }.onSuccess { (convoId, session) ->
+                container.activeCallConversationId.value = convoId
                 startActiveCall(session, peerName, outgoing = true)
                 onStarted()
             }
@@ -171,7 +172,10 @@ class KlicViewModel(
         callPeerName.value = peerName
         callPeerId.value = conversations.value.firstOrNull { it.id == conversationId }?.members?.firstOrNull()?.id
         runCatching { repo.startCall(conversationId, kind) }
-            .onSuccess { startActiveCall(it, peerName, outgoing = true) }
+            .onSuccess {
+                container.activeCallConversationId.value = conversationId
+                startActiveCall(it, peerName, outgoing = true)
+            }
     }
 
     /** Answer an incoming call (from the full-screen notification): fetch a join token. */
@@ -323,6 +327,7 @@ class KlicViewModel(
             activeCall.value = null
             activeCallOutgoing = false
             callStatus.value = "Ended"
+            container.activeCallConversationId.value = null
         }
         viewModelScope.launch {
             if (delayMs > 0) delay(delayMs)

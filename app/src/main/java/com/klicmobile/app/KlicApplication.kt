@@ -8,6 +8,7 @@ import com.klicmobile.app.data.Network
 import com.klicmobile.app.data.TokenStore
 import com.klicmobile.app.realtime.SocketService
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 
 /** Tiny manual DI container — swap for Hilt as the app grows. */
@@ -35,6 +36,11 @@ class AppContainer(app: Application) {
     )
     val socket = SocketService()
     val callManager = CallManager(app)
+
+    /** Conversation id of the call the user is currently placing/in. The call service reads
+     *  this to suppress a duplicate incoming-call screen for that same conversation (glare):
+     *  the server already collapses simultaneous calls into one. Null when not in a call. */
+    val activeCallConversationId = MutableStateFlow<String?>(null)
 
     private val prefs = app.getSharedPreferences("klic_prefs", android.content.Context.MODE_PRIVATE)
     var isDark: Boolean

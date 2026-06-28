@@ -35,9 +35,14 @@ class CallSignalingService : Service() {
             startForeground(CallNotifications.SERVICE_ID, CallNotifications.serviceNotification(this))
         }
 
-        val socket = (application as KlicApplication).container.socket
+        val container = (application as KlicApplication).container
+        val socket = container.socket
         scope.launch {
             socket.incomingCalls.collect { invite ->
+                // Glare guard: if we're already placing/in a call with this same conversation,
+                // don't pop a second incoming-call screen. The server collapses simultaneous
+                // calls into one, so this incoming is the duplicate side of our own call.
+                if (container.activeCallConversationId.value == invite.conversationId) return@collect
                 CallNotifications.showIncomingCall(this@CallSignalingService, invite.toCallInvite())
             }
         }
