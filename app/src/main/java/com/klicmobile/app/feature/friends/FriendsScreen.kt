@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -17,6 +18,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
@@ -31,26 +34,36 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.klicmobile.app.data.FriendRequest
+import com.klicmobile.app.data.Network
 import com.klicmobile.app.data.User
 import com.klicmobile.app.feature.KlicViewModel
+import com.klicmobile.app.ui.components.AvatarView
 import com.klicmobile.app.ui.components.KlicLottieView
 import com.klicmobile.app.ui.components.KlicTextField
 import com.klicmobile.app.ui.theme.KlicIcons
 
 @Composable
-fun FriendsScreen(vm: KlicViewModel, onOpenConversation: (String) -> Unit) {
+fun FriendsScreen(vm: KlicViewModel, onOpenProfile: (String) -> Unit) {
     val friends by vm.friends.collectAsState()
     val requests by vm.friendRequests.collectAsState()
     val status by vm.friendStatus.collectAsState()
+    val presenceMap by vm.presence.collectAsState()
     var username by remember { mutableStateOf("") }
 
     LaunchedEffect(Unit) { vm.loadFriends() }
 
-    LazyColumn(modifier = Modifier.fillMaxSize().padding(horizontal = 20.dp)) {
+    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
+    LazyColumn(
+        modifier = Modifier
+            .widthIn(max = 680.dp)
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp),
+    ) {
         item {
             Text("Add by username", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 16.dp))
             Row(Modifier.fillMaxWidth().padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -105,8 +118,9 @@ fun FriendsScreen(vm: KlicViewModel, onOpenConversation: (String) -> Unit) {
             }
         }
         items(friends) { friend ->
-            FriendRow(friend) {
-                vm.openConversationWith(friend.id) { convo -> onOpenConversation(convo.id) }
+            val online = presenceMap[friend.id]?.online == true
+            FriendRow(friend, online) {
+                vm.openConversationWith(friend.id) { convo -> onOpenProfile(convo.id) }
             }
         }
         item {
@@ -130,6 +144,7 @@ fun FriendsScreen(vm: KlicViewModel, onOpenConversation: (String) -> Unit) {
             }
         }
     }
+    } // Box
 }
 
 @Composable
@@ -147,7 +162,7 @@ private fun RequestRow(req: FriendRequest, onAccept: () -> Unit, onDecline: () -
             .padding(12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Avatar()
+        AvatarView(url = Network.avatarUrl(req.from.id), name = req.from.displayName, size = 44.dp)
         Column(Modifier.weight(1f).padding(start = 12.dp)) {
             Text(req.from.displayName, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurface)
             Text("@${req.from.username}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -177,7 +192,7 @@ private fun RequestRow(req: FriendRequest, onAccept: () -> Unit, onDecline: () -
 }
 
 @Composable
-private fun FriendRow(friend: User, onClick: () -> Unit) {
+private fun FriendRow(friend: User, online: Boolean, onClick: () -> Unit) {
     Row(
         Modifier
             .fillMaxWidth()
@@ -187,29 +202,25 @@ private fun FriendRow(friend: User, onClick: () -> Unit) {
             .padding(12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Avatar()
+        Box(contentAlignment = Alignment.BottomEnd) {
+            AvatarView(url = friend.avatarUrl, name = friend.displayName, size = 44.dp)
+            if (online) {
+                Box(
+                    Modifier
+                        .size(13.dp)
+                        .background(MaterialTheme.colorScheme.surface, CircleShape)
+                        .padding(2.dp)
+                        .background(Color(0xFF22C55E), CircleShape),
+                )
+            }
+        }
         Column(Modifier.weight(1f).padding(start = 12.dp)) {
             Text(friend.displayName, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurface)
             Text("@${friend.username}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         Icon(
-            painter = painterResource(KlicIcons.message),
-            contentDescription = "Message",
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.size(20.dp),
-        )
-    }
-}
-
-@Composable
-private fun Avatar() {
-    Box(
-        Modifier.size(44.dp).background(MaterialTheme.colorScheme.surfaceVariant, CircleShape),
-        contentAlignment = Alignment.Center,
-    ) {
-        Icon(
-            painter = painterResource(KlicIcons.user),
-            contentDescription = null,
+            imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+            contentDescription = "View profile",
             tint = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.size(22.dp),
         )

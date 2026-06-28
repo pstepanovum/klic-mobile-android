@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -22,6 +23,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -29,48 +33,61 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import com.klicmobile.app.data.User
 import com.klicmobile.app.feature.KlicViewModel
+import com.klicmobile.app.ui.components.KlicSearchBar
 import com.klicmobile.app.ui.theme.KlicIcons
 
 @Composable
 fun CallDialScreen(vm: KlicViewModel, onCallStarted: () -> Unit) {
     val friends by vm.friends.collectAsState()
+    var searchText by remember { mutableStateOf("") }
 
     LaunchedEffect(Unit) { vm.loadFriends() }
 
-    LazyColumn(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-            .padding(horizontal = 16.dp),
+    val filtered = if (searchText.isEmpty()) friends else friends.filter {
+        val q = searchText.lowercase()
+        it.displayName.lowercase().contains(q) || it.username.lowercase().contains(q)
+    }
+
+    Box(
+        modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
+        contentAlignment = Alignment.TopCenter,
     ) {
-        item {
+        Column(Modifier.widthIn(max = 680.dp).fillMaxWidth()) {
             Text(
                 "Call",
                 style = MaterialTheme.typography.headlineMedium,
                 color = MaterialTheme.colorScheme.onBackground,
-                modifier = Modifier.padding(top = 20.dp, bottom = 8.dp),
+                modifier = Modifier.padding(start = 16.dp, top = 20.dp, bottom = 8.dp),
             )
-        }
-        if (friends.isEmpty()) {
-            item {
-                Text(
-                    "No friends yet — add them in Friends.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 16.dp),
-                )
+            KlicSearchBar(
+                value = searchText,
+                onValueChange = { searchText = it },
+                placeholder = "Search contacts",
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+            )
+            LazyColumn(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
+                if (friends.isEmpty()) {
+                    item {
+                        Text(
+                            "No friends yet — add them in Friends.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 16.dp),
+                        )
+                    }
+                }
+                items(filtered) { friend ->
+                    FriendCallRow(
+                        friend = friend,
+                        onAudioCall = {
+                            vm.callFriendDirect(friend.id, "AUDIO", friend.displayName, onCallStarted)
+                        },
+                        onVideoCall = {
+                            vm.callFriendDirect(friend.id, "VIDEO", friend.displayName, onCallStarted)
+                        },
+                    )
+                }
             }
-        }
-        items(friends) { friend ->
-            FriendCallRow(
-                friend = friend,
-                onAudioCall = {
-                    vm.callFriendDirect(friend.id, "AUDIO", friend.displayName, onCallStarted)
-                },
-                onVideoCall = {
-                    vm.callFriendDirect(friend.id, "VIDEO", friend.displayName, onCallStarted)
-                },
-            )
         }
     }
 }

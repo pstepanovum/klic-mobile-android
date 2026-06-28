@@ -4,10 +4,13 @@ import android.graphics.PorterDuff
 import android.graphics.PorterDuffColorFilter
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
@@ -47,8 +50,12 @@ fun WelcomeScreen(onGetStarted: () -> Unit) {
     )
     val dynamicProperties = rememberLottieDynamicProperties(colorFilterProp)
 
+    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
     Column(
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier
+            .fillMaxHeight()
+            .widthIn(max = 500.dp)
+            .fillMaxWidth(),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         LottieAnimation(
@@ -103,4 +110,5 @@ fun WelcomeScreen(onGetStarted: () -> Unit) {
             modifier = Modifier.padding(top = 16.dp, bottom = 48.dp),
         )
     }
+    } // Box
 }

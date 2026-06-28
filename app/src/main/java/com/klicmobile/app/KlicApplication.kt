@@ -7,6 +7,8 @@ import com.klicmobile.app.data.KlicRepository
 import com.klicmobile.app.data.Network
 import com.klicmobile.app.data.TokenStore
 import com.klicmobile.app.realtime.SocketService
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
 
 /** Tiny manual DI container — swap for Hilt as the app grows. */
 class KlicApplication : Application() {
@@ -22,7 +24,15 @@ class KlicApplication : Application() {
 
 class AppContainer(app: Application) {
     val tokenStore = TokenStore(app)
-    val repository = KlicRepository(Network.create(tokenStore), tokenStore)
+
+    // Emitted when the server rejects our refresh token (a genuine sign-out).
+    private val _sessionExpired = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    val sessionExpired: SharedFlow<Unit> = _sessionExpired
+
+    val repository = KlicRepository(
+        Network.create(tokenStore) { _sessionExpired.tryEmit(Unit) },
+        tokenStore,
+    )
     val socket = SocketService()
     val callManager = CallManager(app)
 

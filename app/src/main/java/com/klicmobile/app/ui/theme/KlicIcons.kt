@@ -18,4 +18,15 @@ object KlicIcons {
     val settings = R.drawable.ic_line_setting
     val close    = R.drawable.ic_bold_close
     val back     = R.drawable.ic_bold_arrow_left
+    val copy     = R.drawable.ic_line_copy
+    val check    = R.drawable.ic_line_check
+    val add      = R.drawable.ic_bold_add
+    val gallery  = R.drawable.ic_bold_gallery
+    val document = R.drawable.ic_bold_document
+    // Tab bar — line (inactive) and bold (active) pairs
+    val messageChat     = R.drawable.ic_line_message_3
+    val messageChatBold = R.drawable.ic_bold_message_3
+    val userBold        = R.drawable.ic_bold_user
+    val phoneBold       = R.drawable.ic_bold_phone
+    val settingsBold    = R.drawable.ic_bold_setting
 }

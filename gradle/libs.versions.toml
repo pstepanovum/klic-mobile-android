@@ -12,6 +12,7 @@ datastore = "1.1.1"
 livekit = "2.11.0"
 socketio = "2.1.1"
 lottie = "6.6.0"
+coil = "2.7.0"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -34,6 +35,7 @@ retrofit-kotlinx-serialization = { group = "com.squareup.retrofit2", name = "con
 livekit-android = { group = "io.livekit", name = "livekit-android", version.ref = "livekit" }
 socketio-client = { group = "io.socket", name = "socket.io-client", version.ref = "socketio" }
 lottie-compose = { group = "com.airbnb.android", name = "lottie-compose", version.ref = "lottie" }
+coil-compose = { group = "io.coil-kt", name = "coil-compose", version.ref = "coil" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

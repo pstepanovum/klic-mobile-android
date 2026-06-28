@@ -27,7 +27,9 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import com.klicmobile.app.calling.LiveKitVideo
 import com.klicmobile.app.data.CallSession
+import com.klicmobile.app.data.Network
 import com.klicmobile.app.feature.KlicViewModel
+import com.klicmobile.app.ui.components.AvatarView
 import com.klicmobile.app.ui.components.CircleControl
 import com.klicmobile.app.ui.theme.KlicIcons
 import kotlinx.coroutines.launch
@@ -41,6 +43,7 @@ fun CallScreen(vm: KlicViewModel, call: CallSession, peerName: String, onEnd: ()
     val cameraEnabled by manager.cameraEnabled.collectAsState()
     val remoteVideo by manager.remoteVideoTrack.collectAsState()
     val localVideo by manager.localVideoTrack.collectAsState()
+    val peerId by vm.callPeerId.collectAsState()
     val isVideo = call.kind == "VIDEO"
     val shouldShowVideo = cameraEnabled || localVideo != null || remoteVideo != null
 
@@ -66,17 +69,11 @@ fun CallScreen(vm: KlicViewModel, call: CallSession, peerName: String, onEnd: ()
         ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 if (!(shouldShowVideo && remoteVideo != null)) {
-                    Box(
-                        Modifier.size(120.dp).background(MaterialTheme.colorScheme.surfaceVariant, CircleShape),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Icon(
-                            painter = painterResource(KlicIcons.user),
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(48.dp),
-                        )
-                    }
+                    AvatarView(
+                        url = peerId?.let { Network.avatarUrl(it) },
+                        name = peerName,
+                        size = 120.dp,
+                    )
                     Spacer(Modifier.height(16.dp))
                 }
                 Text(peerName, style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onBackground)

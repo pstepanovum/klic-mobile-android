@@ -10,6 +10,7 @@ import com.klicmobile.app.data.KlicRepository
 import com.klicmobile.app.data.Message
 import com.klicmobile.app.data.TokenStore
 import com.klicmobile.app.data.User
+import com.klicmobile.app.data.UserProfile
 import com.klicmobile.app.realtime.SocketService
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -17,6 +18,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
+import java.time.Instant
 
 class KlicViewModel(
     private val repo: KlicRepository,
@@ -33,8 +35,10 @@ class KlicViewModel(
 
     val conversations = MutableStateFlow<List<Conversation>>(emptyList())
     val messages = MutableStateFlow<List<Message>>(emptyList())
+    val presence = socket.presence   // userId -> online / last-seen
     val activeCall = MutableStateFlow<CallSession?>(null)
     val callPeerName = MutableStateFlow("")
+    val callPeerId = MutableStateFlow<String?>(null)
     val callStatus = MutableStateFlow("Calling...")
 
     val friends = MutableStateFlow<List<User>>(emptyList())
@@ -44,7 +48,15 @@ class KlicViewModel(
     init {
         viewModelScope.launch {
             tokenStore.load()
-            if (repo.isAuthenticated) onAuthed()
+            repo.restoreCachedUser()
+            if (repo.isAuthenticated) {
+                // Show the signed-in UI immediately from cached state, then renew the
+                // access token (if stale) before bringing realtime online.
+                isAuthenticated.value = true
+                currentUser.value = repo.currentUser
+                runCatching { repo.ensureFreshToken() }
+                onAuthed()
+            }
         }
         viewModelScope.launch {
             socket.incomingMessages.collect { msg ->
@@ -55,6 +67,15 @@ class KlicViewModel(
             socket.callEvents.collect { event ->
                 handleCallEvent(event)
             }
+        }
+        viewModelScope.launch {
+            container.sessionExpired.collect { handleSessionExpired() }
+        }
+        viewModelScope.launch {
+            socket.readReceipts.collect { applyReceipt(it, read = true) }
+        }
+        viewModelScope.launch {
+            socket.deliveredReceipts.collect { applyReceipt(it, read = false) }
         }
     }
 
@@ -88,6 +109,7 @@ class KlicViewModel(
         viewModelScope.launch {
             if (activeCall.value != null) return@launch
             callPeerName.value = peerName
+            callPeerId.value = userId
             runCatching {
                 val convo = repo.openConversation(userId)
                 repo.startCall(convo.id, kind)
@@ -147,6 +169,7 @@ class KlicViewModel(
     fun startCall(conversationId: String, kind: String, peerName: String) = viewModelScope.launch {
         if (activeCall.value != null) return@launch
         callPeerName.value = peerName
+        callPeerId.value = conversations.value.firstOrNull { it.id == conversationId }?.members?.firstOrNull()?.id
         runCatching { repo.startCall(conversationId, kind) }
             .onSuccess { startActiveCall(it, peerName, outgoing = true) }
     }
@@ -197,10 +220,54 @@ class KlicViewModel(
         loadConversations()
     }
 
+    /** The server rejected our refresh token — a real sign-out (not a transient error). */
+    private fun handleSessionExpired() {
+        socket.disconnect()
+        currentUser.value = null
+        isAuthenticated.value = false
+    }
+
     /** Emit a read receipt for the open conversation. */
     fun markRead(conversationId: String) {
         socket.emit("message:read", buildJsonObject { put("conversationId", conversationId) })
     }
+
+    // ── Profile ───────────────────────────────────────────────────────────────
+    fun saveProfile(displayName: String, avatarBytes: ByteArray?, contentType: String?, onDone: () -> Unit) =
+        viewModelScope.launch {
+            runCatching {
+                val key = if (avatarBytes != null && contentType != null) {
+                    repo.uploadAvatar(avatarBytes, contentType)
+                } else null
+                repo.updateProfile(displayName = displayName, avatarKey = key)
+            }.onSuccess { currentUser.value = it; onDone() }
+                .onFailure { error.value = "Couldn't save profile. Try again." }
+        }
+
+    fun setShowLastSeen(value: Boolean) = viewModelScope.launch {
+        runCatching { repo.updateProfile(showLastSeen = value) }.onSuccess { currentUser.value = it }
+    }
+
+    suspend fun fetchProfile(userId: String): UserProfile? =
+        runCatching { repo.userProfile(userId) }.getOrNull()
+
+    // Advance ticks on the user's own messages when a read/delivered receipt arrives.
+    private fun applyReceipt(receipt: SocketService.Receipt, read: Boolean) {
+        val myId = currentUser.value?.id
+        if (receipt.conversationId != openConversationId || receipt.userId == myId) return
+        messages.value = messages.value.map { m ->
+            val mine = m.senderId == myId
+            val before = msMillis(m.createdAt)?.let { it <= receipt.atMs } == true
+            when {
+                !mine || !before -> m
+                read -> m.copy(status = "read")
+                m.status != "read" -> m.copy(status = "delivered")
+                else -> m
+            }
+        }
+    }
+
+    private fun msMillis(iso: String): Long? = runCatching { Instant.parse(iso).toEpochMilli() }.getOrNull()
 
     private fun startActiveCall(session: CallSession, peerName: String, outgoing: Boolean) {
         if (activeCall.value != null && activeCall.value?.callId != session.callId) return

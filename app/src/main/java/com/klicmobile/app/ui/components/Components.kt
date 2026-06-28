@@ -32,9 +32,11 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.painter.Painter
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
+import com.klicmobile.app.ui.theme.KlicIcons
 
 /** Fully-rounded flat primary button — no shadow, no border (design rules). */
 @Composable
@@ -56,6 +58,49 @@ fun PillButton(
     ) {
         Text(text, modifier = Modifier.padding(vertical = 6.dp))
     }
+}
+
+/** Capsule search field with leading search icon and optional clear button. */
+@Composable
+fun KlicSearchBar(
+    value: String,
+    onValueChange: (String) -> Unit,
+    modifier: Modifier = Modifier,
+    placeholder: String = "Search",
+) {
+    OutlinedTextField(
+        value = value,
+        onValueChange = onValueChange,
+        modifier = modifier.fillMaxWidth(),
+        placeholder = { Text(placeholder, style = MaterialTheme.typography.bodyMedium) },
+        singleLine = true,
+        leadingIcon = {
+            Icon(
+                painter = painterResource(KlicIcons.search),
+                contentDescription = null,
+                modifier = Modifier.size(18.dp),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+            )
+        },
+        trailingIcon = if (value.isNotEmpty()) ({
+            IconButton(onClick = { onValueChange("") }) {
+                Icon(
+                    painter = painterResource(KlicIcons.close),
+                    contentDescription = "Clear",
+                    modifier = Modifier.size(16.dp),
+                )
+            }
+        }) else null,
+        shape = CircleShape,
+        colors = OutlinedTextFieldDefaults.colors(
+            focusedContainerColor   = MaterialTheme.colorScheme.surface,
+            unfocusedContainerColor = MaterialTheme.colorScheme.surface,
+            focusedBorderColor      = Color.Transparent,
+            unfocusedBorderColor    = Color.Transparent,
+            focusedTextColor        = MaterialTheme.colorScheme.onSurface,
+            unfocusedTextColor      = MaterialTheme.colorScheme.onSurface,
+        ),
+    )
 }
 
 /** Flat capsule text field with no visible outline. */

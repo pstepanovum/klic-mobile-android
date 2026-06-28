@@ -1,14 +1,19 @@
 package com.klicmobile.app.data
 
 import kotlinx.serialization.json.Json
+import okhttp3.Authenticator
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
+import okhttp3.Request
 import okhttp3.ResponseBody
+import okhttp3.Route
+import retrofit2.Call
 import retrofit2.Response
 import retrofit2.Retrofit
 import retrofit2.converter.kotlinx.serialization.asConverterFactory
 import retrofit2.http.Body
 import retrofit2.http.GET
+import retrofit2.http.PATCH
 import retrofit2.http.POST
 import retrofit2.http.Path
 import retrofit2.http.Query
@@ -19,6 +24,18 @@ interface KlicApi {
 
     @POST("auth/login")
     suspend fun login(@Body body: LoginRequest): AuthResponse
+
+    @POST("auth/refresh")
+    suspend fun refresh(@Body body: RefreshRequest): AuthResponse
+
+    @PATCH("me")
+    suspend fun updateProfile(@Body body: kotlinx.serialization.json.JsonObject): User
+
+    @POST("me/avatar-upload")
+    suspend fun avatarUpload(@Body body: AvatarUploadRequest): UploadTicket
+
+    @GET("users/{id}")
+    suspend fun userProfile(@Path("id") id: String): UserProfile
 
     @GET("conversations")
     suspend fun conversations(): List<Conversation>
@@ -63,27 +80,105 @@ interface KlicApi {
     suspend fun joinToken(@Path("id") id: String): CallSession
 }
 
+/** Bare, synchronous refresh used by the Authenticator (no auth header, no authenticator → no recursion). */
+private interface AuthApi {
+    @POST("auth/refresh")
+    fun refresh(@Body body: RefreshRequest): Call<AuthResponse>
+}
+
 object Network {
     // Live server (TLS via sslip.io). For local dev use "http://10.0.2.2:3000" (emulator → host).
     const val BASE_HTTP = "https://api.89.34.230.2.sslip.io"
     private const val API = "$BASE_HTTP/api/v1/"
 
+    /** Public, stable avatar URL for any user id (404s → UI falls back to initials). */
+    fun avatarUrl(userId: String): String = "$BASE_HTTP/api/v1/users/$userId/avatar"
+
     private val json = Json { ignoreUnknownKeys = true }
 
-    fun create(tokenStore: TokenStore): KlicApi {
+    fun create(tokenStore: TokenStore, onSessionExpired: () -> Unit): KlicApi {
+        val converter = json.asConverterFactory("application/json".toMediaType())
+
+        // Plain client (no interceptors) so refresh never recurses through itself.
+        val authApi = Retrofit.Builder()
+            .baseUrl(API)
+            .client(OkHttpClient.Builder().build())
+            .addConverterFactory(converter)
+            .build()
+            .create(AuthApi::class.java)
+
         val client = OkHttpClient.Builder()
             .addInterceptor { chain ->
                 val builder = chain.request().newBuilder()
                 tokenStore.cachedAccess?.let { builder.header("Authorization", "Bearer $it") }
                 chain.proceed(builder.build())
             }
+            .authenticator(TokenAuthenticator(tokenStore, authApi, onSessionExpired))
             .build()
 
         return Retrofit.Builder()
             .baseUrl(API)
             .client(client)
-            .addConverterFactory(json.asConverterFactory("application/json".toMediaType()))
+            .addConverterFactory(converter)
             .build()
             .create(KlicApi::class.java)
+    }
+}
+
+/**
+ * Refreshes the access token when a request comes back `401`, then replays it. A lock
+ * serializes concurrent 401s so a burst triggers a single rotation rather than many.
+ *
+ * Only a `401` from the refresh endpoint itself is a genuine sign-out (clear tokens +
+ * notify). Any other failure (network/5xx) is transient — we keep the tokens and just
+ * give up on this request, so the user is never logged out by a hiccup.
+ */
+private class TokenAuthenticator(
+    private val tokenStore: TokenStore,
+    private val authApi: AuthApi,
+    private val onSessionExpired: () -> Unit,
+) : Authenticator {
+    private val lock = Any()
+
+    override fun authenticate(route: Route?, response: okhttp3.Response): Request? {
+        // Stop after one retry to avoid loops.
+        if (responseCount(response) >= 2) return null
+        val refreshToken = tokenStore.cachedRefresh ?: return null
+        val sentToken = response.request.header("Authorization")?.removePrefix("Bearer ")
+
+        synchronized(lock) {
+            // Another thread may have already refreshed while we waited on the lock.
+            val current = tokenStore.cachedAccess
+            if (current != null && current != sentToken) {
+                return response.request.newBuilder()
+                    .header("Authorization", "Bearer $current")
+                    .build()
+            }
+
+            val result = runCatching { authApi.refresh(RefreshRequest(refreshToken)).execute() }
+            val http = result.getOrNull()
+            val body = http?.takeIf { it.isSuccessful }?.body()
+            if (body != null) {
+                tokenStore.saveBlocking(body.accessToken, body.refreshToken)
+                return response.request.newBuilder()
+                    .header("Authorization", "Bearer ${body.accessToken}")
+                    .build()
+            }
+            if (http?.code() == 401) {
+                tokenStore.clearBlocking()
+                onSessionExpired()
+            }
+            return null
+        }
+    }
+
+    private fun responseCount(response: okhttp3.Response): Int {
+        var count = 1
+        var prior = response.priorResponse
+        while (prior != null) {
+            count++
+            prior = prior.priorResponse
+        }
+        return count
     }
 }

@@ -8,6 +8,29 @@ data class User(
     val username: String,
     val displayName: String,
     val avatarUrl: String? = null,
+    val showLastSeen: Boolean? = null,   // present on /me + auth responses
+)
+
+/** A friend's profile (GET /users/:id). lastSeenAt/online are null when hidden by privacy. */
+@Serializable
+data class UserProfile(
+    val id: String,
+    val username: String,
+    val displayName: String,
+    val avatarUrl: String? = null,
+    val lastSeenAt: String? = null,
+    val online: Boolean? = null,
+)
+
+@Serializable
+data class AvatarUploadRequest(val contentType: String, val byteSize: Int)
+
+@Serializable
+data class UploadTicket(
+    val key: String,
+    val uploadUrl: String,
+    val expiresAt: String? = null,
+    val maxBytes: Long? = null,
 )
 
 @Serializable
@@ -24,7 +47,15 @@ data class RegisterRequest(val username: String, val password: String, val displ
 data class LoginRequest(val username: String, val password: String)
 
 @Serializable
-data class Member(val id: String, val username: String, val displayName: String)
+data class RefreshRequest(val refreshToken: String)
+
+@Serializable
+data class Member(
+    val id: String,
+    val username: String,
+    val displayName: String,
+    val avatarUrl: String? = null,
+)
 
 @Serializable
 data class Conversation(
@@ -42,6 +73,7 @@ data class Message(
     val body: String,
     val kind: String = "TEXT",
     val createdAt: String = "",
+    val status: String? = null,   // "sent" | "delivered" | "read" — own messages only
 )
 
 @Serializable

@@ -8,6 +8,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -21,8 +22,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider.Factory
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -43,6 +46,8 @@ import com.klicmobile.app.feature.call.CallScreen
 import com.klicmobile.app.feature.chat.ChatScreen
 import com.klicmobile.app.feature.conversations.ConversationsScreen
 import com.klicmobile.app.feature.friends.FriendsScreen
+import com.klicmobile.app.feature.profile.ProfileScreen
+import com.klicmobile.app.feature.settings.EditProfileScreen
 import com.klicmobile.app.feature.settings.SettingsScreen
 import com.klicmobile.app.ui.theme.KlicIcons
 import com.klicmobile.app.ui.theme.KlicTheme
@@ -52,13 +57,14 @@ private data class Tab(
     val route: String,
     val label: String,
     val iconRes: Int,
+    val boldIconRes: Int,
 )
 
 private val tabs = listOf(
-    Tab("home",     "Chats",    KlicIcons.message),
-    Tab("friends",  "Friends",  KlicIcons.user),
-    Tab("call",     "Call",     KlicIcons.phone),
-    Tab("settings", "Settings", KlicIcons.settings),
+    Tab("home",     "Chats",    KlicIcons.messageChat,    KlicIcons.messageChatBold),
+    Tab("friends",  "Friends",  KlicIcons.user,           KlicIcons.userBold),
+    Tab("call",     "Call",     KlicIcons.phone,          KlicIcons.phoneBold),
+    Tab("settings", "Settings", KlicIcons.settings,       KlicIcons.settings),
 )
 
 private val tabRoutes = tabs.map { it.route }.toSet()
@@ -132,10 +138,10 @@ class MainActivity : ComponentActivity() {
             bottomBar = {
                 if (showBar) {
                     NavigationBar {
-                        val current = backStack?.destination
                         tabs.forEach { tab ->
+                            val selected = route == tab.route
                             NavigationBarItem(
-                                selected = current?.hierarchy?.any { it.route == tab.route } == true,
+                                selected = selected,
                                 onClick = {
                                     navController.navigate(tab.route) {
                                         popUpTo(navController.graph.findStartDestination().id) { saveState = true }
@@ -145,8 +151,9 @@ class MainActivity : ComponentActivity() {
                                 },
                                 icon = {
                                     Icon(
-                                        painter = painterResource(tab.iconRes),
+                                        painter = painterResource(if (selected) tab.boldIconRes else tab.iconRes),
                                         contentDescription = tab.label,
+                                        modifier = Modifier.size(28.dp),
                                     )
                                 },
                                 label = { Text(tab.label) },
@@ -165,13 +172,16 @@ class MainActivity : ComponentActivity() {
                     ConversationsScreen(vm) { convo -> navController.navigate("chat/${convo.id}") }
                 }
                 composable("friends") {
-                    FriendsScreen(vm) { conversationId -> navController.navigate("chat/$conversationId") }
+                    FriendsScreen(vm) { conversationId -> navController.navigate("profile/$conversationId") }
                 }
                 composable("call") {
                     CallDialScreen(vm) { navController.navigate("active_call") }
                 }
                 composable("settings") {
-                    SettingsScreen(vm)
+                    SettingsScreen(vm, onEditProfile = { navController.navigate("edit_profile") })
+                }
+                composable("edit_profile") {
+                    EditProfileScreen(vm) { navController.popBackStack() }
                 }
                 composable("chat/{conversationId}") { entry ->
                     val id = entry.arguments?.getString("conversationId").orEmpty()
@@ -181,8 +191,21 @@ class MainActivity : ComponentActivity() {
                             conversation = convo,
                             onBack = { navController.popBackStack() },
                             onCall = { navController.navigate("active_call") },
+                            onOpenProfile = { navController.navigate("profile/${convo.id}") },
                         )
                     }
+                }
+                composable("profile/{conversationId}") { entry ->
+                    val id = entry.arguments?.getString("conversationId").orEmpty()
+                    ProfileScreen(
+                        vm = vm,
+                        conversationId = id,
+                        onBack = { navController.popBackStack() },
+                        onCall = { navController.navigate("active_call") },
+                        onMessage = {
+                            navController.navigate("chat/$id") { popUpTo("home") }
+                        },
+                    )
                 }
                 composable("active_call") {
                     val call by vm.activeCall.collectAsState()
