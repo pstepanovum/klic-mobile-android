@@ -2,7 +2,6 @@ package com.klic.app.calling
 
 import android.content.Context
 import io.livekit.android.LiveKit
-import io.livekit.android.events.RoomEvent
 import io.livekit.android.events.collect
 import io.livekit.android.room.Room
 import io.livekit.android.room.track.VideoTrack
@@ -31,7 +30,7 @@ class CallManager(private val appContext: Context) {
 
     suspend fun join(url: String, token: String, video: Boolean) {
         val room = LiveKit.create(appContext).also { this.room = it }
-        scope.launch { room.events.collect { onRoomEvent(it) } }
+        scope.launch { room.events.collect { refreshTracks() } }
         room.connect(url, token)
         room.localParticipant.setMicrophoneEnabled(true)
         if (video) room.localParticipant.setCameraEnabled(true)
@@ -60,17 +59,6 @@ class CallManager(private val appContext: Context) {
         isConnected.value = false
         localVideoTrack.value = null
         remoteVideoTrack.value = null
-    }
-
-    private fun onRoomEvent(event: RoomEvent) {
-        when (event) {
-            is RoomEvent.TrackSubscribed,
-            is RoomEvent.TrackUnsubscribed,
-            is RoomEvent.ParticipantConnected,
-            is RoomEvent.ParticipantDisconnected,
-            is RoomEvent.LocalTrackPublished -> refreshTracks()
-            else -> {}
-        }
     }
 
     private fun refreshTracks() {

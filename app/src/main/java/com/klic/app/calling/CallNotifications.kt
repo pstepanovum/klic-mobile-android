@@ -12,7 +12,9 @@ import com.klic.app.R
 object CallNotifications {
     const val CHANNEL_CALLS = "calls"
     const val CHANNEL_MESSAGES = "messages"
+    const val CHANNEL_SERVICE = "service"
     const val INCOMING_CALL_ID = 1001
+    const val SERVICE_ID = 1
     const val MESSAGE_ID_BASE = 2000
 
     fun createChannels(context: Context) {
@@ -26,6 +28,23 @@ object CallNotifications {
         nm.createNotificationChannel(
             NotificationChannel(CHANNEL_MESSAGES, "Messages", NotificationManager.IMPORTANCE_DEFAULT)
         )
+        nm.createNotificationChannel(
+            NotificationChannel(CHANNEL_SERVICE, "Connection", NotificationManager.IMPORTANCE_MIN).apply {
+                description = "Keeps Klic connected for calls"
+            }
+        )
+    }
+
+    /** Persistent notification for the foreground connection service. */
+    fun serviceNotification(context: Context): Notification {
+        createChannels(context)
+        return NotificationCompat.Builder(context, CHANNEL_SERVICE)
+            .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .setContentTitle("Klic")
+            .setContentText("Connected for calls")
+            .setOngoing(true)
+            .setPriority(NotificationCompat.PRIORITY_MIN)
+            .build()
     }
 
     /** Full-screen, high-priority incoming-call notification (rings while backgrounded/locked). */

@@ -13,7 +13,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Logout
+import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -51,7 +51,7 @@ fun ConversationsScreen(vm: KlicViewModel, onOpenChat: (Conversation) -> Unit) {
                 title = { Text("Chats", style = MaterialTheme.typography.titleLarge) },
                 actions = {
                     IconButton(onClick = { vm.logout() }) {
-                        Icon(Icons.Default.Logout, contentDescription = "Log out")
+                        Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = "Log out")
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Background),

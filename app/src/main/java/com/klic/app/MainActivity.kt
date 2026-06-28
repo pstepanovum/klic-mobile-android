@@ -7,6 +7,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.filled.People
@@ -20,6 +21,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider.Factory
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -30,6 +32,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.klic.app.calling.CallInvite
+import com.klic.app.calling.CallSignalingService
 import com.klic.app.calling.IncomingCallActivity
 import com.klic.app.feature.KlicViewModel
 import com.klic.app.feature.auth.AuthScreen
@@ -70,6 +73,10 @@ class MainActivity : ComponentActivity() {
             KlicTheme {
                 val vm: KlicViewModel = viewModel(factory = factory(container))
                 val isAuthed by vm.isAuthenticated.collectAsState()
+                val context = LocalContext.current
+                LaunchedEffect(isAuthed) {
+                    if (isAuthed) CallSignalingService.start(context) else CallSignalingService.stop(context)
+                }
                 if (!isAuthed) AuthScreen(vm) else Home(vm)
             }
         }

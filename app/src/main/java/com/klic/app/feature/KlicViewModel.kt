@@ -11,7 +11,6 @@ import com.klic.app.data.Message
 import com.klic.app.data.TokenStore
 import com.klic.app.data.User
 import com.klic.app.realtime.SocketService
-import com.google.firebase.messaging.FirebaseMessaging
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.buildJsonObject
@@ -137,13 +136,6 @@ class KlicViewModel(
         currentUser.value = repo.currentUser
         tokenStore.cachedAccess?.let { socket.connect(it) }
         loadConversations()
-        registerPushToken()
-    }
-
-    private fun registerPushToken() {
-        FirebaseMessaging.getInstance().token.addOnSuccessListener { token ->
-            viewModelScope.launch { repo.registerDevice(token) }
-        }
     }
 
     /** Emit a read receipt for the open conversation. */
