@@ -29,19 +29,26 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.CallMade
+import androidx.compose.material.icons.automirrored.filled.CallReceived
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
+import com.klicmobile.app.data.RecentCall
 import com.klicmobile.app.data.User
 import com.klicmobile.app.feature.KlicViewModel
 import com.klicmobile.app.ui.components.KlicSearchBar
 import com.klicmobile.app.ui.theme.KlicIcons
+import java.time.Duration
+import java.time.Instant
 
 @Composable
 fun CallDialScreen(vm: KlicViewModel, onCallStarted: () -> Unit) {
     val friends by vm.friends.collectAsState()
+    val recents by vm.recentCalls.collectAsState()
     var searchText by remember { mutableStateOf("") }
 
-    LaunchedEffect(Unit) { vm.loadFriends() }
+    LaunchedEffect(Unit) { vm.loadFriends(); vm.loadRecentCalls() }
 
     val filtered = if (searchText.isEmpty()) friends else friends.filter {
         val q = searchText.lowercase()
@@ -66,6 +73,17 @@ fun CallDialScreen(vm: KlicViewModel, onCallStarted: () -> Unit) {
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
             )
             LazyColumn(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
+                if (searchText.isEmpty() && recents.isNotEmpty()) {
+                    item { SectionHeader("Recent") }
+                    items(recents) { call ->
+                        RecentCallRow(call) {
+                            val name = call.peer?.displayName ?: "Call"
+                            vm.startCall(call.conversationId, call.kind, name)
+                            onCallStarted()
+                        }
+                    }
+                    item { SectionHeader("Contacts") }
+                }
                 if (friends.isEmpty()) {
                     item {
                         Text(
@@ -121,6 +139,89 @@ private fun FriendCallRow(friend: User, onAudioCall: () -> Unit, onVideoCall: ()
             CallIconButton(KlicIcons.phone, "Audio call", MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.onPrimary, onAudioCall)
             CallIconButton(KlicIcons.video, "Video call", MaterialTheme.colorScheme.surfaceVariant, MaterialTheme.colorScheme.onSurface, onVideoCall)
         }
+    }
+}
+
+@Composable
+private fun SectionHeader(title: String) {
+    Text(
+        title.uppercase(),
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(top = 14.dp, bottom = 2.dp),
+    )
+}
+
+@Composable
+private fun RecentCallRow(call: RecentCall, onCallBack: () -> Unit) {
+    val missed = call.outcome != "completed"
+    val red = Color(0xFFE5484D)
+    val direction = if (call.outgoing) "Outgoing" else if (missed) "Missed" else "Incoming"
+    val subtitle = if (!missed && call.durationMs != null) {
+        "$direction · ${callDurationText(call.durationMs)} · ${relativeTime(call.startedAt)}"
+    } else {
+        "$direction · ${relativeTime(call.startedAt)}"
+    }
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp)
+            .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(20.dp))
+            .padding(12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            Modifier.size(50.dp).background(MaterialTheme.colorScheme.surfaceVariant, CircleShape),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                painter = painterResource(KlicIcons.user),
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(22.dp),
+            )
+        }
+        Column(Modifier.weight(1f).padding(start = 14.dp)) {
+            Text(
+                call.peer?.displayName ?: "Unknown",
+                style = MaterialTheme.typography.titleMedium,
+                color = if (missed) red else MaterialTheme.colorScheme.onSurface,
+            )
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                Icon(
+                    imageVector = if (call.outgoing) Icons.AutoMirrored.Filled.CallMade else Icons.AutoMirrored.Filled.CallReceived,
+                    contentDescription = null,
+                    tint = if (missed) red else MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(12.dp),
+                )
+                Text(subtitle, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+        CallIconButton(
+            if (call.isVideo) KlicIcons.video else KlicIcons.phone,
+            "Call back",
+            MaterialTheme.colorScheme.primary,
+            MaterialTheme.colorScheme.onPrimary,
+            onCallBack,
+        )
+    }
+}
+
+private fun callDurationText(ms: Int?): String {
+    val s = (ms ?: 0).coerceAtLeast(0) / 1000
+    return if (s >= 3600) "%d:%02d:%02d".format(s / 3600, (s % 3600) / 60, s % 60)
+    else "%d:%02d".format(s / 60, s % 60)
+}
+
+private fun relativeTime(iso: String): String {
+    val then = runCatching { Instant.parse(iso) }.getOrNull() ?: return ""
+    val d = Duration.between(then, Instant.now())
+    return when {
+        d.toMinutes() < 1 -> "now"
+        d.toMinutes() < 60 -> "${d.toMinutes()}m ago"
+        d.toHours() < 24 -> "${d.toHours()}h ago"
+        else -> "${d.toDays()}d ago"
     }
 }
 

@@ -18,6 +18,9 @@ val TikTokSans = FontFamily(
     Font(R.font.tiktoksans_black, FontWeight.Black),
 )
 
+// Bangers — a bold display face used for the brand tagline.
+val Bangers = FontFamily(Font(R.font.bangers_regular, FontWeight.Normal))
+
 val KlicTypography = Typography(
     displayLarge = TextStyle(fontFamily = TikTokSans, fontWeight = FontWeight.Black, fontSize = 40.sp),
     titleLarge = TextStyle(fontFamily = TikTokSans, fontWeight = FontWeight.Bold, fontSize = 22.sp),

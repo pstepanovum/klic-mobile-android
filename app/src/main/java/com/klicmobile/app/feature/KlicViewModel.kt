@@ -8,6 +8,8 @@ import com.klicmobile.app.data.Conversation
 import com.klicmobile.app.data.FriendRequest
 import com.klicmobile.app.data.KlicRepository
 import com.klicmobile.app.data.Message
+import com.klicmobile.app.data.RecentCall
+import com.klicmobile.app.data.Sticker
 import com.klicmobile.app.data.TokenStore
 import com.klicmobile.app.data.User
 import com.klicmobile.app.data.UserProfile
@@ -44,6 +46,9 @@ class KlicViewModel(
     val friends = MutableStateFlow<List<User>>(emptyList())
     val friendRequests = MutableStateFlow<List<FriendRequest>>(emptyList())
     val friendStatus = MutableStateFlow<String?>(null)
+
+    val recentCalls = MutableStateFlow<List<RecentCall>>(emptyList())
+    val stickers = MutableStateFlow<List<Sticker>>(emptyList())
 
     init {
         viewModelScope.launch {
@@ -165,6 +170,20 @@ class KlicViewModel(
     fun send(conversationId: String, body: String) = viewModelScope.launch {
         runCatching { repo.send(conversationId, body) }
             .onSuccess { messages.value = messages.value + it }
+    }
+
+    fun sendSticker(conversationId: String, stickerId: String) = viewModelScope.launch {
+        runCatching { repo.sendSticker(conversationId, stickerId) }
+            .onSuccess { messages.value = messages.value + it }
+    }
+
+    fun loadRecentCalls() = viewModelScope.launch {
+        runCatching { repo.recentCalls() }.onSuccess { recentCalls.value = it }
+    }
+
+    fun loadStickers() = viewModelScope.launch {
+        if (stickers.value.isNotEmpty()) return@launch
+        runCatching { repo.stickers() }.onSuccess { stickers.value = it }
     }
 
     fun sendVoice(conversationId: String, bytes: ByteArray, durationMs: Int, waveform: ByteArray) =

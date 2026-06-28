@@ -107,6 +107,11 @@ class KlicRepository(
     suspend fun send(conversationId: String, body: String): Message =
         api.send(conversationId, SendMessageRequest(body))
 
+    suspend fun recentCalls(): List<RecentCall> = api.recentCalls()
+    suspend fun stickers(): List<Sticker> = api.stickers().stickers
+    suspend fun sendSticker(conversationId: String, stickerId: String): Message =
+        api.sendSticker(conversationId, SendStickerRequest(stickerId))
+
     suspend fun uploadVoice(
         conversationId: String,
         bytes: ByteArray,

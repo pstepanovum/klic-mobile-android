@@ -60,6 +60,7 @@ dependencies {
     // Animations
     implementation(libs.lottie.compose)
 
-    // Image loading (avatars)
+    // Image loading (avatars, SVG stickers)
     implementation(libs.coil.compose)
+    implementation(libs.coil.svg)
 }

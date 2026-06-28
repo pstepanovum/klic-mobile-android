@@ -25,6 +25,7 @@ import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.airbnb.lottie.LottieProperty
 import com.airbnb.lottie.compose.LottieAnimation
 import com.airbnb.lottie.compose.LottieCompositionSpec
@@ -79,8 +80,10 @@ fun WelcomeScreen(onGetStarted: () -> Unit) {
 
         Text(
             "Talk. Chat. Connect.",
-            style = MaterialTheme.typography.headlineSmall.copy(
+            style = MaterialTheme.typography.headlineMedium.copy(
+                fontFamily = com.klicmobile.app.ui.theme.Bangers,
                 fontWeight = androidx.compose.ui.text.font.FontWeight.Normal,
+                letterSpacing = 0.5.sp,
             ),
             color = MaterialTheme.colorScheme.onBackground,
             textAlign = TextAlign.Center,

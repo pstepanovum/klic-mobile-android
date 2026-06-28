@@ -1,6 +1,9 @@
 package com.klicmobile.app
 
 import android.app.Application
+import coil.ImageLoader
+import coil.ImageLoaderFactory
+import coil.decode.SvgDecoder
 import com.klicmobile.app.calling.CallManager
 import com.klicmobile.app.calling.CallNotifications
 import com.klicmobile.app.data.KlicRepository
@@ -12,7 +15,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 
 /** Tiny manual DI container — swap for Hilt as the app grows. */
-class KlicApplication : Application() {
+class KlicApplication : Application(), ImageLoaderFactory {
     lateinit var container: AppContainer
         private set
 
@@ -21,6 +24,10 @@ class KlicApplication : Application() {
         container = AppContainer(this)
         CallNotifications.createChannels(this)
     }
+
+    // App-wide Coil loader that can decode the SVG sticker pack served from the API.
+    override fun newImageLoader(): ImageLoader =
+        ImageLoader.Builder(this).components { add(SvgDecoder.Factory()) }.build()
 }
 
 class AppContainer(app: Application) {

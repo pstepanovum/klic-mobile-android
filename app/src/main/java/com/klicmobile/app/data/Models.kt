@@ -80,6 +80,15 @@ data class Attachment(
 )
 
 @Serializable
+data class CallEvent(
+    val kind: String,           // "AUDIO" | "VIDEO"
+    val outcome: String,        // "completed" | "missed" | "declined" | "canceled"
+    val durationMs: Int? = null,
+) {
+    val isVideo: Boolean get() = kind == "VIDEO"
+}
+
+@Serializable
 data class Message(
     val id: String,
     val conversationId: String,
@@ -89,7 +98,44 @@ data class Message(
     val createdAt: String = "",
     val status: String? = null,   // "sent" | "delivered" | "read" — own messages only
     val attachments: List<Attachment> = emptyList(),
+    val stickerId: String? = null,
+    val stickerUrl: String? = null,
+    val call: CallEvent? = null,
+) {
+    val isCallEvent: Boolean get() = kind == "CALL_EVENT"
+    val isSticker: Boolean get() = kind == "STICKER"
+}
+
+@Serializable
+data class RecentCall(
+    val id: String,
+    val conversationId: String,
+    val kind: String,
+    val outgoing: Boolean,
+    val outcome: String,
+    val startedAt: String,
+    val durationMs: Int? = null,
+    val peer: RecentCallPeer? = null,
+) {
+    val isVideo: Boolean get() = kind == "VIDEO"
+}
+
+@Serializable
+data class RecentCallPeer(
+    val id: String,
+    val username: String,
+    val displayName: String,
+    val avatarUrl: String? = null,
 )
+
+@Serializable
+data class Sticker(val id: String, val url: String)
+
+@Serializable
+data class StickerCatalog(val stickers: List<Sticker> = emptyList())
+
+@Serializable
+data class SendStickerRequest(val stickerId: String)
 
 @Serializable
 data class UploadRequest(

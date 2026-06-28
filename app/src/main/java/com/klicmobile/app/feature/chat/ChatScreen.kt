@@ -34,6 +34,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DoneAll
+import androidx.compose.material.icons.filled.EmojiEmotions
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -106,8 +107,11 @@ fun ChatScreen(
 
     val focusManager = LocalFocusManager.current
     var showAttachSheet by remember { mutableStateOf(false) }
+    var showStickerSheet by remember { mutableStateOf(false) }
     var tempCameraUri by remember { mutableStateOf<Uri?>(null) }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val stickerSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val stickers by vm.stickers.collectAsState()
 
     val recorder = remember { VoiceRecorder(context) }
     val micPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
@@ -206,6 +210,7 @@ fun ChatScreen(
                         isMine  = isMine,
                         isFirst = isFirst,
                         isLast  = isLast,
+                        onCallBack = { kind -> vm.startCall(conversation.id, kind, title); onCall(kind) },
                     )
                 }
             }
@@ -228,6 +233,7 @@ fun ChatScreen(
                         if (draft.isNotBlank()) { vm.send(conversation.id, draft.trim()); draft = "" }
                     },
                     onAttach = { showAttachSheet = true },
+                    onStickers = { focusManager.clearFocus(); vm.loadStickers(); showStickerSheet = true },
                     onMic    = { micPermission.launch(Manifest.permission.RECORD_AUDIO) },
                 )
             }
@@ -260,13 +266,41 @@ fun ChatScreen(
             )
         }
     }
+
+    if (showStickerSheet) {
+        ModalBottomSheet(
+            onDismissRequest = { showStickerSheet = false },
+            sheetState = stickerSheetState,
+            containerColor = MaterialTheme.colorScheme.surface,
+        ) {
+            StickerPickerSheet(stickers = stickers) { id ->
+                vm.sendSticker(conversation.id, id)
+                scope.launch { stickerSheetState.hide() }.invokeOnCompletion { showStickerSheet = false }
+            }
+        }
+    }
 }
 
 // MARK: - Message bubble
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun MessageBubble(message: Message, isMine: Boolean, isFirst: Boolean, isLast: Boolean) {
+private fun MessageBubble(
+    message: Message,
+    isMine: Boolean,
+    isFirst: Boolean,
+    isLast: Boolean,
+    onCallBack: (String) -> Unit = {},
+) {
+    if (message.isCallEvent && message.call != null) {
+        CallEventBubble(message.call, outgoing = isMine, time = shortTime(message.createdAt), onCallBack = onCallBack)
+        return
+    }
+    if (message.isSticker) {
+        StickerBubble(message, isMine = isMine, time = if (isLast) shortTime(message.createdAt) else null)
+        return
+    }
+
     val tailRadius = 4.dp
     val fullRadius = 18.dp
     val clipboard = LocalClipboardManager.current
@@ -457,6 +491,7 @@ private fun ComposerBar(
     onChange: (String) -> Unit,
     onSend: () -> Unit,
     onAttach: () -> Unit,
+    onStickers: () -> Unit,
     onMic: () -> Unit,
 ) {
     val focusRequester = remember { FocusRequester() }
@@ -484,6 +519,20 @@ private fun ComposerBar(
                 painter = painterResource(KlicIcons.add),
                 contentDescription = "Attach",
                 modifier = Modifier.size(20.dp),
+            )
+        }
+        IconButton(
+            onClick = onStickers,
+            modifier = Modifier.size(44.dp),
+            colors = IconButtonDefaults.iconButtonColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                contentColor   = MaterialTheme.colorScheme.onSurfaceVariant,
+            ),
+        ) {
+            Icon(
+                imageVector = Icons.Filled.EmojiEmotions,
+                contentDescription = "Stickers",
+                modifier = Modifier.size(22.dp),
             )
         }
         TextField(

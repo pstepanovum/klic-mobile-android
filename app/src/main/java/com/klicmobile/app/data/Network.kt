@@ -84,6 +84,15 @@ interface KlicApi {
 
     @POST("calls/{id}/token")
     suspend fun joinToken(@Path("id") id: String): CallSession
+
+    @GET("calls")
+    suspend fun recentCalls(): List<RecentCall>
+
+    @GET("stickers")
+    suspend fun stickers(): StickerCatalog
+
+    @POST("conversations/{id}/messages")
+    suspend fun sendSticker(@Path("id") id: String, @Body body: SendStickerRequest): Message
 }
 
 /** Bare, synchronous refresh used by the Authenticator (no auth header, no authenticator → no recursion). */
