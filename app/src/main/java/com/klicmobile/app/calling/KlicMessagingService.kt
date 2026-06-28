@@ -1,0 +1,45 @@
+package com.klicmobile.app.calling
+
+import android.content.Intent
+import com.google.firebase.messaging.FirebaseMessagingService
+import com.google.firebase.messaging.RemoteMessage
+import com.klicmobile.app.KlicApplication
+import kotlinx.coroutines.launch
+
+/**
+ * Receives high-priority FCM data messages — the wake path for incoming calls when the
+ * app is backgrounded or killed (the foreground socket service only covers the running
+ * app, and Android 15 caps how long it may stay alive). Mirrors the call-end handling in
+ * [CallSignalingService] so both transports behave identically.
+ */
+class KlicMessagingService : FirebaseMessagingService() {
+
+    private val container get() = (application as KlicApplication).container
+
+    override fun onNewToken(token: String) {
+        // Register whenever the token rotates; no-ops server-side if we're not signed in.
+        container.applicationScope.launch { container.repository.registerDevice(token) }
+    }
+
+    override fun onMessageReceived(message: RemoteMessage) {
+        val data = message.data
+        when (data["type"]) {
+            "call.invite" -> {
+                val invite = CallInvite.fromMap(data)
+                if (invite.callId.isBlank()) return
+                // Glare guard: don't pop an incoming screen for a call we're already placing.
+                if (container.activeCallConversationId.value == invite.conversationId) return
+                CallNotifications.showIncomingCall(this, invite)
+            }
+            "call.end", "call.cancel", "call.decline" -> {
+                CallNotifications.cancelIncomingCall(this)
+                sendBroadcast(
+                    Intent(IncomingCallActivity.ACTION_CALL_ENDED).apply {
+                        setPackage(packageName)
+                        putExtra("callId", data["callId"])
+                    }
+                )
+            }
+        }
+    }
+}

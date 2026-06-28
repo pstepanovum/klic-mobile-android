@@ -18,6 +18,7 @@ import java.time.Instant
 /** Socket.io client mirroring klic-server/src/realtime/events.ts. */
 class SocketService {
     private var socket: Socket? = null
+    private var currentAccessToken: String? = null
     private var myUserId: String? = null
 
     val incomingMessages = MutableSharedFlow<Message>(extraBufferCapacity = 32)
@@ -59,6 +60,10 @@ class SocketService {
     }
 
     fun connect(accessToken: String) {
+        if (socket?.connected() == true && currentAccessToken == accessToken) return
+        socket?.off()
+        socket?.disconnect()
+        currentAccessToken = accessToken
         myUserId = AccessToken.subject(accessToken)
         val opts = IO.Options().apply { auth = mapOf("token" to accessToken) }
         val socket = IO.socket(Network.BASE_HTTP, opts).also { this.socket = it }
@@ -171,7 +176,12 @@ class SocketService {
     }
 
     fun emit(event: String, payload: JsonObject) = socket?.emit(event, JSONObject(payload.toString()))
-    fun disconnect() { socket?.disconnect(); socket = null }
+    fun disconnect() {
+        socket?.off()
+        socket?.disconnect()
+        socket = null
+        currentAccessToken = null
+    }
 
     private fun buildPayload(vararg pairs: Pair<String, String>): JsonObject =
         JsonObject(pairs.associate { it.first to kotlinx.serialization.json.JsonPrimitive(it.second) })

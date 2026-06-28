@@ -44,11 +44,25 @@
             android:showOnLockScreen="true"
             android:theme="@style/Theme.Klic" />
 
-        <!-- Keeps the Socket.io connection alive in the background (no Firebase) -->
+        <!-- Keeps the Socket.io connection alive while running; FCM is the wake path
+             for calls when the app is backgrounded or killed. -->
         <service
             android:name=".calling.CallSignalingService"
             android:exported="false"
             android:foregroundServiceType="dataSync" />
+
+        <!-- FCM: high-priority data messages ring incoming calls even when killed/Dozing -->
+        <service
+            android:name=".calling.KlicMessagingService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
+
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="calls" />
 
         <!-- Provides content URIs for camera-captured images -->
         <provider

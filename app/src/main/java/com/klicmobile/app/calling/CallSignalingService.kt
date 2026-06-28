@@ -21,6 +21,7 @@ import kotlinx.coroutines.launch
  */
 class CallSignalingService : Service() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+    private var collectorsStarted = false
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -37,6 +38,13 @@ class CallSignalingService : Service() {
 
         val container = (application as KlicApplication).container
         val socket = container.socket
+        scope.launch(Dispatchers.IO) {
+            container.tokenStore.load()
+            runCatching { container.repository.ensureFreshToken() }
+            container.tokenStore.cachedAccess?.let { socket.connect(it) }
+        }
+        if (collectorsStarted) return START_STICKY
+        collectorsStarted = true
         scope.launch {
             socket.incomingCalls.collect { invite ->
                 // Glare guard: if we're already placing/in a call with this same conversation,
@@ -64,6 +72,13 @@ class CallSignalingService : Service() {
             }
         }
         return START_STICKY
+    }
+
+    // Android 15 caps a dataSync foreground service at ~6h/24h, then calls this. We must
+    // stop within a few seconds or the system throws ForegroundServiceDidNotStopInTimeException.
+    // Incoming calls still arrive via FCM after the service is gone.
+    override fun onTimeout(startId: Int, fgsType: Int) {
+        stopSelf(startId)
     }
 
     override fun onDestroy() {

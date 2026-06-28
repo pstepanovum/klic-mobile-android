@@ -3,6 +3,7 @@ plugins {
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.kotlin.serialization)
+    alias(libs.plugins.google.services)
 }
 
 android {
@@ -56,6 +57,10 @@ dependencies {
     // Realtime + media
     implementation(libs.socketio.client)
     implementation(libs.livekit.android)
+
+    // Push (FCM) — wakes the app to ring incoming calls when backgrounded/killed
+    implementation(platform(libs.firebase.bom))
+    implementation(libs.firebase.messaging)
 
     // Animations
     implementation(libs.lottie.compose)

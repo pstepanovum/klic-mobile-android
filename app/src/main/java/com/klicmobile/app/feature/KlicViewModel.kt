@@ -14,6 +14,7 @@ import com.klicmobile.app.data.TokenStore
 import com.klicmobile.app.data.User
 import com.klicmobile.app.data.UserProfile
 import com.klicmobile.app.realtime.SocketService
+import com.google.firebase.messaging.FirebaseMessaging
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -92,6 +93,15 @@ class KlicViewModel(
         viewModelScope.launch {
             socket.callEvents.collect { event ->
                 handleCallEvent(event)
+            }
+        }
+        viewModelScope.launch {
+            callManager.remoteParticipantDisconnected.collect {
+                val id = activeCall.value?.callId ?: return@collect
+                if (callStatus.value == "Connected") {
+                    repo.endCall(id)
+                    finishCall(callId = id)
+                }
             }
         }
         viewModelScope.launch {
@@ -326,7 +336,15 @@ class KlicViewModel(
         isAuthenticated.value = true
         currentUser.value = repo.currentUser
         tokenStore.cachedAccess?.let { socket.connect(it) }
+        registerPushToken()
         loadConversations()
+    }
+
+    /** Register this device's FCM token so the server can ring incoming calls when killed. */
+    private fun registerPushToken() {
+        FirebaseMessaging.getInstance().token.addOnSuccessListener { token ->
+            viewModelScope.launch { repo.registerDevice(token) }
+        }
     }
 
     /** The server rejected our refresh token — a real sign-out (not a transient error). */

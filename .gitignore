@@ -9,4 +9,5 @@ local.properties
 *.jks
 captures/
 .cxx/
+.kotlin/
 .DS_Store

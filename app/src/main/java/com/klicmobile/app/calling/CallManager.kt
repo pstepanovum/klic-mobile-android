@@ -2,12 +2,15 @@ package com.klicmobile.app.calling
 
 import android.content.Context
 import io.livekit.android.LiveKit
+import io.livekit.android.events.RoomEvent
 import io.livekit.android.events.collect
 import io.livekit.android.room.Room
 import io.livekit.android.room.track.VideoTrack
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 
@@ -22,16 +25,25 @@ class CallManager(private val appContext: Context) {
     val cameraEnabled = MutableStateFlow(false)
     val localVideoTrack = MutableStateFlow<VideoTrack?>(null)
     val remoteVideoTrack = MutableStateFlow<VideoTrack?>(null)
+    val remoteParticipantDisconnected = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
 
     var room: Room? = null
         private set
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+    private var eventsJob: Job? = null
 
     suspend fun join(url: String, token: String, video: Boolean) {
         leave()
         val room = LiveKit.create(appContext).also { this.room = it }
-        scope.launch { room.events.collect { refreshTracks() } }
+        eventsJob = scope.launch {
+            room.events.collect { event ->
+                refreshTracks()
+                if (event is RoomEvent.ParticipantDisconnected) {
+                    remoteParticipantDisconnected.tryEmit(Unit)
+                }
+            }
+        }
         room.connect(url, token)
         room.localParticipant.setMicrophoneEnabled(true)
         if (video) room.localParticipant.setCameraEnabled(true)
@@ -56,6 +68,8 @@ class CallManager(private val appContext: Context) {
     }
 
     fun leave() {
+        eventsJob?.cancel()
+        eventsJob = null
         room?.disconnect()
         room = null
         isConnected.value = false
