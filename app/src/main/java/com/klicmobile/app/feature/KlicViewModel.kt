@@ -3,6 +3,7 @@ package com.klicmobile.app.feature
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.klicmobile.app.calling.CallManager
+import com.klicmobile.app.calling.CallNotifications
 import com.klicmobile.app.calling.OngoingCallService
 import com.klicmobile.app.data.CallSession
 import com.klicmobile.app.data.Conversation
@@ -212,6 +213,8 @@ class KlicViewModel(
     fun openChat(conversationId: String) = viewModelScope.launch {
         openConversationId = conversationId
         replyingTo.value = null
+        // Clear any pending notification (and its launcher badge) for this conversation.
+        CallNotifications.cancelMessage(container.appContext, conversationId)
         runCatching { repo.messages(conversationId) }
             .onSuccess { messages.value = it.reversed().filterNot { m -> m.id in hiddenIds } }
     }

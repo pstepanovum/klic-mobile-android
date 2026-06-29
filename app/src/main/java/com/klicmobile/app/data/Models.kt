@@ -63,6 +63,7 @@ data class Conversation(
     val type: String,
     val members: List<Member> = emptyList(),
     val lastMessage: Message? = null,
+    val unreadCount: Int = 0,
 )
 
 @Serializable

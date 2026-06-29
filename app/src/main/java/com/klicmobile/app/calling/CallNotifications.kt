@@ -35,7 +35,9 @@ object CallNotifications {
             }
         )
         nm.createNotificationChannel(
-            NotificationChannel(CHANNEL_MESSAGES, "Messages", NotificationManager.IMPORTANCE_DEFAULT)
+            NotificationChannel(CHANNEL_MESSAGES, "Messages", NotificationManager.IMPORTANCE_DEFAULT).apply {
+                setShowBadge(true) // launcher badge dot for unread messages
+            }
         )
         nm.createNotificationChannel(
             NotificationChannel(CHANNEL_SERVICE, "Connection", NotificationManager.IMPORTANCE_MIN).apply {
@@ -148,13 +150,27 @@ object CallNotifications {
 
     fun showMessage(context: Context, title: String, body: String, conversationId: String) {
         createChannels(context)
+        val open = Intent(context, MainActivity::class.java).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+        }
+        val pending = PendingIntent.getActivity(
+            context, conversationId.hashCode(), open,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
         val notification = NotificationCompat.Builder(context, CHANNEL_MESSAGES)
             .setSmallIcon(R.drawable.ic_launcher_foreground)
             .setContentTitle(title)
             .setContentText(body)
+            .setCategory(NotificationCompat.CATEGORY_MESSAGE)
             .setAutoCancel(true)
+            .setContentIntent(pending)
             .build()
         context.getSystemService(NotificationManager::class.java)
             .notify(MESSAGE_ID_BASE + conversationId.hashCode(), notification)
+    }
+
+    fun cancelMessage(context: Context, conversationId: String) {
+        context.getSystemService(NotificationManager::class.java)
+            .cancel(MESSAGE_ID_BASE + conversationId.hashCode())
     }
 }

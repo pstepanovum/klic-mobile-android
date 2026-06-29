@@ -1,6 +1,8 @@
 package com.klicmobile.app
 
+import android.app.Activity
 import android.app.Application
+import android.os.Bundle
 import coil.ImageLoader
 import coil.ImageLoaderFactory
 import coil.decode.SvgDecoder
@@ -26,6 +28,26 @@ class KlicApplication : Application(), ImageLoaderFactory {
         super.onCreate()
         container = AppContainer(this)
         CallNotifications.createChannels(this)
+        trackForeground()
+    }
+
+    /** Track whether any activity is in the foreground, so push handlers can suppress
+     *  notifications while the user is actively in the app. */
+    private fun trackForeground() {
+        registerActivityLifecycleCallbacks(object : ActivityLifecycleCallbacks {
+            private var started = 0
+            override fun onActivityStarted(activity: Activity) {
+                started++; container.appForeground = started > 0
+            }
+            override fun onActivityStopped(activity: Activity) {
+                started = (started - 1).coerceAtLeast(0); container.appForeground = started > 0
+            }
+            override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) {}
+            override fun onActivityResumed(activity: Activity) {}
+            override fun onActivityPaused(activity: Activity) {}
+            override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) {}
+            override fun onActivityDestroyed(activity: Activity) {}
+        })
     }
 
     // App-wide Coil loader that can decode the SVG sticker pack served from the API.
@@ -37,6 +59,9 @@ class AppContainer(app: Application) {
     val appContext = app.applicationContext
     val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     val tokenStore = TokenStore(app)
+
+    /** True while any activity is started (app visible) — set by KlicApplication. */
+    @Volatile var appForeground: Boolean = false
 
     // Emitted when the server rejects our refresh token (a genuine sign-out).
     private val _sessionExpired = MutableSharedFlow<Unit>(extraBufferCapacity = 1)

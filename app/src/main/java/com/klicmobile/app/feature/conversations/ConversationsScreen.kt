@@ -2,8 +2,10 @@ package com.klicmobile.app.feature.conversations
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -126,6 +128,32 @@ private fun ConversationRow(conversation: Conversation, online: Boolean, onClick
                     overflow = TextOverflow.Ellipsis,
                 )
             }
+            // Time (top) + unread count badge (bottom), right-aligned.
+            Column(
+                horizontalAlignment = Alignment.End,
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+                modifier = Modifier.padding(start = 8.dp),
+            ) {
+                lastMessageTime(conversation.lastMessage)?.let { time ->
+                    Text(time, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                val unread = conversation.unreadCount
+                if (unread > 0) {
+                    Box(
+                        Modifier
+                            .defaultMinSize(minWidth = 20.dp, minHeight = 20.dp)
+                            .background(MaterialTheme.colorScheme.primary, CircleShape)
+                            .padding(horizontal = 6.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            if (unread > 99) "99+" else unread.toString(),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onPrimary,
+                        )
+                    }
+                }
+            }
         }
         // Divider inset to start under the text content, not under the avatar.
         HorizontalDivider(
@@ -134,6 +162,17 @@ private fun ConversationRow(conversation: Conversation, online: Boolean, onClick
             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f),
         )
     }
+}
+
+/** Short clock time for the last message (e.g. "3:26 PM"), or null if unknown. */
+private fun lastMessageTime(m: Message?): String? {
+    val iso = m?.createdAt?.takeIf { it.isNotBlank() } ?: return null
+    return runCatching {
+        val instant = java.time.Instant.parse(iso)
+        java.time.format.DateTimeFormatter.ofPattern("h:mm a")
+            .withZone(java.time.ZoneId.systemDefault())
+            .format(instant)
+    }.getOrNull()
 }
 
 /** One-line summary of the last message for the chat list (no emoji, per the design system). */

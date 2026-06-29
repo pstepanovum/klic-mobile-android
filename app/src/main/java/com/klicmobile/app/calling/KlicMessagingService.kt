@@ -40,6 +40,18 @@ class KlicMessagingService : FirebaseMessagingService() {
                     }
                 )
             }
+            "message.new" -> {
+                // The live socket already shows messages while the app is open; only post a
+                // notification (which puts the badge on the launcher icon) when backgrounded.
+                if (!container.appForeground) {
+                    CallNotifications.showMessage(
+                        this,
+                        title = data["title"] ?: "New message",
+                        body = data["body"] ?: "",
+                        conversationId = data["conversationId"] ?: "",
+                    )
+                }
+            }
         }
     }
 }
