@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.runtime.mutableStateOf
@@ -19,6 +20,9 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.DoneAll
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -41,6 +45,7 @@ import com.klicmobile.app.feature.KlicViewModel
 import com.klicmobile.app.ui.components.AvatarView
 import com.klicmobile.app.ui.components.KlicSearchBar
 import com.klicmobile.app.ui.theme.KlicIcons
+import com.klicmobile.app.ui.theme.ReadGreen
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -134,8 +139,14 @@ private fun ConversationRow(conversation: Conversation, online: Boolean, onClick
                 verticalArrangement = Arrangement.spacedBy(6.dp),
                 modifier = Modifier.padding(start = 8.dp).align(Alignment.Top),
             ) {
-                lastMessageTime(conversation.lastMessage)?.let { time ->
-                    Text(time, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                lastMessageStamp(conversation.lastMessage)?.let { stamp ->
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(3.dp),
+                    ) {
+                        conversation.lastMessage?.status?.let { ConversationTick(it) }
+                        Text(stamp, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
                 }
                 val unread = conversation.unreadCount
                 if (unread > 0) {
@@ -164,15 +175,28 @@ private fun ConversationRow(conversation: Conversation, online: Boolean, onClick
     }
 }
 
-/** Short clock time for the last message (e.g. "3:26 PM"), or null if unknown. */
-private fun lastMessageTime(m: Message?): String? {
+/** Last-message stamp for the chat list: clock time today (e.g. "3:26 PM"), "MM/dd" earlier this
+ *  year, "MM/dd/yy" before that — or null if unknown. */
+private fun lastMessageStamp(m: Message?): String? {
     val iso = m?.createdAt?.takeIf { it.isNotBlank() } ?: return null
     return runCatching {
-        val instant = java.time.Instant.parse(iso)
-        java.time.format.DateTimeFormatter.ofPattern("h:mm a")
-            .withZone(java.time.ZoneId.systemDefault())
-            .format(instant)
+        val zoned = java.time.Instant.parse(iso).atZone(java.time.ZoneId.systemDefault())
+        val today = java.time.LocalDate.now()
+        val pattern = when {
+            zoned.toLocalDate() == today -> "h:mm a"
+            zoned.year == today.year -> "MM/dd"
+            else -> "MM/dd/yy"
+        }
+        java.time.format.DateTimeFormatter.ofPattern(pattern).format(zoned)
     }.getOrNull()
+}
+
+/** Compact read-status tick for the chat list (own last message only). Gray until read, green after. */
+@Composable
+private fun ConversationTick(status: String) {
+    val icon = if (status == "sent") Icons.Filled.Check else Icons.Filled.DoneAll
+    val tint = if (status == "read") ReadGreen else MaterialTheme.colorScheme.onSurfaceVariant
+    Icon(imageVector = icon, contentDescription = null, tint = tint, modifier = Modifier.size(14.dp))
 }
 
 /** One-line summary of the last message for the chat list (no emoji, per the design system). */

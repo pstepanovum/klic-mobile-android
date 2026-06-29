@@ -17,6 +17,8 @@ import androidx.compose.material.icons.filled.CallEnd
 import androidx.compose.material.icons.filled.Cameraswitch
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MicOff
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
+import androidx.compose.material.icons.filled.PhoneInTalk
 import androidx.compose.material.icons.filled.PictureInPictureAlt
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material.icons.filled.VideocamOff
@@ -50,6 +52,7 @@ fun CallScreen(vm: KlicViewModel, call: CallSession, peerName: String, onEnd: ()
     val callStatus by vm.callStatus.collectAsState()
     val micEnabled by manager.micEnabled.collectAsState()
     val cameraEnabled by manager.cameraEnabled.collectAsState()
+    val speakerOn by manager.speakerOn.collectAsState()
     val remoteVideo by manager.remoteVideoTrack.collectAsState()
     val localVideo by manager.localVideoTrack.collectAsState()
     val peerId by vm.callPeerId.collectAsState()
@@ -127,6 +130,16 @@ fun CallScreen(vm: KlicViewModel, call: CallSession, peerName: String, onEnd: ()
                         painter = rememberVectorPainter(if (micEnabled) Icons.Filled.Mic else Icons.Filled.MicOff),
                         contentDescription = "Toggle microphone",
                     ) { scope.launch { manager.toggleMic() } }
+
+                    // Speaker / earpiece toggle — shown on a voice call (video defaults to speaker).
+                    if (!shouldShowVideo) {
+                        CircleControl(
+                            painter = rememberVectorPainter(if (speakerOn) Icons.AutoMirrored.Filled.VolumeUp else Icons.Filled.PhoneInTalk),
+                            contentDescription = "Toggle speaker",
+                            fill = if (speakerOn) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
+                            tint = if (speakerOn) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
+                        ) { manager.toggleSpeaker() }
+                    }
 
                     CircleControl(
                         painter = rememberVectorPainter(Icons.Filled.CallEnd),

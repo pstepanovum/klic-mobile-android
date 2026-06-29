@@ -36,6 +36,8 @@ class CallManager(
     val isConnected = MutableStateFlow(false)
     val micEnabled = MutableStateFlow(true)
     val cameraEnabled = MutableStateFlow(false)
+    /** Whether call audio is on the loudspeaker (vs. earpiece / a connected headset). */
+    val speakerOn = MutableStateFlow(false)
     val localVideoTrack = MutableStateFlow<VideoTrack?>(null)
     val remoteVideoTrack = MutableStateFlow<VideoTrack?>(null)
     val remoteParticipantDisconnected = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
@@ -261,9 +263,29 @@ class CallManager(
                 diagnostic("livekit.audio.focus", callId, "change=$change")
             }
             audioDeviceChangeListener = { devices: List<AudioDevice>, selected: AudioDevice? ->
+                speakerOn.value = selected is AudioDevice.Speakerphone
                 diagnostic("livekit.audio.route", callId, routeDetail(devices, selected))
             }
         }
+
+    /** Toggle call audio between the loudspeaker and the earpiece/headset. Leaving the speaker
+     *  prefers a connected Bluetooth/wired headset, falling back to the earpiece. */
+    fun toggleSpeaker() {
+        val handler = audioHandler ?: return
+        val devices = handler.availableAudioDevices
+        val target = if (handler.selectedAudioDevice is AudioDevice.Speakerphone) {
+            devices.firstOrNull { it is AudioDevice.BluetoothHeadset }
+                ?: devices.firstOrNull { it is AudioDevice.WiredHeadset }
+                ?: devices.firstOrNull { it is AudioDevice.Earpiece }
+        } else {
+            devices.firstOrNull { it is AudioDevice.Speakerphone }
+        }
+        target?.let {
+            handler.selectDevice(it)
+            speakerOn.value = it is AudioDevice.Speakerphone
+            diagnostic("livekit.audio.speaker", currentCallId, if (it is AudioDevice.Speakerphone) "on" else "off")
+        }
+    }
 
     private fun preferVideoSpeaker(handler: AudioSwitchHandler, callId: String, reason: String) {
         val devices = handler.availableAudioDevices

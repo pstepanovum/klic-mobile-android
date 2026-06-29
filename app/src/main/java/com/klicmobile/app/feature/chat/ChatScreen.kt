@@ -91,6 +91,7 @@ import com.klicmobile.app.data.Message
 import com.klicmobile.app.feature.KlicViewModel
 import com.klicmobile.app.ui.components.AvatarView
 import com.klicmobile.app.ui.theme.KlicIcons
+import com.klicmobile.app.ui.theme.ReadGreen
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -516,10 +517,15 @@ private fun MessageBubble(
         }
 
         if (isLast) {
+            // Time + delivery ticks in a small pill below the bubble so they never overlap the text.
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(3.dp),
-                modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                modifier = Modifier
+                    .padding(vertical = 2.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f))
+                    .padding(horizontal = 8.dp, vertical = 3.dp),
             ) {
                 Text(
                     shortTime(message.createdAt),
@@ -575,7 +581,7 @@ private fun messagePreview(m: Message): String = when {
 @Composable
 private fun MessageTicks(status: String) {
     val icon = if (status == "sent") Icons.Filled.Check else Icons.Filled.DoneAll
-    val tint = if (status == "read") MaterialTheme.colorScheme.primary
+    val tint = if (status == "read") ReadGreen
                else MaterialTheme.colorScheme.onSurfaceVariant
     Icon(imageVector = icon, contentDescription = null, tint = tint, modifier = Modifier.size(14.dp))
 }
@@ -835,7 +841,7 @@ private fun sameDay(a: String, b: String): Boolean = a.take(10) == b.take(10)
 
 private fun shortTime(iso: String): String = runCatching {
     val instant = Instant.parse(iso)
-    DateTimeFormatter.ofPattern("HH:mm").format(instant.atZone(ZoneId.systemDefault()))
+    DateTimeFormatter.ofPattern("h:mm a").format(instant.atZone(ZoneId.systemDefault()))
 }.getOrDefault("")
 
 private fun dateLabel(iso: String): String = runCatching {
