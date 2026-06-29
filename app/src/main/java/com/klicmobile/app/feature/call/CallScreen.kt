@@ -132,18 +132,9 @@ fun CallScreen(vm: KlicViewModel, call: CallSession, peerName: String, onEnd: ()
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.SpaceBetween,
             ) {
-                // Over video the name + status ("Connected") sit on a dark pill with white text so
-                // they stay legible against the remote camera feed; otherwise use theme colors.
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    modifier = if (hasPrimaryVideo) {
-                        Modifier.clip(RoundedCornerShape(20.dp))
-                            .background(Color.Black.copy(alpha = 0.35f))
-                            .padding(horizontal = 18.dp, vertical = 8.dp)
-                    } else {
-                        Modifier
-                    },
-                ) {
+                // Over video: the name is plain white text and only the status ("Connected") gets a
+                // small white pill. On a voice/avatar call, use theme colors with no pill.
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     if (!hasPrimaryVideo) {
                         AvatarView(
                             url = peerId?.let { Network.avatarUrl(it) },
@@ -157,10 +148,20 @@ fun CallScreen(vm: KlicViewModel, call: CallSession, peerName: String, onEnd: ()
                         style = MaterialTheme.typography.titleLarge,
                         color = if (hasPrimaryVideo) Color.White else MaterialTheme.colorScheme.onBackground,
                     )
-                    Text(
-                        callStatus,
-                        color = if (hasPrimaryVideo) Color.White.copy(alpha = 0.85f) else MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                    if (hasPrimaryVideo) {
+                        Spacer(Modifier.height(6.dp))
+                        Text(
+                            callStatus,
+                            style = MaterialTheme.typography.labelMedium,
+                            color = Color.Black.copy(alpha = 0.8f),
+                            modifier = Modifier
+                                .clip(CircleShape)
+                                .background(Color.White)
+                                .padding(horizontal = 12.dp, vertical = 5.dp),
+                        )
+                    } else {
+                        Text(callStatus, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
                 }
 
                 Row(horizontalArrangement = Arrangement.spacedBy(24.dp), verticalAlignment = Alignment.CenterVertically) {
