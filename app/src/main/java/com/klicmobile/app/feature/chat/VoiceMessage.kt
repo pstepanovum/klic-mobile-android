@@ -5,8 +5,11 @@ import android.media.AudioAttributes
 import android.media.MediaPlayer
 import android.media.MediaRecorder
 import android.os.Build
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -36,6 +39,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.unit.dp
 import com.klicmobile.app.data.Attachment
+import com.klicmobile.app.ui.components.MessageTicks
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -144,7 +148,12 @@ private fun downsample(src: List<Float>, n: Int): List<Float> {
 // ── VoiceAttachmentView ──────────────────────────────────────────────────────
 
 @Composable
-fun VoiceAttachmentView(att: Attachment, isMine: Boolean) {
+fun VoiceAttachmentView(
+    att: Attachment,
+    isMine: Boolean,
+    time: String = "",
+    status: String? = null,
+) {
     val player = AudioPlaybackManager
     val playing = player.playingId == att.id
     val progress = if (playing) player.progress else 0f
@@ -161,42 +170,59 @@ fun VoiceAttachmentView(att: Attachment, isMine: Boolean) {
                     else MaterialTheme.colorScheme.onSurfaceVariant
 
     Surface(color = containerColor, shape = RoundedCornerShape(18.dp)) {
-        Row(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            IconButton(
-                onClick = { player.toggle(att.id, att.url) },
-                modifier = Modifier.size(34.dp),
-                colors = IconButtonDefaults.iconButtonColors(
-                    containerColor = buttonContainer,
-                    contentColor   = buttonTint,
-                ),
-            ) {
-                Icon(
-                    imageVector = if (playing) Icons.Filled.Pause else Icons.Filled.PlayArrow,
-                    contentDescription = if (playing) "Pause" else "Play",
-                    modifier = Modifier.size(18.dp),
+        Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                IconButton(
+                    onClick = { player.toggle(att.id, att.url) },
+                    modifier = Modifier.size(34.dp),
+                    colors = IconButtonDefaults.iconButtonColors(
+                        containerColor = buttonContainer,
+                        contentColor   = buttonTint,
+                    ),
+                ) {
+                    Icon(
+                        imageVector = if (playing) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                        contentDescription = if (playing) "Pause" else "Play",
+                        modifier = Modifier.size(18.dp),
+                    )
+                }
+                Spacer(Modifier.width(10.dp))
+                WaveformBarsView(
+                    amplitudes = amplitudes,
+                    progress = progress,
+                    isOutgoing = isMine,
+                    modifier = Modifier.width(110.dp),
+                )
+                Spacer(Modifier.width(10.dp))
+                Text(
+                    text = durationText(att.durationMs ?: 0),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = timeColor,
                 )
             }
-            Spacer(Modifier.width(10.dp))
-            WaveformBarsView(
-                amplitudes = amplitudes,
-                progress = progress,
-                isOutgoing = isMine,
-                modifier = Modifier.width(110.dp),
-            )
-            Spacer(Modifier.width(10.dp))
-            Text(
-                text = durationText(att.durationMs ?: 0),
-                style = MaterialTheme.typography.labelSmall,
-                color = timeColor,
-            )
+            // Time + delivery ticks — trailing-aligned below the waveform row.
+            if (time.isNotEmpty()) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(top = 3.dp),
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = time,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = timeColor,
+                    )
+                    if (isMine && status != null) {
+                        Spacer(Modifier.width(3.dp))
+                        MessageTicks(status = status, onPrimary = isMine)
+                    }
+                }
+            }
         }
     }
 }
 
-private fun durationText(ms: Int): String {
+internal fun durationText(ms: Int): String {
     val s = ms / 1000
     return "%d:%02d".format(s / 60, s % 60)
 }

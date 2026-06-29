@@ -36,15 +36,15 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Call
-import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.DoneAll
 import androidx.compose.material.icons.filled.EmojiEmotions
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -52,6 +52,7 @@ import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
@@ -90,8 +91,8 @@ import com.klicmobile.app.data.Conversation
 import com.klicmobile.app.data.Message
 import com.klicmobile.app.feature.KlicViewModel
 import com.klicmobile.app.ui.components.AvatarView
+import com.klicmobile.app.ui.components.MessageTicks
 import com.klicmobile.app.ui.theme.KlicIcons
-import com.klicmobile.app.ui.theme.ReadGreen
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -138,6 +139,10 @@ fun ChatScreen(
     val peerTyping = typingMap[conversation.id]?.let { System.currentTimeMillis() - it < 6000L } == true
     val displaySubtitle = if (peerTyping) "typing…" else headerSubtitle
 
+    // Pagination
+    val isLoadingOlder by vm.isLoadingOlderMessages.collectAsState()
+    val hasMore by vm.hasMoreMessages.collectAsState()
+
     val recorder = remember { VoiceRecorder(context) }
     val micPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted && !recorder.start()) vm.error.value = "Couldn't start recording."
@@ -176,10 +181,46 @@ fun ChatScreen(
         vm.markRead(conversation.id)
     }
 
-    // Magnet to the bottom on every new message and when the peer starts typing.
-    LaunchedEffect(messages.size, peerTyping) {
+    // Initial open: instant scroll to bottom (no animation).
+    // Subsequent new messages: animated scroll.
+    // Older messages prepended: no scroll-to-bottom (lastMessageId doesn't change).
+    val lastMessageId = messages.lastOrNull()?.id
+    var initialScrollDone by remember(conversation.id) { mutableStateOf(false) }
+
+    LaunchedEffect(lastMessageId, peerTyping) {
         val target = messages.size - 1 + if (peerTyping) 1 else 0
-        if (target >= 0) scope.launch { listState.animateScrollToItem(target) }
+        if (target >= 0) {
+            if (!initialScrollDone) {
+                listState.scrollToItem(target)
+                initialScrollDone = true
+            } else {
+                scope.launch { listState.animateScrollToItem(target) }
+            }
+        }
+    }
+
+    // Restore scroll position after older messages are prepended.
+    LaunchedEffect(Unit) {
+        vm.prependedCount.collect { count ->
+            if (count > 0) {
+                val newIndex = (listState.firstVisibleItemIndex + count)
+                    .coerceAtMost(messages.size - 1)
+                listState.scrollToItem(newIndex, listState.firstVisibleItemScrollOffset)
+            }
+        }
+    }
+
+    // Trigger pagination when the user reaches the top.
+    val isAtTop by remember {
+        derivedStateOf {
+            listState.firstVisibleItemIndex == 0 &&
+                listState.firstVisibleItemScrollOffset < 10
+        }
+    }
+    LaunchedEffect(isAtTop) {
+        if (isAtTop && hasMore && !isLoadingOlder && initialScrollDone) {
+            vm.loadOlderMessages()
+        }
     }
 
     Box(Modifier.fillMaxSize()) {
@@ -271,8 +312,23 @@ fun ChatScreen(
                 }
             }
 
+            // Loading indicator overlay at the top while fetching older messages.
+            if (isLoadingOlder) {
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(top = 8.dp),
+                    contentAlignment = Alignment.TopCenter,
+                ) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(24.dp),
+                        strokeWidth = 2.dp,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
+            }
+
             // Scroll-to-latest button: shown only when the newest item is off-screen.
-            // Tapping scrolls down without touching focus, so the keyboard stays open.
             val isAtBottom by remember {
                 derivedStateOf {
                     val info = listState.layoutInfo
@@ -462,6 +518,10 @@ private fun MessageBubble(
 
     val voiceAtt = message.attachments.firstOrNull { it.kind == "VOICE" }
     val imageAtt = message.attachments.firstOrNull { it.kind == "IMAGE" }
+    val videoAtt = message.attachments.firstOrNull { it.kind == "VIDEO" }
+
+    val time = shortTime(message.createdAt)
+    val status = if (isMine) message.status else null
 
     Column(
         modifier = Modifier.fillMaxWidth().padding(vertical = 1.dp),
@@ -470,23 +530,77 @@ private fun MessageBubble(
         when {
             voiceAtt != null ->
                 Box(Modifier.combinedClickable(onClick = {}, onLongClick = onLongPress)) {
-                    VoiceAttachmentView(att = voiceAtt, isMine = isMine)
+                    VoiceAttachmentView(
+                        att = voiceAtt,
+                        isMine = isMine,
+                        time = time,
+                        status = status,
+                    )
                 }
+
             imageAtt != null ->
                 Column(horizontalAlignment = if (isMine) Alignment.End else Alignment.Start) {
                     message.replyTo?.let { ReplyQuote(it, replyAuthorName) }
-                    AsyncImage(
-                        model = imageAtt.url,
-                        contentDescription = "Image",
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier
+                    Box(
+                        Modifier
                             .widthIn(max = 240.dp)
                             .heightIn(max = 320.dp)
                             .aspectRatio(imageAspect(imageAtt))
                             .clip(RoundedCornerShape(16.dp))
-                            .combinedClickable(onClick = { onImageClick(imageAtt.url) }, onLongClick = onLongPress),
-                    )
+                            .combinedClickable(
+                                onClick = { onImageClick(imageAtt.url) },
+                                onLongClick = onLongPress,
+                            ),
+                    ) {
+                        AsyncImage(
+                            model = imageAtt.url,
+                            contentDescription = "Image",
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.fillMaxSize(),
+                        )
+                        // Time + ticks pill overlay — bottom-right.
+                        MediaTimePill(
+                            time = time,
+                            status = status,
+                            modifier = Modifier.align(Alignment.BottomEnd).padding(8.dp),
+                        )
+                    }
                 }
+
+            videoAtt != null ->
+                Column(horizontalAlignment = if (isMine) Alignment.End else Alignment.Start) {
+                    message.replyTo?.let { ReplyQuote(it, replyAuthorName) }
+                    Box(
+                        Modifier
+                            .widthIn(max = 240.dp)
+                            .heightIn(max = 320.dp)
+                            .aspectRatio(imageAspect(videoAtt))
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(Color(0xFF1A1A1A))
+                            .combinedClickable(onClick = {}, onLongClick = onLongPress),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.PlayArrow,
+                            contentDescription = "Play video",
+                            tint = Color.White.copy(alpha = 0.85f),
+                            modifier = Modifier.size(48.dp).align(Alignment.Center),
+                        )
+                        // Duration pill — bottom-left.
+                        if (videoAtt.durationMs != null) {
+                            MediaTimePill(
+                                text = durationText(videoAtt.durationMs),
+                                modifier = Modifier.align(Alignment.BottomStart).padding(8.dp),
+                            )
+                        }
+                        // Time + ticks pill — bottom-right.
+                        MediaTimePill(
+                            time = time,
+                            status = status,
+                            modifier = Modifier.align(Alignment.BottomEnd).padding(8.dp),
+                        )
+                    }
+                }
+
             else ->
                 Box(
                     Modifier
@@ -498,14 +612,35 @@ private fun MessageBubble(
                         .combinedClickable(onClick = {}, onLongClick = onLongPress)
                         .padding(horizontal = 14.dp, vertical = 10.dp),
                 ) {
+                    val textColor = if (isMine) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
+                    val timeColor = if (isMine) MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.65f)
+                                    else MaterialTheme.colorScheme.onSurfaceVariant
                     Column {
                         message.replyTo?.let { ReplyQuote(it, replyAuthorName, onPrimary = isMine) }
-                        if (message.body.isNotBlank()) {
-                            Text(
-                                message.body,
-                                color = if (isMine) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
-                                style = MaterialTheme.typography.bodyLarge,
-                            )
+                        // Message body + inline time + ticks, aligned to bottom of last text line.
+                        Row(verticalAlignment = Alignment.Bottom) {
+                            if (message.body.isNotBlank()) {
+                                Text(
+                                    message.body,
+                                    color = textColor,
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    modifier = Modifier.weight(1f, fill = false),
+                                )
+                            }
+                            Spacer(Modifier.width(6.dp))
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(3.dp),
+                            ) {
+                                Text(
+                                    time,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = timeColor,
+                                )
+                                if (status != null) {
+                                    MessageTicks(status = status, onPrimary = isMine)
+                                }
+                            }
                         }
                     }
                 }
@@ -515,32 +650,40 @@ private fun MessageBubble(
             Spacer(Modifier.height(2.dp))
             ReactionPillsRow(message.reactions, onReactionTap)
         }
+    }
+}
 
-        if (isLast) {
-            // Time + delivery ticks in a small pill below the bubble so they never overlap the text.
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
-                modifier = Modifier
-                    .padding(vertical = 2.dp)
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f))
-                    .padding(horizontal = 8.dp, vertical = 3.dp),
-            ) {
-                Text(
-                    shortTime(message.createdAt),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                if (isMine && message.status != null) {
-                    MessageTicks(message.status)
-                }
-            }
+// Semi-transparent dark pill used as overlay on image/video.
+@Composable
+private fun MediaTimePill(
+    modifier: Modifier = Modifier,
+    time: String = "",
+    text: String = "",           // for the duration pill on video (no ticks)
+    status: String? = null,
+) {
+    Row(
+        modifier = modifier
+            .clip(CircleShape)
+            .background(Color.Black.copy(alpha = 0.45f))
+            .padding(horizontal = 6.dp, vertical = 3.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(3.dp),
+    ) {
+        val label = text.ifEmpty { time }
+        if (label.isNotEmpty()) {
+            Text(
+                label,
+                style = MaterialTheme.typography.labelSmall,
+                color = Color.White,
+            )
+        }
+        if (status != null && text.isEmpty()) {
+            MessageTicks(status = status, onMedia = true)
         }
     }
 }
 
-// Aspect ratio for an inline image, clamped so extreme shapes stay reasonable.
+// Aspect ratio for an inline image/video, clamped so extreme shapes stay reasonable.
 private fun imageAspect(att: Attachment): Float {
     val w = att.width; val h = att.height
     return if (w != null && h != null && w > 0 && h > 0) (w.toFloat() / h.toFloat()).coerceIn(0.6f, 1.6f) else 1f
@@ -578,14 +721,6 @@ private fun messagePreview(m: Message): String = when {
     else -> "Message"
 }
 
-@Composable
-private fun MessageTicks(status: String) {
-    val icon = if (status == "sent") Icons.Filled.Check else Icons.Filled.DoneAll
-    val tint = if (status == "read") ReadGreen
-               else MaterialTheme.colorScheme.onSurfaceVariant
-    Icon(imageVector = icon, contentDescription = null, tint = tint, modifier = Modifier.size(14.dp))
-}
-
 // Presence subtitle for the chat header: "Online" or "last seen …".
 private fun presenceSubtitle(presence: com.klicmobile.app.realtime.SocketService.Presence?): String? {
     if (presence == null) return null
@@ -604,18 +739,21 @@ private fun presenceSubtitle(presence: com.klicmobile.app.realtime.SocketService
 
 @Composable
 private fun DateSeparator(isoDate: String) {
-    Row(
+    Box(
         modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
+        contentAlignment = Alignment.Center,
     ) {
-        Box(Modifier.weight(1f).height(1.dp).background(MaterialTheme.colorScheme.surfaceVariant))
-        Text(
-            dateLabel(isoDate),
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(horizontal = 8.dp),
-        )
-        Box(Modifier.weight(1f).height(1.dp).background(MaterialTheme.colorScheme.surfaceVariant))
+        Surface(
+            shape = RoundedCornerShape(50),
+            color = MaterialTheme.colorScheme.surfaceVariant,
+        ) {
+            Text(
+                dateLabel(isoDate),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp),
+            )
+        }
     }
 }
 

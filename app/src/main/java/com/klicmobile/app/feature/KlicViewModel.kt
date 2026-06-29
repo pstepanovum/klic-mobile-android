@@ -19,6 +19,7 @@ import com.klicmobile.app.realtime.SocketService
 import com.google.firebase.messaging.FirebaseMessaging
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.buildJsonObject
@@ -58,6 +59,12 @@ class KlicViewModel(
 
     val recentCalls = MutableStateFlow<List<RecentCall>>(emptyList())
     val stickers = MutableStateFlow<List<Sticker>>(emptyList())
+
+    // Pagination
+    val hasMoreMessages = MutableStateFlow(false)
+    val isLoadingOlderMessages = MutableStateFlow(false)
+    /** Emits the number of messages prepended so the UI can restore scroll position. */
+    val prependedCount = MutableSharedFlow<Int>(extraBufferCapacity = 1)
 
     init {
         viewModelScope.launch {
@@ -212,10 +219,30 @@ class KlicViewModel(
     fun openChat(conversationId: String) = viewModelScope.launch {
         openConversationId = conversationId
         replyingTo.value = null
+        hasMoreMessages.value = false
+        isLoadingOlderMessages.value = false
         // Clear any pending notification (and its launcher badge) for this conversation.
         CallNotifications.cancelMessage(container.appContext, conversationId)
         runCatching { repo.messages(conversationId) }
-            .onSuccess { messages.value = it.reversed().filterNot { m -> m.id in hiddenIds } }
+            .onSuccess { msgs ->
+                messages.value = msgs.reversed().filterNot { m -> m.id in hiddenIds }
+                hasMoreMessages.value = msgs.size >= 50
+            }
+    }
+
+    fun loadOlderMessages() = viewModelScope.launch {
+        val convId = openConversationId ?: return@launch
+        if (isLoadingOlderMessages.value || !hasMoreMessages.value) return@launch
+        val oldest = messages.value.firstOrNull()?.createdAt ?: return@launch
+        isLoadingOlderMessages.value = true
+        runCatching { repo.messages(convId, before = oldest) }
+            .onSuccess { older ->
+                val filtered = older.reversed().filterNot { m -> m.id in hiddenIds }
+                messages.value = filtered + messages.value
+                hasMoreMessages.value = older.size >= 50
+                prependedCount.tryEmit(filtered.size)
+            }
+        isLoadingOlderMessages.value = false
     }
 
     fun send(conversationId: String, body: String) = viewModelScope.launch {

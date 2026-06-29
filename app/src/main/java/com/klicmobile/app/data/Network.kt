@@ -45,7 +45,11 @@ interface KlicApi {
     suspend fun openConversation(@Body body: Map<String, String>): Conversation
 
     @GET("conversations/{id}/messages")
-    suspend fun messages(@Path("id") id: String): List<Message>
+    suspend fun messages(
+        @Path("id") id: String,
+        @Query("limit") limit: Int = 50,
+        @Query("before") before: String? = null,
+    ): List<Message>
 
     @POST("conversations/{id}/messages")
     suspend fun send(@Path("id") id: String, @Body body: SendMessageRequest): Message

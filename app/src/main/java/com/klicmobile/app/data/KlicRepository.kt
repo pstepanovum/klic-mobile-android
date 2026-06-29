@@ -123,7 +123,8 @@ class KlicRepository(
     suspend fun openConversation(userId: String): Conversation = api.openConversation(mapOf("userId" to userId))
 
     suspend fun conversations(): List<Conversation> = api.conversations()
-    suspend fun messages(conversationId: String): List<Message> = api.messages(conversationId)
+    suspend fun messages(conversationId: String, before: String? = null): List<Message> =
+        api.messages(conversationId, before = before)
     suspend fun send(conversationId: String, body: String, replyToId: String? = null): Message =
         api.send(conversationId, SendMessageRequest(body, replyToId))
 

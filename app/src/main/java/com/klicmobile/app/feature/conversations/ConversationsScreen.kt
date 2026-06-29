@@ -21,8 +21,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.DoneAll
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -36,7 +34,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.klicmobile.app.data.Conversation
@@ -44,8 +41,8 @@ import com.klicmobile.app.data.Message
 import com.klicmobile.app.feature.KlicViewModel
 import com.klicmobile.app.ui.components.AvatarView
 import com.klicmobile.app.ui.components.KlicSearchBar
+import com.klicmobile.app.ui.components.MessageTicks
 import com.klicmobile.app.ui.theme.KlicIcons
-import com.klicmobile.app.ui.theme.ReadGreen
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -144,7 +141,7 @@ private fun ConversationRow(conversation: Conversation, online: Boolean, onClick
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(3.dp),
                     ) {
-                        conversation.lastMessage?.status?.let { ConversationTick(it) }
+                        conversation.lastMessage?.status?.let { MessageTicks(status = it) }
                         Text(stamp, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
@@ -189,14 +186,6 @@ private fun lastMessageStamp(m: Message?): String? {
         }
         java.time.format.DateTimeFormatter.ofPattern(pattern).format(zoned)
     }.getOrNull()
-}
-
-/** Compact read-status tick for the chat list (own last message only). Gray until read, green after. */
-@Composable
-private fun ConversationTick(status: String) {
-    val icon = if (status == "sent") Icons.Filled.Check else Icons.Filled.DoneAll
-    val tint = if (status == "read") ReadGreen else MaterialTheme.colorScheme.onSurfaceVariant
-    Icon(imageVector = icon, contentDescription = null, tint = tint, modifier = Modifier.size(14.dp))
 }
 
 /** One-line summary of the last message for the chat list (no emoji, per the design system). */
