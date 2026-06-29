@@ -23,6 +23,7 @@ import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -45,8 +46,10 @@ import androidx.compose.ui.unit.dp
 import com.klicmobile.app.calling.CallReliability
 import com.klicmobile.app.feature.KlicViewModel
 import com.klicmobile.app.ui.components.AvatarView
+import com.klicmobile.app.update.AppUpdater
 import com.klicmobile.app.ui.components.KlicLottieView
 import com.klicmobile.app.ui.theme.KlicIcons
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -55,6 +58,7 @@ fun SettingsScreen(vm: KlicViewModel, onEditProfile: () -> Unit = {}) {
     val user by vm.currentUser.collectAsState()
     val themeMode by vm.themeMode.collectAsState()
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     var showLastSeen by remember(user?.showLastSeen) { mutableStateOf(user?.showLastSeen ?: true) }
     val versionName = remember {
         try { context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: "1.0" }
@@ -189,6 +193,11 @@ fun SettingsScreen(vm: KlicViewModel, onEditProfile: () -> Unit = {}) {
 
         Spacer(Modifier.height(16.dp))
 
+        // App updates — check GitHub releases and self-install (no Play Store).
+        AppUpdateCard(versionName = versionName, scope = scope, context = context)
+
+        Spacer(Modifier.height(16.dp))
+
         Button(
             onClick = { vm.logout() },
             modifier = Modifier.fillMaxWidth(),
@@ -256,6 +265,91 @@ private fun CopyableUsername(username: String) {
             tint = if (copied) MaterialTheme.colorScheme.primary
                    else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f),
         )
+    }
+}
+
+@Composable
+private fun AppUpdateCard(versionName: String, scope: CoroutineScope, context: android.content.Context) {
+    var checking by remember { mutableStateOf(false) }
+    var statusMsg by remember { mutableStateOf<String?>(null) }
+    var available by remember { mutableStateOf<AppUpdater.Release?>(null) }
+    var downloading by remember { mutableStateOf(false) }
+    var progress by remember { mutableStateOf(0f) }
+
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(20.dp))
+            .padding(18.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("App updates", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurface)
+                Text(
+                    statusMsg ?: "Version $versionName",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            if (available == null && !downloading) {
+                Button(
+                    onClick = {
+                        checking = true
+                        statusMsg = null
+                        scope.launch {
+                            val r = AppUpdater.fetchLatest()
+                            checking = false
+                            when {
+                                r == null -> statusMsg = "Couldn't check for updates"
+                                AppUpdater.isNewerThanInstalled(r.versionName) -> {
+                                    available = r
+                                    statusMsg = "Update available: ${r.versionName}"
+                                }
+                                else -> statusMsg = "You're on the latest version"
+                            }
+                        }
+                    },
+                    enabled = !checking,
+                    shape = CircleShape,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                        contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                    ),
+                ) { Text(if (checking) "Checking…" else "Check") }
+            }
+        }
+
+        val update = available
+        if (update != null) {
+            Spacer(Modifier.height(12.dp))
+            if (downloading) {
+                LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth())
+            } else {
+                Button(
+                    onClick = {
+                        if (!AppUpdater.canInstall(context)) {
+                            AppUpdater.openInstallPermissionSettings(context)
+                            return@Button
+                        }
+                        downloading = true
+                        progress = 0f
+                        scope.launch {
+                            runCatching { AppUpdater.download(context, update.apkUrl) { progress = it } }
+                                .onSuccess { file ->
+                                    downloading = false
+                                    AppUpdater.install(context, file)
+                                }
+                                .onFailure {
+                                    downloading = false
+                                    statusMsg = "Download failed"
+                                }
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = CircleShape,
+                ) { Text("Download & install ${update.versionName}") }
+            }
+        }
     }
 }
 
