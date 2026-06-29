@@ -53,6 +53,8 @@ import com.klicmobile.app.feature.friends.FriendsScreen
 import com.klicmobile.app.feature.profile.ProfileScreen
 import com.klicmobile.app.feature.settings.EditProfileScreen
 import com.klicmobile.app.feature.settings.SettingsScreen
+import com.klicmobile.app.feature.update.ForceUpdateScreen
+import com.klicmobile.app.update.AppUpdater
 import com.klicmobile.app.ui.theme.KlicIcons
 import com.klicmobile.app.ui.theme.KlicTheme
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -121,6 +123,19 @@ class MainActivity : ComponentActivity() {
                 }
             }
             KlicTheme(isDark = isDark) {
+                // Gate the whole app behind a mandatory update when a newer release exists.
+                // Offline or already on the latest version → proceeds normally.
+                var requiredUpdate by remember { mutableStateOf<AppUpdater.Release?>(null) }
+                LaunchedEffect(Unit) {
+                    AppUpdater.fetchLatest()?.let { latest ->
+                        if (AppUpdater.isNewerThanInstalled(latest.versionName)) requiredUpdate = latest
+                    }
+                }
+                val update = requiredUpdate
+                if (update != null) {
+                    ForceUpdateScreen(update)
+                    return@KlicTheme
+                }
                 when {
                     isAuthed       -> Home(vm)
                     showWelcome    -> WelcomeScreen { showWelcome = false }
