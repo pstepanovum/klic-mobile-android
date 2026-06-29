@@ -5,6 +5,7 @@ import io.livekit.android.LiveKit
 import io.livekit.android.events.RoomEvent
 import io.livekit.android.events.collect
 import io.livekit.android.room.Room
+import io.livekit.android.room.track.LocalVideoTrack
 import io.livekit.android.room.track.VideoTrack
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -26,21 +27,35 @@ class CallManager(private val appContext: Context) {
     val localVideoTrack = MutableStateFlow<VideoTrack?>(null)
     val remoteVideoTrack = MutableStateFlow<VideoTrack?>(null)
     val remoteParticipantDisconnected = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    /** True while LiveKit is re-establishing media after a network change (WiFi↔cellular). */
+    val isReconnecting = MutableStateFlow(false)
+    /** Emitted when the connection is lost terminally (not a user-initiated leave). */
+    val networkDisconnected = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
 
     var room: Room? = null
         private set
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var eventsJob: Job? = null
+    private var leaving = false
 
     suspend fun join(url: String, token: String, video: Boolean) {
         leave()
+        leaving = false
+        isReconnecting.value = false
         val room = LiveKit.create(appContext).also { this.room = it }
         eventsJob = scope.launch {
             room.events.collect { event ->
                 refreshTracks()
-                if (event is RoomEvent.ParticipantDisconnected) {
-                    remoteParticipantDisconnected.tryEmit(Unit)
+                when (event) {
+                    is RoomEvent.ParticipantDisconnected -> remoteParticipantDisconnected.tryEmit(Unit)
+                    is RoomEvent.Reconnecting -> isReconnecting.value = true
+                    is RoomEvent.Reconnected -> isReconnecting.value = false
+                    is RoomEvent.Disconnected -> {
+                        isReconnecting.value = false
+                        if (!leaving) networkDisconnected.tryEmit(Unit)
+                    }
+                    else -> Unit
                 }
             }
         }
@@ -67,7 +82,16 @@ class CallManager(private val appContext: Context) {
         refreshTracks()
     }
 
+    /** Flip between the front and back camera mid-call. */
+    fun switchCamera() {
+        val track = room?.localParticipant?.videoTrackPublications
+            ?.firstOrNull()?.second as? LocalVideoTrack
+        track?.switchCamera()
+    }
+
     fun leave() {
+        leaving = true
+        isReconnecting.value = false
         eventsJob?.cancel()
         eventsJob = null
         room?.disconnect()

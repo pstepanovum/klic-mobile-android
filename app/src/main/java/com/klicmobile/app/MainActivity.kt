@@ -83,11 +83,15 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         permissionLauncher.launch(
-            arrayOf(
-                Manifest.permission.POST_NOTIFICATIONS,
-                Manifest.permission.RECORD_AUDIO,
-                Manifest.permission.CAMERA,
-            )
+            buildList {
+                add(Manifest.permission.POST_NOTIFICATIONS)
+                add(Manifest.permission.RECORD_AUDIO)
+                add(Manifest.permission.CAMERA)
+                // BLUETOOTH_CONNECT lets call audio route to Bluetooth headsets/car (Android 12+).
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+                    add(Manifest.permission.BLUETOOTH_CONNECT)
+                }
+            }.toTypedArray()
         )
         handleIntent(intent)
         val container = (application as KlicApplication).container

@@ -12,6 +12,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Cameraswitch
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -24,6 +26,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
@@ -110,6 +113,13 @@ fun CallScreen(vm: KlicViewModel, call: CallSession, peerName: String, onEnd: ()
                     painter = painterResource(if (cameraEnabled) KlicIcons.camera else KlicIcons.cameraOff),
                     contentDescription = "Toggle camera",
                 ) { scope.launch { manager.toggleCamera() } }
+
+                if (cameraEnabled) {
+                    CircleControl(
+                        painter = rememberVectorPainter(Icons.Filled.Cameraswitch),
+                        contentDescription = "Switch camera",
+                    ) { manager.switchCamera() }
+                }
             }
         }
 

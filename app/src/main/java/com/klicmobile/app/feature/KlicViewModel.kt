@@ -106,6 +106,19 @@ class KlicViewModel(
             }
         }
         viewModelScope.launch {
+            callManager.isReconnecting.collect { reconnecting ->
+                if (activeCall.value == null) return@collect
+                if (reconnecting) callStatus.value = "Reconnecting…"
+                else if (callStatus.value == "Reconnecting…") callStatus.value = "Connected"
+            }
+        }
+        viewModelScope.launch {
+            callManager.networkDisconnected.collect {
+                // LiveKit gave up reconnecting → end the call (best-effort server notify).
+                if (activeCall.value != null) endCall()
+            }
+        }
+        viewModelScope.launch {
             container.callHangup.collect { endCall() }
         }
         viewModelScope.launch {
