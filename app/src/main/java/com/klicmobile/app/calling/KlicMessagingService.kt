@@ -30,8 +30,12 @@ class KlicMessagingService : FirebaseMessagingService() {
                 // Glare guard: don't pop an incoming screen for a call we're already placing.
                 if (container.activeCallConversationId.value == invite.conversationId) return
                 CallNotifications.showIncomingCall(this, invite)
+                // Ring from the notification path so a backgrounded/killed device rings even if the
+                // full-screen Activity isn't launched. Idempotent if the socket also delivered this.
+                CallRinger.start(applicationContext)
             }
             "call.end", "call.cancel", "call.decline" -> {
+                CallRinger.stop()
                 CallNotifications.cancelIncomingCall(this)
                 sendBroadcast(
                     Intent(IncomingCallActivity.ACTION_CALL_ENDED).apply {

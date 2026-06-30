@@ -18,6 +18,7 @@ class CallActionReceiver : BroadcastReceiver() {
         when (intent.action) {
             ACTION_DECLINE -> {
                 val callId = intent.getStringExtra("callId") ?: return
+                CallRinger.stop()
                 container.applicationScope.launch { container.repository.declineCall(callId) }
                 CallNotifications.cancelIncomingCall(context)
                 // Close the full-screen UI if it's open.

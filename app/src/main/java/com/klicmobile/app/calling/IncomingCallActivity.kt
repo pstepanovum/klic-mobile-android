@@ -28,6 +28,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -46,12 +47,15 @@ class IncomingCallActivity : ComponentActivity() {
         const val ACTION_CALL_ENDED = "com.klicmobile.app.CALL_ENDED"
     }
 
-    private var callId: String? = null
-    private val ringer by lazy { CallRinger(applicationContext) }
+    // The invite currently shown. Held as Compose state so a replacing invite delivered via
+    // onNewIntent (this Activity is singleInstance) updates the UI instead of leaving it stale.
+    private val invite = mutableStateOf<CallInvite?>(null)
+    private val callId: String? get() = invite.value?.callId
+
     private val callEndedReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
             if (intent.action == ACTION_CALL_ENDED && intent.getStringExtra("callId") == callId) {
-                ringer.stop()
+                CallRinger.stop()
                 CallNotifications.cancelIncomingCall(this@IncomingCallActivity)
                 finish()
             }
@@ -64,36 +68,49 @@ class IncomingCallActivity : ComponentActivity() {
             setShowWhenLocked(true)
             setTurnScreenOn(true)
         }
-        val invite = CallInvite.fromIntent(intent)
-        if (invite == null) { finish(); return }
-        callId = invite.callId
+        val parsed = CallInvite.fromIntent(intent)
+        if (parsed == null) { finish(); return }
+        invite.value = parsed
+        // The ringer is started by the notification path (CallSignalingService / KlicMessagingService)
+        // so the call rings whether or not this full-screen Activity launches.
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             registerReceiver(callEndedReceiver, IntentFilter(ACTION_CALL_ENDED), RECEIVER_NOT_EXPORTED)
         } else {
             registerReceiver(callEndedReceiver, IntentFilter(ACTION_CALL_ENDED))
         }
-        ringer.start()
 
         setContent {
             KlicTheme {
-                IncomingCallScreen(
-                    callerName = invite.fromName,
-                    isVideo = invite.kind == "VIDEO",
-                    onAccept = { accept(invite) },
-                    onDecline = { decline(invite) },
-                )
+                invite.value?.let { current ->
+                    IncomingCallScreen(
+                        callerName = current.fromName,
+                        isVideo = current.kind == "VIDEO",
+                        onAccept = { accept(current) },
+                        onDecline = { decline(current) },
+                    )
+                }
             }
         }
     }
 
+    // singleInstance: a different incoming call (e.g. a re-dial after the first was cancelled)
+    // is delivered here rather than launching a second screen. Swap to it instead of showing stale.
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        CallInvite.fromIntent(intent)?.let { this.invite.value = it }
+    }
+
     override fun onDestroy() {
-        ringer.stop()
+        // Intentionally does NOT stop the ringer: if the user just dismisses this screen the call
+        // is still incoming (notification still up), so the ringer keeps going until the call is
+        // actually answered, declined, or ended — all of which stop it explicitly.
         runCatching { unregisterReceiver(callEndedReceiver) }
         super.onDestroy()
     }
 
     private fun accept(invite: CallInvite) {
-        ringer.stop()
+        CallRinger.stop()
         CallNotifications.cancelIncomingCall(this)
         startActivity(
             Intent(this, MainActivity::class.java).apply {
@@ -106,7 +123,7 @@ class IncomingCallActivity : ComponentActivity() {
     }
 
     private fun decline(invite: CallInvite) {
-        ringer.stop()
+        CallRinger.stop()
         val container = (application as KlicApplication).container
         container.applicationScope.launch { container.repository.declineCall(invite.callId) }
         CallNotifications.cancelIncomingCall(this)

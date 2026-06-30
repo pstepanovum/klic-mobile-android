@@ -44,7 +44,9 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.klicmobile.app.calling.CallInvite
+import com.klicmobile.app.calling.CallNotifications
 import com.klicmobile.app.calling.CallReliability
+import com.klicmobile.app.calling.CallRinger
 import com.klicmobile.app.calling.CallSignalingService
 import com.klicmobile.app.calling.IncomingCallActivity
 import com.klicmobile.app.feature.KlicViewModel
@@ -190,7 +192,21 @@ class MainActivity : ComponentActivity() {
 
     private fun handleIntent(intent: Intent?) {
         if (intent?.action == IncomingCallActivity.ACTION_ACCEPT_CALL) {
-            pendingCall.value = CallInvite.fromIntent(intent)
+            val invite = CallInvite.fromIntent(intent)
+            pendingCall.value = invite
+            // Answering from the notification's Answer button lands here without going through
+            // IncomingCallActivity, so tear down the incoming surfaces ourselves: stop the ring,
+            // remove the incoming notification, and dismiss the full-screen Activity if it's up.
+            CallRinger.stop()
+            CallNotifications.cancelIncomingCall(this)
+            invite?.callId?.let { id ->
+                sendBroadcast(
+                    Intent(IncomingCallActivity.ACTION_CALL_ENDED).apply {
+                        setPackage(packageName)
+                        putExtra("callId", id)
+                    }
+                )
+            }
         }
     }
 

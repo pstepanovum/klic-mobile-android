@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.klicmobile.app.calling.CallManager
 import com.klicmobile.app.calling.CallNotifications
+import com.klicmobile.app.calling.CallRinger
 import com.klicmobile.app.calling.OngoingCallService
 import com.klicmobile.app.data.CallSession
 import com.klicmobile.app.data.Conversation
@@ -463,6 +464,11 @@ class KlicViewModel(
 
     private fun startActiveCall(session: CallSession, peerName: String, outgoing: Boolean) {
         if (activeCall.value != null && activeCall.value?.callId != session.callId) return
+        // The call is going active — kill any incoming ring + notification so the user isn't left
+        // with a second, stale call surface (e.g. after answering from the notification action,
+        // which otherwise never cancels the incoming notification).
+        CallRinger.stop()
+        CallNotifications.cancelIncomingCall(container.appContext)
         finishingCallIds.remove(session.callId)
         activeCallOutgoing = outgoing
         callPeerName.value = peerName

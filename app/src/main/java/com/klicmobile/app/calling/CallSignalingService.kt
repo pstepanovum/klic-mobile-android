@@ -52,6 +52,9 @@ class CallSignalingService : Service() {
                 // calls into one, so this incoming is the duplicate side of our own call.
                 if (container.activeCallConversationId.value == invite.conversationId) return@collect
                 CallNotifications.showIncomingCall(this@CallSignalingService, invite.toCallInvite())
+                // Ring from here (not the full-screen Activity) so the call rings even when the
+                // Activity never launches (unlocked/in-use device or no full-screen-intent grant).
+                CallRinger.start(applicationContext)
             }
         }
         scope.launch {
@@ -61,6 +64,7 @@ class CallSignalingService : Service() {
                     event.type == SocketService.CallEvent.Type.END ||
                     event.type == SocketService.CallEvent.Type.DECLINE
                 ) {
+                    CallRinger.stop()
                     CallNotifications.cancelIncomingCall(this@CallSignalingService)
                     sendBroadcast(
                         Intent(IncomingCallActivity.ACTION_CALL_ENDED).apply {
