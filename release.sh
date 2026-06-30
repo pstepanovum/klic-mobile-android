@@ -90,10 +90,9 @@ echo "IPA built: $IPA_PATH"
 echo "Committing iOS changes..."
 cd "$IOS_DIR"
 ios_branch="$(git rev-parse --abbrev-ref HEAD)"
-# Stage tracked modified files + any new Swift sources (handles case-insensitive path quirks)
-git add Resources/Info.plist project.yml
-# Add all .swift files recursively — covers both modified tracked files and new untracked ones
-find Sources -name "*.swift" -print0 | xargs -0 git add
+# git add -A lets git resolve paths via its own index rather than the filesystem,
+# which avoids the macOS case-insensitive mismatch (Sources/Features vs Sources/features).
+git add -A Sources/ Resources/ project.yml
 git commit -m "Release ${tag}" || echo "(nothing to commit in iOS)"
 git tag "$tag"
 git push origin "$ios_branch" --tags
