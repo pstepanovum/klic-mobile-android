@@ -77,6 +77,10 @@ class CallManager(
     val localVideoTrack = MutableStateFlow<VideoTrack?>(null)
     /** First remote video track — drives the 1:1 fullscreen layout and audio routing. */
     val remoteVideoTrack = MutableStateFlow<VideoTrack?>(null)
+    /** Pixel dimensions of that remote feed, when known — drives the system-PiP aspect ratio. */
+    val remoteVideoDimensions = MutableStateFlow<Pair<Int, Int>?>(null)
+    /** True while another call/app holds the audio focus — mic auto-muted, UI shows "On Hold". */
+    val onHold = MutableStateFlow(false)
     /** All remote participants (connected + in-grace), for the group grid. */
     val participants = MutableStateFlow<List<RemoteCallParticipant>>(emptyList())
     /** A remote participant's 60s grace expired without them coming back (value = userId). */
@@ -101,6 +105,8 @@ class CallManager(
     /** Last audio route we applied based on whether any video is on screen — drives automatic
      *  speaker (video) ↔ earpiece (audio-only) switching as cameras turn on/off mid-call. */
     private var videoRouteActive = false
+    /** Whether the mic was on when audio focus was lost, so unhold restores the user's choice. */
+    private var micBeforeHold = true
     private var currentCallId: String? = null
     // Participants that dropped from the SFU and are inside their grace window:
     // userId → (timer, last-known snapshot rendered as a dimmed "reconnecting" tile).
@@ -386,6 +392,8 @@ class CallManager(
         cameraEnabled.value = false
         localVideoTrack.value = null
         remoteVideoTrack.value = null
+        remoteVideoDimensions.value = null
+        onHold.value = false
         participants.value = emptyList()
         if (hadRoom) diagnostic("livekit.leave.ok", callId)
         currentCallId = null
@@ -398,10 +406,12 @@ class CallManager(
         // A muted remote publication means their camera is off (LiveKit's setCameraEnabled(false)
         // mutes rather than unpublishes) — rendering it would freeze on the last decoded frame,
         // so treat it as "no video" and let the UI fall back to the avatar placeholder.
-        remoteVideoTrack.value = r.remoteParticipants.values
+        val remotePublication = r.remoteParticipants.values
             .flatMap { it.videoTrackPublications }
             .firstOrNull { (publication, track) -> track != null && !publication.muted }
-            ?.second as? VideoTrack
+        remoteVideoTrack.value = remotePublication?.second as? VideoTrack
+        remoteVideoDimensions.value = remotePublication?.first?.dimensions
+            ?.let { it.width to it.height }
         refreshParticipants(r)
         diagnostic(
             "livekit.tracks.refresh",
@@ -448,12 +458,42 @@ class CallManager(
             }
             onAudioFocusChangeListener = AudioManager.OnAudioFocusChangeListener { change ->
                 diagnostic("livekit.audio.focus", callId, "change=$change")
+                // §7.5: another call/app taking the call stream puts us "On Hold" (auto-mute);
+                // regaining focus restores the pre-hold mic state.
+                when (change) {
+                    AudioManager.AUDIOFOCUS_LOSS,
+                    AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> holdForFocusLoss()
+                    AudioManager.AUDIOFOCUS_GAIN -> resumeFromHold()
+                }
             }
             audioDeviceChangeListener = { devices: List<AudioDevice>, selected: AudioDevice? ->
                 speakerOn.value = selected is AudioDevice.Speakerphone
                 diagnostic("livekit.audio.route", callId, routeDetail(devices, selected))
             }
         }
+
+    private fun holdForFocusLoss() {
+        if (onHold.value) return
+        micBeforeHold = micEnabled.value
+        onHold.value = true
+        scope.launch {
+            runCatching { room?.localParticipant?.setMicrophoneEnabled(false) }
+            room?.setMicrophoneMute(true)
+            micEnabled.value = false
+            diagnostic("livekit.hold.start", detail = "micWas=$micBeforeHold")
+        }
+    }
+
+    private fun resumeFromHold() {
+        if (!onHold.value) return
+        onHold.value = false
+        scope.launch {
+            runCatching { room?.localParticipant?.setMicrophoneEnabled(micBeforeHold) }
+            room?.setMicrophoneMute(!micBeforeHold)
+            micEnabled.value = micBeforeHold
+            diagnostic("livekit.hold.end", detail = "micRestored=$micBeforeHold")
+        }
+    }
 
     /** Toggle call audio between the loudspeaker and the earpiece/headset. Leaving the speaker
      *  prefers a connected Bluetooth/wired headset, falling back to the earpiece. */

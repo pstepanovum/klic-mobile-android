@@ -1,5 +1,8 @@
 package com.klic.mobile.app.feature.call
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -14,7 +17,6 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -51,14 +53,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.util.VelocityTracker
+import androidx.compose.ui.input.pointer.util.addPointerInputChange
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import com.klic.mobile.app.calling.LiveKitVideo
 import com.klic.mobile.app.calling.RemoteCallParticipant
@@ -68,7 +71,6 @@ import com.klic.mobile.app.feature.KlicViewModel
 import com.klic.mobile.app.ui.components.AvatarView
 import com.klic.mobile.app.ui.components.CircleControl
 import kotlinx.coroutines.launch
-import kotlin.math.roundToInt
 
 @Composable
 fun CallScreen(
@@ -112,7 +114,6 @@ fun CallScreen(
 
     val pip = LocalPipController.current
     var localFullscreen by remember { mutableStateOf(false) }
-    var cardOffset by remember { mutableStateOf(Offset.Zero) }
     val density = LocalDensity.current
 
     // Pick which feed is full-screen and which rides in the draggable card (WhatsApp-style swap).
@@ -122,24 +123,26 @@ fun CallScreen(
     val primaryTrack = if (primaryIsLocal) localTrack else remoteVideo
     val secondaryTrack = if (gridMode) localTrack else if (primaryIsLocal) remoteVideo else localTrack
     val hasPrimaryVideo = !gridMode && shouldShowVideo && primaryTrack != null
+    // §7.6: the "video-call look" keys on the REMOTE feed being fullscreen — never on the
+    // local camera. No remote fullscreen → themed header with name + status pill.
+    val remoteFullscreen = hasPrimaryVideo && !primaryIsLocal
 
     BoxWithConstraints(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-        if (hasPrimaryVideo) {
-            LiveKitVideo(manager.room, primaryTrack, Modifier.fillMaxSize())
-        }
-
         if (pip.isInPipMode) {
-            // Compacted into a PiP window: video only, no chrome. Fall back to a centred avatar
-            // while there's no full-screen video (grid mode shows the first live remote feed).
-            val pipTrack = if (gridMode) participants.firstNotNullOfOrNull { it.videoTrack } else primaryTrack
-            if (gridMode && pipTrack != null) {
+            // Compacted into the system PiP window: ONLY the remote video, full-bleed, no
+            // chrome. Fall back to a centred avatar while no remote feed is live.
+            val pipTrack = remoteVideo ?: participants.firstNotNullOfOrNull { it.videoTrack }
+            if (pipTrack != null) {
                 LiveKitVideo(manager.room, pipTrack, Modifier.fillMaxSize())
-            } else if (!hasPrimaryVideo && pipTrack == null) {
+            } else {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     AvatarView(url = peerId?.let { Network.avatarUrl(it) }, name = peerName, size = 64.dp)
                 }
             }
         } else {
+            if (hasPrimaryVideo) {
+                LiveKitVideo(manager.room, primaryTrack, Modifier.fillMaxSize())
+            }
             // Minimize back into the app (floating overlay) + optional system-PiP compact.
             Row(
                 Modifier.align(Alignment.TopStart).padding(16.dp),
@@ -163,8 +166,9 @@ fun CallScreen(
                 Modifier.fillMaxSize().padding(vertical = 56.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                // Over video: the name is plain white text and only the status ("Connected") gets a
-                // small white pill. On a voice/avatar call, use theme colors with no pill.
+                // §7.6: remote video fullscreen → no header at all (controls remain). Otherwise
+                // (voice call, peer's camera off, or my own preview expanded) → themed name +
+                // status pill, never white-on-nothing.
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     if (!hasPrimaryVideo && !gridMode) {
                         AvatarView(
@@ -174,24 +178,37 @@ fun CallScreen(
                         )
                         Spacer(Modifier.height(16.dp))
                     }
-                    Text(
-                        peerName,
-                        style = MaterialTheme.typography.titleLarge,
-                        color = if (hasPrimaryVideo) Color.White else MaterialTheme.colorScheme.onBackground,
-                    )
-                    if (hasPrimaryVideo) {
-                        Spacer(Modifier.height(6.dp))
-                        Text(
-                            callStatus,
-                            style = MaterialTheme.typography.labelMedium,
-                            color = Color.Black.copy(alpha = 0.8f),
-                            modifier = Modifier
-                                .clip(CircleShape)
-                                .background(Color.White)
-                                .padding(horizontal = 12.dp, vertical = 5.dp),
-                        )
-                    } else {
-                        Text(callStatus, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    when {
+                        !remoteFullscreen -> {
+                            Text(
+                                peerName,
+                                style = MaterialTheme.typography.titleLarge,
+                                color = MaterialTheme.colorScheme.onBackground,
+                            )
+                            Spacer(Modifier.height(6.dp))
+                            Text(
+                                callStatus,
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier
+                                    .clip(CircleShape)
+                                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                                    .padding(horizontal = 12.dp, vertical = 5.dp),
+                            )
+                        }
+                        callStatus == "On Hold" -> {
+                            // Header is hidden over remote video, but a hold must stay
+                            // visible (§7.5) — dark translucent capsule over the feed.
+                            Text(
+                                callStatus,
+                                style = MaterialTheme.typography.labelMedium,
+                                color = Color.White,
+                                modifier = Modifier
+                                    .clip(CircleShape)
+                                    .background(Color.Black.copy(alpha = 0.55f))
+                                    .padding(horizontal = 12.dp, vertical = 5.dp),
+                            )
+                        }
                     }
                 }
 
@@ -254,25 +271,63 @@ fun CallScreen(
 
         }
 
-        // Draggable, tap-to-swap picture-in-picture card for the secondary feed.
+        // Draggable, tap-to-swap picture-in-picture card for the secondary feed. §7.7: the drag
+        // tracks the finger 1:1 (accumulated into Animatables, rendered via graphicsLayer) and
+        // the release springs to the nearest horizontal edge carrying the fling velocity.
         if (!pip.isInPipMode && shouldShowVideo && secondaryTrack != null) {
             val leftLimitPx = with(density) { (maxWidth - 150.dp).toPx() }.coerceAtLeast(0f)
             val downLimitPx = with(density) { (maxHeight - 320.dp).toPx() }.coerceAtLeast(0f)
+            val cardX = remember { Animatable(0f) }
+            val cardY = remember { Animatable(0f) }
+            LaunchedEffect(leftLimitPx, downLimitPx) {
+                cardX.updateBounds(-leftLimitPx, 0f)
+                cardY.updateBounds(0f, downLimitPx)
+            }
             Box(
                 Modifier
                     .align(Alignment.TopEnd)
-                    .offset { IntOffset(cardOffset.x.roundToInt(), cardOffset.y.roundToInt()) }
+                    .graphicsLayer {
+                        translationX = cardX.value
+                        translationY = cardY.value
+                    }
                     .padding(20.dp)
                     .size(110.dp, 160.dp)
                     .clip(RoundedCornerShape(18.dp))
-                    .pointerInput(Unit) {
-                        detectDragGestures { change, drag ->
-                            change.consume()
-                            cardOffset = Offset(
-                                (cardOffset.x + drag.x).coerceIn(-leftLimitPx, 0f),
-                                (cardOffset.y + drag.y).coerceIn(0f, downLimitPx),
-                            )
-                        }
+                    .pointerInput(leftLimitPx, downLimitPx) {
+                        val tracker = VelocityTracker()
+                        var dragX = 0f
+                        var dragY = 0f
+                        detectDragGestures(
+                            onDragStart = {
+                                dragX = cardX.value
+                                dragY = cardY.value
+                                tracker.resetTracking()
+                            },
+                            onDrag = { change, drag ->
+                                change.consume()
+                                tracker.addPointerInputChange(change)
+                                dragX = (dragX + drag.x).coerceIn(-leftLimitPx, 0f)
+                                dragY = (dragY + drag.y).coerceIn(0f, downLimitPx)
+                                val x = dragX
+                                val y = dragY
+                                scope.launch {
+                                    cardX.snapTo(x)
+                                    cardY.snapTo(y)
+                                }
+                            },
+                            onDragEnd = {
+                                val velocity = tracker.calculateVelocity()
+                                val settle = spring<Float>(
+                                    dampingRatio = Spring.DampingRatioNoBouncy,
+                                    stiffness = Spring.StiffnessMediumLow,
+                                )
+                                // Project the fling a beat forward to pick the edge it's headed to.
+                                val projectedX = dragX + velocity.x * 0.12f
+                                val targetX = if (projectedX < -leftLimitPx / 2f) -leftLimitPx else 0f
+                                scope.launch { cardX.animateTo(targetX, settle, initialVelocity = velocity.x) }
+                                scope.launch { cardY.animateTo(dragY, settle, initialVelocity = velocity.y) }
+                            },
+                        )
                     }
                     .clickable { if (!gridMode) localFullscreen = !localFullscreen },
             ) {

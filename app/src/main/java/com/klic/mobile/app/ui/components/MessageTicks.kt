@@ -1,27 +1,28 @@
 package com.klic.mobile.app.ui.components
 
-import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.drawscope.withTransform
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
+import com.klic.mobile.app.ui.theme.KlicIcons
 import com.klic.mobile.app.ui.theme.ReadGreen
 
 /**
- * Custom double-checkmark icon for message delivery status.
+ * Message delivery-status ticks drawn with the shared "klic check" glyph
+ * (vector asset, viewport 268x190).
  *
- * Draws a single tick for "sent", double tick for "delivered" and "read".
- * SVG source viewBox: 12 × 7.
+ * Single check for "sent"; "delivered" and "read" overlap a second copy of the
+ * same glyph, shifted right; "read" tints green.
  *
  * @param status    "sent" | "delivered" | "read"
  * @param onPrimary true when sitting on a primary-coloured bubble (own messages)
- * @param onMedia   true when used as an overlay on image or video
+ * @param onMedia   true when used inside the dark overlay pill on image or video
  */
 @Composable
 fun MessageTicks(
@@ -38,44 +39,24 @@ fun MessageTicks(
         else             -> muted
     }
     val showDouble = status == "delivered" || status == "read"
+    val check = painterResource(KlicIcons.klicCheck)
 
-    // Build once, reuse every frame.
-    val path1 = remember {
-        Path().apply {
-            moveTo(8.28033f, 1.28033f)
-            cubicTo(8.57322f, 0.987437f, 8.57322f, 0.512563f, 8.28033f, 0.21967f)
-            cubicTo(7.98744f, -0.0732232f, 7.51256f, -0.0732232f, 7.21967f, 0.21967f)
-            lineTo(3.25f, 4.18934f)
-            lineTo(1.28033f, 2.21967f)
-            cubicTo(0.987437f, 1.92678f, 0.512563f, 1.92678f, 0.21967f, 2.21967f)
-            cubicTo(-0.0732232f, 2.51256f, -0.0732232f, 2.98744f, 0.21967f, 3.28033f)
-            lineTo(2.71967f, 5.78033f)
-            cubicTo(3.01256f, 6.07322f, 3.48744f, 6.07322f, 3.78033f, 5.78033f)
-            lineTo(8.28033f, 1.28033f)
-            close()
-        }
-    }
-    val path2 = remember {
-        Path().apply {
-            moveTo(11.7066f, 0.21967f)
-            cubicTo(11.4137f, -0.0732232f, 10.9388f, -0.0732232f, 10.6459f, 0.21967f)
-            lineTo(6.08527f, 4.78033f)
-            cubicTo(5.79238f, 5.07322f, 5.79238f, 5.5481f, 6.08527f, 5.84099f)
-            cubicTo(6.37817f, 6.13388f, 6.85304f, 6.13388f, 7.14594f, 5.84099f)
-            lineTo(11.7066f, 1.28033f)
-            cubicTo(11.9995f, 0.987437f, 11.9995f, 0.512563f, 11.7066f, 0.21967f)
-            close()
-        }
-    }
-
-    Canvas(modifier = modifier.size(width = 16.dp, height = 10.dp)) {
-        val sx = size.width / 12f
-        val sy = size.height / 7f
-        withTransform({
-            scale(scaleX = sx, scaleY = sy, pivot = Offset.Zero)
-        }) {
-            drawPath(path1, color = tickColor)
-            if (showDouble) drawPath(path2, color = tickColor)
+    // Each check draws at 11x8dp (glyph is ~1.41:1); the double state overlaps a second
+    // copy at the trailing edge, keeping the old 16x10dp footprint.
+    Box(modifier.size(width = if (showDouble) 16.dp else 11.dp, height = 10.dp)) {
+        Icon(
+            painter = check,
+            contentDescription = null,
+            tint = tickColor,
+            modifier = Modifier.align(Alignment.CenterStart).size(width = 11.dp, height = 8.dp),
+        )
+        if (showDouble) {
+            Icon(
+                painter = check,
+                contentDescription = null,
+                tint = tickColor,
+                modifier = Modifier.align(Alignment.CenterEnd).size(width = 11.dp, height = 8.dp),
+            )
         }
     }
 }

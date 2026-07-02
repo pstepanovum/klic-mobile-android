@@ -20,6 +20,8 @@ object KlicIcons {
     val back     = R.drawable.ic_bold_arrow_left
     val copy     = R.drawable.ic_line_copy
     val check    = R.drawable.ic_line_check
+    // Shared "klic check" mark — message delivery ticks (single/double).
+    val klicCheck = R.drawable.ic_klic_check
     val add      = R.drawable.ic_bold_add
     val gallery  = R.drawable.ic_bold_gallery
     val document = R.drawable.ic_bold_document

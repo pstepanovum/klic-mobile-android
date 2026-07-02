@@ -158,6 +158,18 @@ class KlicViewModel(
             }
         }
         viewModelScope.launch {
+            // §7.5: audio focus stolen by another call/app → "On Hold"; regained → back to
+            // Connected. Only flips a settled "Connected" status so Calling…/Reconnecting… win.
+            callManager.onHold.collect { held ->
+                if (activeCall.value == null) return@collect
+                if (held) {
+                    if (callStatus.value == "Connected") callStatus.value = "On Hold"
+                } else if (callStatus.value == "On Hold") {
+                    callStatus.value = "Connected"
+                }
+            }
+        }
+        viewModelScope.launch {
             // A rejoin reconnected us to the room — re-announce media presence to the server.
             callManager.rejoined.collect { id ->
                 if (activeCall.value?.callId == id) repo.mediaJoined(id)
@@ -500,9 +512,11 @@ class KlicViewModel(
     fun endCall() {
         val id = activeCall.value?.callId
         if (id != null) {
-            // "Reconnecting…" is still a live call (media was up) — hang-up must END it,
-            // not cancel/decline, so the outcome records as completed.
-            val wasConnected = callStatus.value == "Connected" || callStatus.value == "Reconnecting…"
+            // "Reconnecting…"/"On Hold" are still live calls (media was up) — hang-up must
+            // END them, not cancel/decline, so the outcome records as completed.
+            val wasConnected = callStatus.value == "Connected" ||
+                callStatus.value == "Reconnecting…" ||
+                callStatus.value == "On Hold"
             val wasOutgoing = activeCallOutgoing
             serverTeardownJob = viewModelScope.launch {
                 runCatching {

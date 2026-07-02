@@ -94,6 +94,10 @@ class MainActivity : ComponentActivity() {
         android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O &&
             packageManager.hasSystemFeature(PackageManager.FEATURE_PICTURE_IN_PICTURE)
     }
+    // §7.4: PiP eligibility (video call with a live remote feed) + aspect ratio from the
+    // remote track — mirrored out of compose state so onUserLeaveHint/params can read them.
+    private var pipVideoActive = false
+    private var pipAspect: Rational? = null
 
     private val permissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {}
@@ -131,6 +135,23 @@ class MainActivity : ComponentActivity() {
             }
             var showWelcome by remember { mutableStateOf(true) }
             var showReliabilityDialog by remember { mutableStateOf(false) }
+            // §7.4: keep the system's PiP params in sync — auto-enter (API 31+) only while a
+            // call with live remote video is up, aspect ratio from the track when known.
+            val activeCallForPip by vm.activeCall.collectAsState()
+            val remoteVideoForPip by container.callManager.remoteVideoTrack.collectAsState()
+            val remoteVideoDims by container.callManager.remoteVideoDimensions.collectAsState()
+            LaunchedEffect(activeCallForPip, remoteVideoForPip, remoteVideoDims) {
+                pipVideoActive = activeCallForPip != null && remoteVideoForPip != null
+                pipAspect = remoteVideoDims?.let { (w, h) ->
+                    if (w > 0 && h > 0) {
+                        // Clamp into the platform's legal PiP range (~1:2.39 … 2.39:1).
+                        val ratio = w.toFloat() / h
+                        val clamped = ratio.coerceIn(0.42f, 2.38f)
+                        if (clamped == ratio) Rational(w, h) else Rational((clamped * 1000).toInt(), 1000)
+                    } else null
+                }
+                applyPipParams()
+            }
             // Once after sign-in, nudge the user to allow reliable background calls.
             LaunchedEffect(isAuthed) {
                 if (isAuthed && !container.reliabilityPrompted &&
@@ -216,18 +237,29 @@ class MainActivity : ComponentActivity() {
     // Picture-in-Picture: "compact" the call so the user can keep using Klic during it.
     private fun enterPipMode() {
         if (!pipSupported) return
-        runCatching {
-            enterPictureInPictureMode(
-                PictureInPictureParams.Builder().setAspectRatio(Rational(9, 16)).build(),
-            )
+        runCatching { enterPictureInPictureMode(pipParamsBuilder().build()) }
+    }
+
+    private fun pipParamsBuilder(): PictureInPictureParams.Builder {
+        val builder = PictureInPictureParams.Builder().setAspectRatio(pipAspect ?: Rational(9, 16))
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+            builder.setAutoEnterEnabled(pipVideoActive)
         }
+        return builder
+    }
+
+    private fun applyPipParams() {
+        if (!pipSupported) return
+        runCatching { setPictureInPictureParams(pipParamsBuilder().build()) }
     }
 
     override fun onUserLeaveHint() {
         super.onUserLeaveHint()
-        // Auto-compact an active video call when the user navigates away (WhatsApp-style).
-        val cm = (application as KlicApplication).container.callManager
-        if (pipSupported && cm.isConnected.value && cm.cameraEnabled.value) enterPipMode()
+        // Pre-S fallback: auto-compact when leaving during a call with live remote video.
+        // On S+ the system auto-enters via setAutoEnterEnabled (see applyPipParams).
+        if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.S && pipVideoActive) {
+            enterPipMode()
+        }
     }
 
     override fun onPictureInPictureModeChanged(isInPictureInPictureMode: Boolean, newConfig: Configuration) {

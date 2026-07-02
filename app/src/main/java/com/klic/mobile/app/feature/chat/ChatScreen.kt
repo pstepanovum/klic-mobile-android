@@ -65,6 +65,7 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
+import com.klic.mobile.app.data.Attachment
 import com.klic.mobile.app.data.Conversation
 import com.klic.mobile.app.data.Message
 import com.klic.mobile.app.feature.KlicViewModel
@@ -76,8 +77,12 @@ import com.klic.mobile.app.feature.chat.composer.AttachSheet
 import com.klic.mobile.app.feature.chat.composer.CaptureMode
 import com.klic.mobile.app.feature.chat.composer.ComposerBar
 import com.klic.mobile.app.feature.chat.composer.RecordingBar
+import com.klic.mobile.app.feature.chat.media.AttachmentDownloads
+import com.klic.mobile.app.feature.chat.media.FileDetailSheet
+import com.klic.mobile.app.feature.chat.media.PdfViewerOverlay
 import com.klic.mobile.app.feature.chat.media.PendingMediaBar
 import com.klic.mobile.app.feature.chat.media.PendingMediaDraft
+import com.klic.mobile.app.feature.chat.media.isPdfAttachment
 import com.klic.mobile.app.feature.chat.media.loadFileAttachment
 import com.klic.mobile.app.feature.chat.media.loadImageDraft
 import com.klic.mobile.app.feature.chat.media.loadMediaDraft
@@ -141,6 +146,9 @@ fun ChatScreen(
     var menuTarget by remember { mutableStateOf<Message?>(null) }
     var deleteTarget by remember { mutableStateOf<Message?>(null) }
     var viewerUrl by remember { mutableStateOf<String?>(null) }
+    // §7.3: FILE attachments are downloaded to cache and viewed in-app, never opened by URL.
+    var pdfFile by remember { mutableStateOf<File?>(null) }
+    var fileDetail by remember { mutableStateOf<Pair<Attachment, File>?>(null) }
     val peerTyping = isDirect && typingMap[conversation.id]?.let { System.currentTimeMillis() - it < 6000L } == true
     val displaySubtitle = if (peerTyping) "typing…" else headerSubtitle
 
@@ -348,6 +356,16 @@ fun ChatScreen(
                         onLongPress = { menuTarget = msg },
                         onReactionTap = { emoji -> vm.react(conversation.id, msg.id, emoji) },
                         onImageClick = { url -> viewerUrl = url },
+                        onFileClick = { att ->
+                            scope.launch {
+                                val file = AttachmentDownloads.ensureLocal(context, att)
+                                when {
+                                    file == null -> vm.error.value = "Couldn't download the file."
+                                    isPdfAttachment(att) -> pdfFile = file
+                                    else -> fileDetail = att to file
+                                }
+                            }
+                        },
                     )
                 }
                 if (peerTyping) {
@@ -567,6 +585,14 @@ fun ChatScreen(
 
     viewerUrl?.let { url ->
         ImageViewerOverlay(url = url, onDismiss = { viewerUrl = null })
+    }
+
+    pdfFile?.let { file ->
+        PdfViewerOverlay(file = file, onDismiss = { pdfFile = null })
+    }
+
+    fileDetail?.let { (att, file) ->
+        FileDetailSheet(att = att, file = file, onDismiss = { fileDetail = null })
     }
     } // Box
 }
