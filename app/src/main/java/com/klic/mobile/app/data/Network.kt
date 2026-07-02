@@ -17,6 +17,7 @@ import retrofit2.http.DELETE
 import retrofit2.http.GET
 import retrofit2.http.PATCH
 import retrofit2.http.POST
+import retrofit2.http.PUT
 import retrofit2.http.Path
 import retrofit2.http.Query
 
@@ -63,6 +64,19 @@ interface KlicApi {
 
     @POST("me/devices")
     suspend fun registerDevice(@Body body: Map<String, String>): Response<ResponseBody>
+
+    // E2EE key distribution (E2EE.md §6.2)
+    @PUT("keys")
+    suspend fun publishKeys(@Body body: PublishKeysRequest): PublishKeysResponse
+
+    @GET("keys/count")
+    suspend fun preKeyCount(@Query("installId") installId: String): PreKeyCountResponse
+
+    @POST("keys/prekeys")
+    suspend fun topUpPreKeys(@Body body: TopUpPreKeysRequest): Response<ResponseBody>
+
+    @PUT("keys/signed-prekey")
+    suspend fun rotateSignedPreKey(@Body body: RotateSignedPreKeyRequest): Response<ResponseBody>
 
     @POST("diagnostics/mobile-event")
     suspend fun mobileDiagnostic(@Body body: MobileDiagnosticRequest): Response<ResponseBody>

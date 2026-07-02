@@ -64,6 +64,9 @@ dependencies {
     implementation(libs.okhttp.logging)
     implementation(libs.androidx.datastore.preferences)
 
+    // E2EE — Signal protocol (identity keys + prekeys now; sessions arrive in Phase 2)
+    implementation(libs.libsignal.android)
+
     // Realtime + media
     implementation(libs.socketio.client)
     implementation(libs.livekit.android)

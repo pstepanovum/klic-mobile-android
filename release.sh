@@ -1,126 +1,311 @@
 #!/usr/bin/env bash
 #
-# Cut a new Klic release: bump version (Android + iOS kept in sync), build the APK
-# and an unsigned iOS IPA, tag both repos, and publish GitHub releases with assets
-# attached. Android users update via the in-app updater; iOS IPA is for AltStore/
-# sideloading (unsigned — AltStore re-signs with the user's personal cert).
+# Shared mobile release entrypoint for Klic.
+# - Always keeps Android + iOS version numbers in sync when both repos are present.
+# - Publishes the current platform by default.
+# - Optionally also publishes the sibling platform after a confirmation prompt.
 #
 # Usage:
-#   ./release.sh            # auto-bump the patch version (0.3.7 -> 0.3.8)
-#   ./release.sh 0.4.0      # set an explicit version
+#   ./release.sh            # auto-bump patch version
+#   ./release.sh 0.4.3      # explicit shared version
 #
 set -euo pipefail
-cd "$(dirname "$0")"
 
-ANDROID_DIR="$(pwd)"
-IOS_DIR="$(cd ../klic-mobile-ios && pwd)"
-GRADLE="app/build.gradle.kts"
-IOS_PROJECT="${IOS_DIR}/project.yml"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+SELF_DIR="$SCRIPT_DIR"
+SELF_NAME="$(basename "$SELF_DIR")"
 
-cur_name="$(grep -E 'versionName = ' "$GRADLE" | head -1 | sed -E 's/.*"([^"]+)".*/\1/')"
-cur_code="$(grep -E 'versionCode = ' "$GRADLE" | head -1 | sed -E 's/.*= *([0-9]+).*/\1/')"
-
-new_name="${1:-}"
-if [ -z "$new_name" ]; then
-  IFS=. read -r MA MI PA <<< "$cur_name"
-  new_name="${MA}.${MI}.$((PA + 1))"
-fi
-new_code=$((cur_code + 1))
-tag="v${new_name}"
-
-echo "==========================================="
-echo "Releasing ${cur_name} (code ${cur_code})"
-echo "      ->  ${new_name} (code ${new_code})  tag=${tag}"
-echo "==========================================="
-
-# ── 1. Bump versions ──────────────────────────────────────────────────────────
-sed -i '' -E "s/versionName = \"[^\"]+\"/versionName = \"${new_name}\"/" "$GRADLE"
-sed -i '' -E "s/versionCode = [0-9]+/versionCode = ${new_code}/" "$GRADLE"
-
-if [ -f "$IOS_PROJECT" ]; then
-  sed -i '' -E "s/MARKETING_VERSION: \"[^\"]+\"/MARKETING_VERSION: \"${new_name}\"/" "$IOS_PROJECT"
-  sed -i '' -E "s/CURRENT_PROJECT_VERSION: \"[^\"]+\"/CURRENT_PROJECT_VERSION: \"${new_code}\"/" "$IOS_PROJECT"
-  echo "iOS version synced → ${new_name} (build ${new_code})"
-fi
-
-# ── 2. Build Android APK ──────────────────────────────────────────────────────
-echo "Building Android APK..."
-cd "$ANDROID_DIR"
-./gradlew assembleDebug
-apk="${ANDROID_DIR}/klic-${new_name}.apk"
-cp "app/build/outputs/apk/debug/app-debug.apk" "$apk"
-echo "APK built: $apk"
-
-# ── 3. Build iOS unsigned IPA ─────────────────────────────────────────────────
-echo "Building iOS IPA..."
-cd "$IOS_DIR"
-
-# Regenerate xcodeproj from project.yml so all source files are included.
-if command -v xcodegen &>/dev/null; then
-  xcodegen generate --quiet
+if [ "$SELF_NAME" = "klic-mobile-android" ]; then
+  SELF_PLATFORM="android"
+  SIBLING_PLATFORM="ios"
+  SIBLING_DIR="$(cd "$SELF_DIR/../klic-mobile-ios" 2>/dev/null && pwd || true)"
 else
-  echo "xcodegen not found — skipping project regeneration (xcodeproj must already be up to date)"
+  SELF_PLATFORM="ios"
+  SIBLING_PLATFORM="android"
+  SIBLING_DIR="$(cd "$SELF_DIR/../klic-mobile-android" 2>/dev/null && pwd || true)"
 fi
 
-ARCHIVE_PATH="/tmp/klic-${new_name}.xcarchive"
-IPA_NAME="klic-ios-${new_name}.ipa"
-IPA_PATH="${IOS_DIR}/${IPA_NAME}"
-PAYLOAD_DIR="/tmp/klic-ipa-payload-${new_name}"
+ANDROID_DIR=""
+IOS_DIR=""
 
-xcodebuild archive \
-  -scheme Klic \
-  -sdk iphoneos \
-  -configuration Release \
-  -archivePath "$ARCHIVE_PATH" \
-  CODE_SIGN_IDENTITY="" \
-  CODE_SIGNING_REQUIRED=NO \
-  CODE_SIGNING_ALLOWED=NO \
-  DEVELOPMENT_TEAM="" \
-  -quiet
+if [ "$SELF_PLATFORM" = "android" ]; then
+  ANDROID_DIR="$SELF_DIR"
+  IOS_DIR="$SIBLING_DIR"
+else
+  IOS_DIR="$SELF_DIR"
+  ANDROID_DIR="$SIBLING_DIR"
+fi
 
-# Package .app → IPA manually (no provisioning profile needed for unsigned)
-rm -rf "$PAYLOAD_DIR"
-mkdir -p "${PAYLOAD_DIR}/Payload"
-cp -r "${ARCHIVE_PATH}/Products/Applications/Klic.app" "${PAYLOAD_DIR}/Payload/"
-(cd "$PAYLOAD_DIR" && zip -qr "$IPA_PATH" Payload)
-rm -rf "$PAYLOAD_DIR" "$ARCHIVE_PATH"
-echo "IPA built: $IPA_PATH"
+ANDROID_GRADLE_REL="app/build.gradle.kts"
+IOS_PROJECT_REL="project.yml"
 
-# ── 4. Commit + tag + push iOS repo ──────────────────────────────────────────
-echo "Committing iOS changes..."
-cd "$IOS_DIR"
-ios_branch="$(git rev-parse --abbrev-ref HEAD)"
-# git add -A lets git resolve paths via its own index rather than the filesystem,
-# which avoids the macOS case-insensitive mismatch (Sources/Features vs Sources/features).
-git add -A Sources/ Resources/ project.yml
-git commit -m "Release ${tag}" || echo "(nothing to commit in iOS)"
-git tag "$tag"
-git push origin "$ios_branch" --tags
-echo "iOS repo tagged ${tag} and pushed."
+require_dir() {
+  local dir="$1"
+  [ -n "$dir" ] && [ -d "$dir" ]
+}
 
-# Create iOS GitHub release with the IPA
-gh release create "$tag" "${IPA_PATH}#Klic ${new_name} (iOS IPA — unsigned)" \
-  --repo pstepanovum/klic-mobile-ios \
-  --title "Klic ${new_name}" \
-  --notes "Unsigned IPA for sideloading via AltStore or similar tools. AltStore will re-sign it with your personal certificate. iOS ${new_name} (build ${new_code})."
+android_version_name() {
+  grep -E 'versionName = ' "$1/$ANDROID_GRADLE_REL" | head -1 | sed -E 's/.*"([^"]+)".*/\1/'
+}
 
-# ── 5. Commit + tag + push Android repo ──────────────────────────────────────
-echo "Committing Android changes..."
-cd "$ANDROID_DIR"
-android_branch="$(git rev-parse --abbrev-ref HEAD)"
-git add "$GRADLE"
-git commit -m "Release ${tag}" || echo "(nothing to commit in Android)"
-git tag "$tag"
-git push origin "$android_branch" --tags
+android_version_code() {
+  grep -E 'versionCode = ' "$1/$ANDROID_GRADLE_REL" | head -1 | sed -E 's/.*= *([0-9]+).*/\1/'
+}
 
-gh release create "$tag" "${apk}#Klic ${new_name} (Android APK)" \
-  --repo pstepanovum/klic-mobile-android \
-  --title "Klic ${new_name}" \
-  --notes "Android debug build. Install via the in-app updater (Settings → App updates) or by downloading the APK. iOS is distributed via the iOS release on pstepanovum/klic-mobile-ios."
+ios_version_name() {
+  grep -E 'MARKETING_VERSION: ' "$1/$IOS_PROJECT_REL" | head -1 | sed -E 's/.*"([^"]+)".*/\1/'
+}
+
+ios_version_code() {
+  grep -E 'CURRENT_PROJECT_VERSION: ' "$1/$IOS_PROJECT_REL" | head -1 | sed -E 's/.*"([^"]+)".*/\1/'
+}
+
+bump_patch() {
+  local version="$1"
+  IFS=. read -r major minor patch <<< "$version"
+  echo "${major}.${minor}.$((patch + 1))"
+}
+
+update_android_version() {
+  local dir="$1"
+  local version="$2"
+  local code="$3"
+  sed -i '' -E "s/versionName = \"[^\"]+\"/versionName = \"${version}\"/" "$dir/$ANDROID_GRADLE_REL"
+  sed -i '' -E "s/versionCode = [0-9]+/versionCode = ${code}/" "$dir/$ANDROID_GRADLE_REL"
+}
+
+update_ios_version() {
+  local dir="$1"
+  local version="$2"
+  local code="$3"
+  sed -i '' -E "s/MARKETING_VERSION: \"[^\"]+\"/MARKETING_VERSION: \"${version}\"/" "$dir/$IOS_PROJECT_REL"
+  sed -i '' -E "s/CURRENT_PROJECT_VERSION: \"[^\"]+\"/CURRENT_PROJECT_VERSION: \"${code}\"/" "$dir/$IOS_PROJECT_REL"
+}
+
+ensure_clean_tag() {
+  local dir="$1"
+  local tag="$2"
+  if git -C "$dir" rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
+    echo "Tag $tag already exists in $dir"
+    exit 1
+  fi
+}
+
+confirm_yes() {
+  local prompt="$1"
+  local answer
+  read -r -p "$prompt [y/N] " answer || true
+  case "${answer:-}" in
+    y|Y|yes|YES) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+build_android() {
+  local dir="$1"
+  local version="$2"
+  echo "Building Android APK..." >&2
+  (
+    cd "$dir"
+    ./gradlew assembleDebug
+  )
+  local apk="$dir/klic-${version}.apk"
+  cp "$dir/app/build/outputs/apk/debug/app-debug.apk" "$apk"
+  echo "$apk"
+}
+
+build_ios() {
+  local dir="$1"
+  local version="$2"
+  echo "Building iOS IPA..." >&2
+  (
+    cd "$dir"
+    if command -v xcodegen >/dev/null 2>&1; then
+      xcodegen generate --quiet
+    else
+      echo "xcodegen not found — skipping project regeneration (xcodeproj must already be up to date)" >&2
+    fi
+  )
+
+  local archive_path="/tmp/klic-${version}.xcarchive"
+  local ipa_path="$dir/klic-ios-${version}.ipa"
+  local payload_dir="/tmp/klic-ipa-payload-${version}"
+
+  (
+    cd "$dir"
+    xcodebuild archive \
+      -scheme Klic \
+      -sdk iphoneos \
+      -configuration Release \
+      -archivePath "$archive_path" \
+      CODE_SIGN_IDENTITY="" \
+      CODE_SIGNING_REQUIRED=NO \
+      CODE_SIGNING_ALLOWED=NO \
+      DEVELOPMENT_TEAM="" \
+      -quiet
+  )
+
+  rm -rf "$payload_dir"
+  mkdir -p "$payload_dir/Payload"
+  cp -r "$archive_path/Products/Applications/Klic.app" "$payload_dir/Payload/"
+  (cd "$payload_dir" && zip -qr "$ipa_path" Payload)
+  rm -rf "$payload_dir" "$archive_path"
+  echo "$ipa_path"
+}
+
+commit_tag_push_android() {
+  local dir="$1"
+  local tag="$2"
+  local branch
+  branch="$(git -C "$dir" rev-parse --abbrev-ref HEAD)"
+  git -C "$dir" add "$ANDROID_GRADLE_REL"
+  git -C "$dir" commit -m "Release ${tag}" || echo "(nothing to commit in Android)"
+  git -C "$dir" tag "$tag"
+  git -C "$dir" push origin "$branch" --tags
+}
+
+commit_tag_push_ios() {
+  local dir="$1"
+  local tag="$2"
+  local branch
+  branch="$(git -C "$dir" rev-parse --abbrev-ref HEAD)"
+  git -C "$dir" add "$IOS_PROJECT_REL"
+  git -C "$dir" commit -m "Release ${tag}" || echo "(nothing to commit in iOS)"
+  git -C "$dir" tag "$tag"
+  git -C "$dir" push origin "$branch" --tags
+}
+
+publish_android_release() {
+  local version="$1"
+  local code="$2"
+  local tag="$3"
+  local apk="$4"
+  gh release create "$tag" "${apk}#Klic ${version} (Android APK)" \
+    --repo pstepanovum/klic-mobile-android \
+    --title "Klic ${version}" \
+    --notes "Android debug build. Install via the in-app updater (Settings → App updates) or by downloading the APK. Shared mobile version ${version} (build ${code})."
+}
+
+publish_ios_release() {
+  local version="$1"
+  local code="$2"
+  local tag="$3"
+  local ipa="$4"
+  gh release create "$tag" "${ipa}#Klic ${version} (iOS IPA — unsigned)" \
+    --repo pstepanovum/klic-mobile-ios \
+    --title "Klic ${version}" \
+    --notes "Unsigned IPA for sideloading via AltStore or similar tools. AltStore will re-sign it with your personal certificate. Shared mobile version ${version} (build ${code})."
+}
+
+current_version=""
+current_code=""
+
+if require_dir "$ANDROID_DIR"; then
+  current_version="$(android_version_name "$ANDROID_DIR")"
+  current_code="$(android_version_code "$ANDROID_DIR")"
+elif require_dir "$IOS_DIR"; then
+  current_version="$(ios_version_name "$IOS_DIR")"
+  current_code="$(ios_version_code "$IOS_DIR")"
+else
+  echo "Neither Android nor iOS repo was found."
+  exit 1
+fi
+
+new_version="${1:-}"
+if [ -z "$new_version" ]; then
+  new_version="$(bump_patch "$current_version")"
+fi
+new_code=$((current_code + 1))
+tag="v${new_version}"
+
+publish_sibling=false
+sync_sibling=false
+
+if [ "$SIBLING_PLATFORM" = "ios" ] && require_dir "$IOS_DIR"; then
+  sync_sibling=true
+  if confirm_yes "Also publish iOS from ${IOS_DIR}?"; then
+    publish_sibling=true
+  fi
+elif [ "$SIBLING_PLATFORM" = "android" ] && require_dir "$ANDROID_DIR"; then
+  sync_sibling=true
+  if confirm_yes "Also publish Android from ${ANDROID_DIR}?"; then
+    publish_sibling=true
+  fi
+else
+  echo "Sibling repo for ${SIBLING_PLATFORM} was not found. Only ${SELF_PLATFORM} will be published."
+fi
+
+echo "==========================================="
+echo "Shared mobile release"
+echo "  ${current_version} (${current_code}) -> ${new_version} (${new_code})"
+echo "  tag=${tag}"
+echo "  current platform : ${SELF_PLATFORM}"
+echo "  sibling publish  : ${publish_sibling}"
+echo "  sibling sync     : ${sync_sibling}"
+echo "==========================================="
+
+if require_dir "$ANDROID_DIR"; then
+  ensure_clean_tag "$ANDROID_DIR" "$tag"
+fi
+if require_dir "$IOS_DIR"; then
+  ensure_clean_tag "$IOS_DIR" "$tag"
+fi
+
+if require_dir "$ANDROID_DIR"; then
+  update_android_version "$ANDROID_DIR" "$new_version" "$new_code"
+fi
+if require_dir "$IOS_DIR"; then
+  update_ios_version "$IOS_DIR" "$new_version" "$new_code"
+fi
+
+android_apk=""
+ios_ipa=""
+
+if [ "$SELF_PLATFORM" = "android" ]; then
+  android_apk="$(build_android "$ANDROID_DIR" "$new_version")"
+  if [ "$publish_sibling" = true ] && require_dir "$IOS_DIR"; then
+    ios_ipa="$(build_ios "$IOS_DIR" "$new_version")"
+  fi
+else
+  ios_ipa="$(build_ios "$IOS_DIR" "$new_version")"
+  if [ "$publish_sibling" = true ] && require_dir "$ANDROID_DIR"; then
+    android_apk="$(build_android "$ANDROID_DIR" "$new_version")"
+  fi
+fi
+
+if require_dir "$ANDROID_DIR"; then
+  echo "Committing/tagging Android repo..." >&2
+  commit_tag_push_android "$ANDROID_DIR" "$tag"
+fi
+if require_dir "$IOS_DIR"; then
+  echo "Committing/tagging iOS repo..." >&2
+  commit_tag_push_ios "$IOS_DIR" "$tag"
+fi
+
+if [ "$SELF_PLATFORM" = "android" ]; then
+  publish_android_release "$new_version" "$new_code" "$tag" "$android_apk"
+  if [ "$publish_sibling" = true ] && [ -n "$ios_ipa" ]; then
+    publish_ios_release "$new_version" "$new_code" "$tag" "$ios_ipa"
+  else
+    echo "Skipped iOS artifact release."
+  fi
+else
+  publish_ios_release "$new_version" "$new_code" "$tag" "$ios_ipa"
+  if [ "$publish_sibling" = true ] && [ -n "$android_apk" ]; then
+    publish_android_release "$new_version" "$new_code" "$tag" "$android_apk"
+  else
+    echo "Skipped Android artifact release."
+  fi
+fi
 
 echo ""
 echo "==========================================="
 echo "Released ${tag}"
-echo "  Android APK : klic-${new_name}.apk"
-echo "  iOS IPA     : klic-ios-${new_name}.ipa"
+echo "  Shared version : ${new_version} (${new_code})"
+if [ -n "$android_apk" ]; then
+  echo "  Android APK    : $(basename "$android_apk")"
+fi
+if [ -n "$ios_ipa" ]; then
+  echo "  iOS IPA        : $(basename "$ios_ipa")"
+fi
 echo "==========================================="

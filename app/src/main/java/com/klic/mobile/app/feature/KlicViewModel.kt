@@ -414,6 +414,8 @@ class KlicViewModel(
         tokenStore.cachedAccess?.let { socket.connect(it) }
         registerPushToken()
         loadConversations()
+        // E2EE: publish/refresh this install's key bundle (generates keys on first run).
+        viewModelScope.launch { container.e2eeKeys.ensureReady() }
     }
 
     /** Register this device's FCM token so the server can ring incoming calls when killed. */
