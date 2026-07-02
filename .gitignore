@@ -1,5 +1,6 @@
 .gradle/
 build/
+build-android/
 app/build/
 .idea/
 local.properties
