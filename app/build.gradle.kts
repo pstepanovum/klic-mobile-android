@@ -4,6 +4,7 @@ plugins {
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.google.services)
+    alias(libs.plugins.ksp)
 }
 
 fun stringBuildConfig(name: String, defaultValue: String): String {
@@ -79,6 +80,11 @@ dependencies {
     coreLibraryDesugaring(libs.desugar.jdk.libs)
 
     testImplementation(libs.junit)
+
+    // Local E2EE message store (decrypted content encrypted per-row via KeystoreCrypto)
+    implementation(libs.room.runtime)
+    implementation(libs.room.ktx)
+    ksp(libs.room.compiler)
 
     // Realtime + media
     implementation(libs.socketio.client)

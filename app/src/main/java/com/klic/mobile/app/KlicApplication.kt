@@ -11,6 +11,9 @@ import coil.memory.MemoryCache
 import com.klic.mobile.app.calling.CallManager
 import com.klic.mobile.app.calling.CallNotifications
 import com.klic.mobile.app.data.E2eeKeyManager
+import com.klic.mobile.app.data.E2eeMessageStore
+import com.klic.mobile.app.data.E2eeMessaging
+import com.klic.mobile.app.data.E2eeSessions
 import com.klic.mobile.app.data.KlicRepository
 import com.klic.mobile.app.data.Network
 import com.klic.mobile.app.data.TokenStore
@@ -87,6 +90,12 @@ class AppContainer(app: Application) {
     private val api = Network.create(tokenStore) { _sessionExpired.tryEmit(Unit) }
     val repository = KlicRepository(api, tokenStore)
     val e2eeKeys = E2eeKeyManager(appContext, api)
+    val e2eeMessaging = E2eeMessaging(
+        e2eeKeys,
+        E2eeSessions(e2eeKeys, api),
+        E2eeMessageStore(appContext),
+        api,
+    ).also { repository.e2ee = it }
     val socket = SocketService()
     val callManager = CallManager(app) { event, callId, detail ->
         repository.mobileDiagnostic(event, callId, detail)

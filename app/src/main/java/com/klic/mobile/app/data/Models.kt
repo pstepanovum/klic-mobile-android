@@ -144,11 +144,18 @@ data class Message(
     val replyTo: ReplyPreview? = null,
     val reactions: List<Reaction> = emptyList(),
     val deletedAt: String? = null,
+    // CIPHERTEXT messages (E2EE): sender's protocol device + the envelopes
+    // addressed to this user's devices (this client picks its own by deviceId).
+    val senderDeviceId: Int? = null,
+    val envelopes: List<MessageEnvelope> = emptyList(),
 ) {
     val isCallEvent: Boolean get() = kind == "CALL_EVENT"
     val isSticker: Boolean get() = kind == "STICKER"
     val isDeleted: Boolean get() = deletedAt != null
 }
+
+@Serializable
+data class MessageEnvelope(val deviceId: Int, val type: Int, val ciphertext: String)
 
 @Serializable
 data class RecentCall(

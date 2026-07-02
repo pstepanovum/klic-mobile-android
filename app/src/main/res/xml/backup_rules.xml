@@ -3,4 +3,7 @@
 <full-backup-content>
     <exclude domain="file" path="datastore/klic_tokens.preferences_pb" />
     <exclude domain="file" path="datastore/klic_e2ee.preferences_pb" />
+    <exclude domain="database" path="klic_e2ee_messages.db" />
+    <exclude domain="database" path="klic_e2ee_messages.db-wal" />
+    <exclude domain="database" path="klic_e2ee_messages.db-shm" />
 </full-backup-content>

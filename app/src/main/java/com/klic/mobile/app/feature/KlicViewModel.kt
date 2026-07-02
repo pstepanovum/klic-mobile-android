@@ -82,8 +82,10 @@ class KlicViewModel(
             }
         }
         viewModelScope.launch {
-            socket.incomingMessages.collect { msg ->
-                // Upsert — the server echoes our own sends back for multi-device sync.
+            socket.incomingMessages.collect { raw ->
+                // Decrypt-or-passthrough, then upsert — the server echoes our own
+                // sends back for multi-device sync.
+                val msg = container.e2eeMessaging.materialize(raw, currentUser.value?.id)
                 if (msg.conversationId == openConversationId) upsertMessage(msg)
             }
         }

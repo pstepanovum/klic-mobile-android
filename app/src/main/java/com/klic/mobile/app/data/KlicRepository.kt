@@ -22,6 +22,9 @@ class KlicRepository(
     var currentUser: User? = null
         private set
 
+    /** E2EE bridge — set by the container right after construction. */
+    var e2ee: E2eeMessaging? = null
+
     // Authenticated as long as we hold a refresh token — the access token may be
     // expired but is renewable, so a stale access token must not look like a sign-out.
     val isAuthenticated: Boolean get() = tokenStore.hasSession
@@ -126,10 +129,29 @@ class KlicRepository(
     suspend fun createGroupConversation(title: String, userIds: List<String>): Conversation =
         api.createConversation(CreateConversationRequest(title = title, userIds = userIds))
 
-    suspend fun conversations(): List<Conversation> = api.conversations()
+    suspend fun conversations(): List<Conversation> {
+        val raw = api.conversations()
+        val bridge = e2ee ?: return raw
+        return raw.map { convo ->
+            convo.lastMessage
+                ?.takeIf { it.kind == "CIPHERTEXT" }
+                ?.let { convo.copy(lastMessage = bridge.materialize(it, currentUser?.id)) }
+                ?: convo
+        }
+    }
     suspend fun messages(conversationId: String, before: String? = null): List<Message> =
         api.messages(conversationId, before = before)
-    suspend fun send(conversationId: String, body: String, replyToId: String? = null): Message =
+    suspend fun send(conversationId: String, body: String, replyToId: String? = null): Message {
+        val bridge = e2ee
+        if (E2eeConfig.SEND_ENABLED && bridge != null) {
+            // Reply quotes travel inside the ciphertext at the cutover; plaintext
+            // replyToId is dropped then. Until the flag flips this path is dormant.
+            return bridge.sendText(conversationId, body)
+        }
+        return sendLegacy(conversationId, body, replyToId)
+    }
+
+    private suspend fun sendLegacy(conversationId: String, body: String, replyToId: String? = null): Message =
         api.send(conversationId, SendMessageRequest(body, replyToId))
 
     suspend fun react(conversationId: String, messageId: String, emoji: String): List<Reaction> =
