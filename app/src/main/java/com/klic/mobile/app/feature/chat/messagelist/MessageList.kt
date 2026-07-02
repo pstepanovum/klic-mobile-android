@@ -28,20 +28,38 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.Dp
 import coil.compose.AsyncImage
+import coil.imageLoader
+import com.klic.mobile.app.R
 import com.klic.mobile.app.data.Attachment
+import com.klic.mobile.app.data.DataUsage
+import com.klic.mobile.app.data.GallerySaver
 import com.klic.mobile.app.data.Message
+import com.klic.mobile.app.data.SettingsStore
 import com.klic.mobile.app.feature.chat.actions.DeletedBubble
 import com.klic.mobile.app.feature.chat.actions.ReactionPillsRow
 import com.klic.mobile.app.feature.chat.actions.ReplyQuote
 import com.klic.mobile.app.feature.chat.media.FileAttachmentView
+import com.klic.mobile.app.feature.chat.media.formatByteSize
 import com.klic.mobile.app.feature.chat.media.isAudioAttachment
 import com.klic.mobile.app.feature.chat.stickers.CallEventBubble
 import com.klic.mobile.app.feature.chat.stickers.StickerBubble
@@ -63,6 +81,8 @@ internal fun MessageBubble(
     isFirst: Boolean,
     isLast: Boolean,
     replyAuthorName: String = "",
+    /** Group chats highlight "@all" mentions in bubble bodies (§8.4). */
+    highlightMentions: Boolean = false,
     onCallBack: (String) -> Unit = {},
     onLongPress: () -> Unit = {},
     onReactionTap: (String) -> Unit = {},
@@ -103,6 +123,12 @@ internal fun MessageBubble(
     val time = shortTime(message.createdAt)
     val status = if (isMine) message.status else null
 
+    // §8.4 Save to Photos (Always): incoming media auto-saves once, deduped by attachment id.
+    val autoSaveContext = LocalContext.current
+    if (!isMine && (imageAtts.isNotEmpty() || videoAtt != null)) {
+        LaunchedEffect(message.id) { GallerySaver.maybeAutoSave(autoSaveContext, message) }
+    }
+
     Column(
         modifier = Modifier.fillMaxWidth().padding(vertical = 1.dp),
         horizontalAlignment = if (isMine) Alignment.End else Alignment.Start,
@@ -115,6 +141,7 @@ internal fun MessageBubble(
                         isMine = isMine,
                         time = time,
                         status = status,
+                        starred = message.starred,
                     )
                 }
 
@@ -128,6 +155,7 @@ internal fun MessageBubble(
                             MediaTimePill(
                                 time = time,
                                 status = status,
+                                starred = message.starred,
                                 modifier = Modifier.align(Alignment.BottomEnd).padding(8.dp),
                             )
                         }
@@ -156,7 +184,7 @@ internal fun MessageBubble(
                                 modifier = Modifier.width(240.dp).padding(horizontal = 6.dp, vertical = 6.dp),
                             ) {
                                 Text(
-                                    message.body,
+                                    bodyWithMentions(message.body, highlightMentions, mentionAccent(isMine)),
                                     color = textColor,
                                     style = MaterialTheme.typography.bodyLarge,
                                     modifier = Modifier.weight(1f, fill = false),
@@ -166,6 +194,7 @@ internal fun MessageBubble(
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.spacedBy(3.dp),
                                 ) {
+                                    if (message.starred) StarIndicator(timeColor)
                                     Text(time, style = MaterialTheme.typography.labelSmall, color = timeColor)
                                     if (status != null) {
                                         MessageTicks(status = status, onPrimary = isMine)
@@ -205,6 +234,7 @@ internal fun MessageBubble(
                         MediaTimePill(
                             time = time,
                             status = status,
+                            starred = message.starred,
                             modifier = Modifier.align(Alignment.BottomEnd).padding(8.dp),
                         )
                     }
@@ -221,7 +251,14 @@ internal fun MessageBubble(
                             onLongClick = onLongPress,
                         ),
                     ) {
-                        FileAttachmentView(att = fileAtt, isMine = isMine, time = time, status = status)
+                        FileAttachmentView(
+                            att = fileAtt,
+                            isMine = isMine,
+                            time = time,
+                            status = status,
+                            conversationId = message.conversationId,
+                            starred = message.starred,
+                        )
                     }
                 }
 
@@ -245,7 +282,7 @@ internal fun MessageBubble(
                         Row(verticalAlignment = Alignment.Bottom) {
                             if (message.body.isNotBlank()) {
                                 Text(
-                                    message.body,
+                                    bodyWithMentions(message.body, highlightMentions, mentionAccent(isMine)),
                                     color = textColor,
                                     style = MaterialTheme.typography.bodyLarge,
                                     modifier = Modifier.weight(1f, fill = false),
@@ -256,6 +293,7 @@ internal fun MessageBubble(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(3.dp),
                             ) {
+                                if (message.starred) StarIndicator(timeColor)
                                 Text(
                                     time,
                                     style = MaterialTheme.typography.labelSmall,
@@ -291,17 +329,65 @@ private fun BentoImageGrid(
 
     @Composable
     fun Tile(att: Attachment, modifier: Modifier, overflow: Int = 0) {
+        // §8.3 auto-download matrix: photos auto-fetch only when the current network
+        // allows it; otherwise a placeholder with a manual download button. Already
+        // Coil-cached images always render (no network needed).
+        val context = LocalContext.current
+        val settings by SettingsStore.snapshot.collectAsState()
+        var manuallyRequested by remember(att.id) { mutableStateOf(false) }
+        val cached = remember(att.url) {
+            runCatching {
+                context.imageLoader.diskCache?.openSnapshot(att.url)?.use { true } ?: false
+            }.getOrDefault(false)
+        }
+        val allowed = cached || manuallyRequested ||
+            settings.autoDownloadAllowed(SettingsStore.KIND_PHOTOS, DataUsage.isOnWifi())
+
         Box(
             modifier
                 .clip(RoundedCornerShape(tileRadius))
-                .combinedClickable(onClick = { onImageClick(att.url) }, onLongClick = onLongPress),
+                .combinedClickable(
+                    onClick = { if (allowed) onImageClick(att.url) else manuallyRequested = true },
+                    onLongClick = onLongPress,
+                ),
         ) {
-            AsyncImage(
-                model = att.url,
-                contentDescription = "Image",
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize(),
-            )
+            if (allowed) {
+                AsyncImage(
+                    model = att.url,
+                    contentDescription = "Image",
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            } else {
+                Box(
+                    Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surfaceVariant),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Box(
+                            Modifier
+                                .size(40.dp)
+                                .background(Color.Black.copy(alpha = 0.35f), CircleShape),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_bold_arrow_bottom),
+                                contentDescription = "Download photo",
+                                tint = Color.White,
+                                modifier = Modifier.size(18.dp),
+                            )
+                        }
+                        if (att.byteSize > 0) {
+                            Spacer(Modifier.height(4.dp))
+                            Text(
+                                formatByteSize(att.byteSize),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                }
+            }
             if (overflow > 0) {
                 Box(
                     Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.5f)),
@@ -346,6 +432,7 @@ private fun MediaTimePill(
     time: String = "",
     text: String = "",           // for the duration pill on video (no ticks)
     status: String? = null,
+    starred: Boolean = false,
 ) {
     Row(
         modifier = modifier
@@ -355,6 +442,7 @@ private fun MediaTimePill(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(3.dp),
     ) {
+        if (starred && text.isEmpty()) StarIndicator(Color.White)
         val label = text.ifEmpty { time }
         if (label.isNotEmpty()) {
             Text(
@@ -368,6 +456,47 @@ private fun MediaTimePill(
         }
     }
 }
+
+/** Small star next to the timestamp on starred bubbles (§8.4). */
+@Composable
+internal fun StarIndicator(tint: Color) {
+    Icon(
+        painter = painterResource(com.klic.mobile.app.ui.theme.KlicIcons.starBold),
+        contentDescription = "Starred",
+        tint = tint,
+        modifier = Modifier.size(10.dp),
+    )
+}
+
+// Accent for "@all" inside a bubble: primary on neutral bubbles; own (primary-coloured)
+// bubbles use white so the highlight stays visible on the accent background.
+@Composable
+private fun mentionAccent(isMine: Boolean): Color =
+    if (isMine) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.primary
+
+/** Highlights "@all" tokens (accent + semibold) when [highlight] is on (§8.4). */
+internal fun bodyWithMentions(body: String, highlight: Boolean, accent: Color): AnnotatedString {
+    if (!highlight) return AnnotatedString(body)
+    val matches = mentionAllRanges(body)
+    if (matches.isEmpty()) return AnnotatedString(body)
+    return buildAnnotatedString {
+        append(body)
+        matches.forEach { range ->
+            addStyle(
+                SpanStyle(color = accent, fontWeight = FontWeight.SemiBold),
+                range.first,
+                range.last + 1,
+            )
+        }
+    }
+}
+
+/** Character ranges of "@all" tokens (same regex as the server's push gating). */
+internal fun mentionAllRanges(body: String): List<IntRange> =
+    Regex("""(^|\s)(@all)\b""", RegexOption.IGNORE_CASE)
+        .findAll(body)
+        .mapNotNull { it.groups[2]?.range }
+        .toList()
 
 // Aspect ratio for an inline image/video, clamped so extreme shapes stay reasonable.
 private fun imageAspect(att: Attachment): Float {

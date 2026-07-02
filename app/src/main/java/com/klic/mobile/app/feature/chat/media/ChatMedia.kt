@@ -34,6 +34,7 @@ import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.klic.mobile.app.data.AttachmentInput
 import com.klic.mobile.app.data.ImageUploads
+import com.klic.mobile.app.data.SettingsStore
 import com.klic.mobile.app.ui.theme.KlicIcons
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -49,7 +50,14 @@ data class PendingMediaDraft(
 )
 
 suspend fun loadImageDraft(context: Context, uri: Uri): PendingMediaDraft? = withContext(Dispatchers.IO) {
-    val encoded = ImageUploads.encodeImage(context, uri) ?: return@withContext null
+    // Upload quality (§8.3): Standard = the long-standing 2048px/q85 compression;
+    // HD = a higher-res, lighter-touch encode. The pref lives in SettingsStore.
+    val hd = SettingsStore.snapshot.value.uploadHd
+    val encoded = ImageUploads.encodeImage(
+        context, uri,
+        maxDimension = if (hd) 4096 else 2048,
+        quality = if (hd) 95 else 85,
+    ) ?: return@withContext null
     PendingMediaDraft(
         id = UUID.randomUUID().toString(),
         previewUri = uri,

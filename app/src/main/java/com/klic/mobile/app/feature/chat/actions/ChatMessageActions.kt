@@ -21,6 +21,8 @@ import androidx.compose.material.icons.automirrored.filled.Reply
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material.icons.outlined.Block
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -60,6 +62,7 @@ fun MessageActionsOverlay(
     onReact: (String) -> Unit,
     onReply: () -> Unit,
     onCopy: () -> Unit,
+    onStar: () -> Unit = {},
     onDelete: () -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -112,6 +115,10 @@ fun MessageActionsOverlay(
                 Column(Modifier.width(240.dp)) {
                     ActionRow("Reply", Icons.AutoMirrored.Filled.Reply) { onReply(); onDismiss() }
                     if (hasBody) ActionRow("Copy", Icons.Filled.ContentCopy) { onCopy(); onDismiss() }
+                    ActionRow(
+                        if (message.starred) "Unstar" else "Star",
+                        if (message.starred) Icons.Filled.Star else Icons.Filled.StarBorder,
+                    ) { onStar(); onDismiss() }
                     ActionRow("Delete", Icons.Filled.Delete, destructive = true) { onDelete() }
                 }
             }

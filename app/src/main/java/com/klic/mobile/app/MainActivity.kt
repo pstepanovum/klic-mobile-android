@@ -60,6 +60,7 @@ import com.klic.mobile.app.feature.call.LocalPipController
 import com.klic.mobile.app.feature.call.MinimizedCallOverlay
 import com.klic.mobile.app.feature.call.PipController
 import com.klic.mobile.app.feature.chat.ChatScreen
+import com.klic.mobile.app.feature.chatinfo.GroupInfoScreen
 import com.klic.mobile.app.feature.conversations.ConversationsScreen
 import com.klic.mobile.app.feature.friends.FriendsScreen
 import com.klic.mobile.app.feature.profile.ProfileScreen
@@ -356,9 +357,24 @@ class MainActivity : ComponentActivity() {
                             onCall = {}, // navigation is reactive on activeCall (see Home)
                             onOpenProfile = {
                                 if (convo.type == "DIRECT") navController.navigate("profile/${convo.id}")
+                                else navController.navigate("group_info/${convo.id}")
                             },
                         )
                     }
+                }
+                composable("group_info/{conversationId}") { entry ->
+                    val id = entry.arguments?.getString("conversationId").orEmpty()
+                    GroupInfoScreen(
+                        vm = vm,
+                        conversationId = id,
+                        onBack = { navController.popBackStack() },
+                        onOpenChat = {
+                            navController.navigate("chat/$id") {
+                                popUpTo("home")
+                                launchSingleTop = true
+                            }
+                        },
+                    )
                 }
                 composable("profile/{conversationId}") { entry ->
                     val id = entry.arguments?.getString("conversationId").orEmpty()

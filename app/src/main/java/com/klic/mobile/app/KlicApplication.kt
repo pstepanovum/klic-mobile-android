@@ -10,12 +10,14 @@ import coil.decode.SvgDecoder
 import coil.memory.MemoryCache
 import com.klic.mobile.app.calling.CallManager
 import com.klic.mobile.app.calling.CallNotifications
+import com.klic.mobile.app.data.DataUsage
 import com.klic.mobile.app.data.E2eeKeyManager
 import com.klic.mobile.app.data.E2eeMessageStore
 import com.klic.mobile.app.data.E2eeMessaging
 import com.klic.mobile.app.data.E2eeSessions
 import com.klic.mobile.app.data.KlicRepository
 import com.klic.mobile.app.data.Network
+import com.klic.mobile.app.data.SettingsStore
 import com.klic.mobile.app.data.TokenStore
 import com.klic.mobile.app.realtime.SocketService
 import kotlinx.coroutines.CoroutineScope
@@ -33,6 +35,10 @@ class KlicApplication : Application(), ImageLoaderFactory {
     override fun onCreate() {
         super.onCreate()
         container = AppContainer(this)
+        // Settings + data-usage singletons (§8.3–§8.5) — the push/ringer paths and every
+        // OkHttp stack (via DataUsage.interceptor) read them.
+        SettingsStore.init(this, container.applicationScope)
+        DataUsage.init(this, container.applicationScope)
         CallNotifications.createChannels(this)
         trackForeground()
     }
@@ -60,6 +66,8 @@ class KlicApplication : Application(), ImageLoaderFactory {
     override fun newImageLoader(): ImageLoader =
         ImageLoader.Builder(this)
             .components { add(SvgDecoder.Factory()) }
+            // Attribute image/sticker fetches in the data-usage counters (§8.3).
+            .okHttpClient { okhttp3.OkHttpClient.Builder().addInterceptor(DataUsage.interceptor).build() }
             .memoryCache {
                 MemoryCache.Builder(this)
                     .maxSizePercent(0.25)

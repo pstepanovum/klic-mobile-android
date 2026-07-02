@@ -1,5 +1,6 @@
 package com.klic.mobile.app.feature.profile
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -13,7 +14,10 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -33,12 +37,17 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.klic.mobile.app.data.UserProfile
 import com.klic.mobile.app.feature.KlicViewModel
+import com.klic.mobile.app.feature.chatinfo.ChatInfoSectionsCard
+import com.klic.mobile.app.feature.chatinfo.ChatInfoSub
+import com.klic.mobile.app.feature.chatinfo.ChatNotificationsCard
+import com.klic.mobile.app.feature.chatinfo.ManageStoragePage
+import com.klic.mobile.app.feature.chatinfo.MediaLinksDocsPage
+import com.klic.mobile.app.feature.chatinfo.StarredMessagesPage
 import com.klic.mobile.app.ui.components.AvatarView
 import com.klic.mobile.app.ui.theme.KlicIcons
 import java.time.Instant
@@ -58,17 +67,30 @@ fun ProfileScreen(
     val conversations by vm.conversations.collectAsState()
     val member = conversations.firstOrNull { it.id == conversationId }?.members?.firstOrNull()
     val presenceMap by vm.presence.collectAsState()
+    val me by vm.currentUser.collectAsState()
     var profile by remember { mutableStateOf<UserProfile?>(null) }
+    var sub by remember { mutableStateOf<ChatInfoSub?>(null) }
 
     LaunchedEffect(member?.id) { member?.id?.let { profile = vm.fetchProfile(it) } }
+    BackHandler(enabled = sub != null) { sub = null }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             TopAppBar(
-                title = { Text("Profile", style = MaterialTheme.typography.titleMedium) },
+                title = {
+                    Text(
+                        when (sub) {
+                            ChatInfoSub.MEDIA -> "Media, links, docs"
+                            ChatInfoSub.STARRED -> "Starred"
+                            ChatInfoSub.STORAGE -> "Manage storage"
+                            null -> "Profile"
+                        },
+                        style = MaterialTheme.typography.titleMedium,
+                    )
+                },
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
+                    IconButton(onClick = { if (sub == null) onBack() else sub = null }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 },
@@ -80,39 +102,77 @@ fun ProfileScreen(
             Box(Modifier.fillMaxSize().padding(padding))
             return@Scaffold
         }
-        val live = presenceMap[member.id]
-        val online = live?.online ?: (profile?.online == true)
-        val lastSeenMs = live?.lastSeenMs ?: profile?.lastSeenAt?.let { runCatching { Instant.parse(it).toEpochMilli() }.getOrNull() }
 
-        Column(
-            modifier = Modifier.fillMaxSize().padding(padding).padding(20.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            Spacer(Modifier.height(24.dp))
-            AvatarView(url = profile?.avatarUrl ?: member.avatarUrl, name = member.displayName, size = 132.dp)
-            Spacer(Modifier.height(16.dp))
-            Text(member.displayName, style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.onBackground)
-            Spacer(Modifier.height(4.dp))
-            Text("@${member.username}", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            presenceText(online, lastSeenMs)?.let { text ->
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    text,
-                    style = MaterialTheme.typography.labelMedium,
-                    color = if (online) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = TextAlign.Center,
+        when (sub) {
+            ChatInfoSub.MEDIA -> Box(Modifier.fillMaxSize().padding(padding)) {
+                MediaLinksDocsPage(vm, conversationId)
+            }
+            ChatInfoSub.STARRED -> Box(Modifier.fillMaxSize().padding(padding)) {
+                StarredMessagesPage(
+                    vm, conversationId,
+                    senderName = { senderId -> if (senderId == me?.id) "You" else member.displayName },
+                    onOpenMessage = { msg ->
+                        vm.requestJumpTo(msg.id)
+                        onMessage?.invoke()
+                    },
                 )
             }
-            Spacer(Modifier.height(28.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                CallActionButton(KlicIcons.phone, "Audio") {
-                    vm.startCall(conversationId, "AUDIO", member.displayName); onCall("AUDIO")
-                }
-                CallActionButton(KlicIcons.video, "Video") {
-                    vm.startCall(conversationId, "VIDEO", member.displayName); onCall("VIDEO")
-                }
-                if (onMessage != null) {
-                    CallActionButton(KlicIcons.message, "Message") { onMessage() }
+            ChatInfoSub.STORAGE -> Box(Modifier.fillMaxSize().padding(padding)) {
+                ManageStoragePage(conversationId)
+            }
+            null -> {
+                val live = presenceMap[member.id]
+                val online = live?.online ?: (profile?.online == true)
+                val lastSeenMs = live?.lastSeenMs
+                    ?: profile?.lastSeenAt?.let { runCatching { Instant.parse(it).toEpochMilli() }.getOrNull() }
+
+                Box(
+                    Modifier.fillMaxSize().padding(padding),
+                    contentAlignment = Alignment.TopCenter,
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .widthIn(max = 680.dp)
+                            .fillMaxWidth()
+                            .verticalScroll(rememberScrollState())
+                            .padding(20.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                    ) {
+                        Spacer(Modifier.height(12.dp))
+                        AvatarView(url = profile?.avatarUrl ?: member.avatarUrl, name = member.displayName, size = 132.dp)
+                        Spacer(Modifier.height(16.dp))
+                        Text(member.displayName, style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.onBackground)
+                        Spacer(Modifier.height(4.dp))
+                        Text("@${member.username}", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        presenceText(online, lastSeenMs)?.let { text ->
+                            Spacer(Modifier.height(4.dp))
+                            Text(
+                                text,
+                                style = MaterialTheme.typography.labelMedium,
+                                color = if (online) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                textAlign = TextAlign.Center,
+                            )
+                        }
+                        Spacer(Modifier.height(28.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                            CallActionButton(KlicIcons.phone, "Audio") {
+                                vm.startCall(conversationId, "AUDIO", member.displayName); onCall("AUDIO")
+                            }
+                            CallActionButton(KlicIcons.video, "Video") {
+                                vm.startCall(conversationId, "VIDEO", member.displayName); onCall("VIDEO")
+                            }
+                            if (onMessage != null) {
+                                CallActionButton(KlicIcons.message, "Message") { onMessage() }
+                            }
+                        }
+
+                        // §8.4: notifications + media/starred/storage/save-to-photos sections.
+                        Spacer(Modifier.height(28.dp))
+                        ChatNotificationsCard(vm, conversationId, isGroup = false)
+                        Spacer(Modifier.height(16.dp))
+                        ChatInfoSectionsCard(conversationId) { sub = it }
+                        Spacer(Modifier.height(24.dp))
+                    }
                 }
             }
         }
