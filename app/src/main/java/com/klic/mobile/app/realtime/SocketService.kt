@@ -49,6 +49,9 @@ class SocketService {
         val livekitUrl: String,
         val kind: String,
         val fromDisplayName: String,
+        val conversationType: String = "DIRECT",
+        val conversationTitle: String = "",
+        val participantCount: Int = 0,
     )
 
     data class CallEvent(
@@ -56,7 +59,7 @@ class SocketService {
         val callId: String,
         val userId: String? = null,
     ) {
-        enum class Type { ACCEPT, DECLINE, CANCEL, END }
+        enum class Type { ACCEPT, DECLINE, CANCEL, END, PARTICIPANT_JOINED, PARTICIPANT_LEFT }
     }
 
     fun connect(accessToken: String) {
@@ -156,6 +159,9 @@ class SocketService {
                         livekitUrl = json.optString("livekitUrl"),
                         kind = json.optString("kind", "AUDIO"),
                         fromDisplayName = from?.optString("displayName") ?: "Unknown",
+                        conversationType = json.optString("conversationType", "DIRECT"),
+                        conversationTitle = json.optString("conversationTitle"),
+                        participantCount = json.optInt("participantCount", 0),
                     )
                 )
             }
@@ -171,6 +177,14 @@ class SocketService {
         }
         socket.on("call:end") { args ->
             emitCallEvent(args, CallEvent.Type.END)
+        }
+        // Group ring/banner signals: fired on every media-joined (including our own and
+        // repeats after a rejoin — consumers treat them idempotently) and on each leave.
+        socket.on("call:participant-joined") { args ->
+            emitCallEvent(args, CallEvent.Type.PARTICIPANT_JOINED)
+        }
+        socket.on("call:participant-left") { args ->
+            emitCallEvent(args, CallEvent.Type.PARTICIPANT_LEFT)
         }
         socket.connect()
     }

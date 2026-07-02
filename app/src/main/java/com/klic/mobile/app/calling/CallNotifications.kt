@@ -66,7 +66,8 @@ object CallNotifications {
     /** Full-screen, high-priority incoming-call notification (rings while backgrounded/locked). */
     fun showIncomingCall(context: Context, invite: CallInvite) {
         createChannels(context)
-        val caller = Person.Builder().setName(invite.fromName).setImportant(true).build()
+        // Group invites ring as "<Caller> · <Group title>" so the surface says where it's from.
+        val caller = Person.Builder().setName(invite.displayLabel).setImportant(true).build()
 
         // Answer: open MainActivity straight into the accept flow (reuses ACTION_ACCEPT_CALL).
         val answerIntent = Intent(context, MainActivity::class.java).apply {
@@ -102,13 +103,16 @@ object CallNotifications {
 
         val notification = NotificationCompat.Builder(context, CHANNEL_CALLS)
             .setSmallIcon(R.drawable.ic_launcher_foreground)
-            .setContentTitle(invite.fromName)
+            .setContentTitle(invite.displayLabel)
             .setContentText(if (invite.kind == "VIDEO") "Incoming video call" else "Incoming call")
             .setCategory(NotificationCompat.CATEGORY_CALL)
             .setPriority(NotificationCompat.PRIORITY_MAX)
             .setOngoing(true)
             .setFullScreenIntent(fsPending, true)
             .setStyle(NotificationCompat.CallStyle.forIncomingCall(caller, declinePending, answerPending))
+            // Backstop: auto-expire the ring surface if the end event never arrives (D2);
+            // CallRinger's own 65s timer handles the ringtone side.
+            .setTimeoutAfter(65_000)
             .build()
 
         context.getSystemService(NotificationManager::class.java)

@@ -11,7 +11,16 @@ data class CallInvite(
     val livekitUrl: String,
     val kind: String,
     val fromName: String,
+    val conversationType: String = "DIRECT",
+    val conversationTitle: String = "",
+    val participantCount: Int = 0,
 ) {
+    val isGroup: Boolean get() = conversationType == "GROUP"
+
+    /** Ring-surface label: "<Caller> · <Group title>" for groups, else just the caller. */
+    val displayLabel: String
+        get() = if (isGroup && conversationTitle.isNotBlank()) "$fromName · $conversationTitle" else fromName
+
     fun toBundle(): Bundle = Bundle().apply {
         putString("callId", callId)
         putString("conversationId", conversationId)
@@ -19,6 +28,9 @@ data class CallInvite(
         putString("livekitUrl", livekitUrl)
         putString("kind", kind)
         putString("fromName", fromName)
+        putString("conversationType", conversationType)
+        putString("conversationTitle", conversationTitle)
+        putInt("participantCount", participantCount)
     }
 
     companion object {
@@ -29,6 +41,9 @@ data class CallInvite(
             livekitUrl = d["livekitUrl"].orEmpty(),
             kind = d["kind"] ?: "AUDIO",
             fromName = d["fromName"] ?: "Incoming call",
+            conversationType = d["conversationType"] ?: "DIRECT",
+            conversationTitle = d["conversationTitle"].orEmpty(),
+            participantCount = d["participantCount"]?.toIntOrNull() ?: 0,
         )
 
         fun fromIntent(intent: Intent): CallInvite? {
@@ -40,6 +55,9 @@ data class CallInvite(
                 livekitUrl = intent.getStringExtra("livekitUrl").orEmpty(),
                 kind = intent.getStringExtra("kind") ?: "AUDIO",
                 fromName = intent.getStringExtra("fromName") ?: "Incoming call",
+                conversationType = intent.getStringExtra("conversationType") ?: "DIRECT",
+                conversationTitle = intent.getStringExtra("conversationTitle").orEmpty(),
+                participantCount = intent.getIntExtra("participantCount", 0),
             )
         }
     }

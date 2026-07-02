@@ -243,3 +243,22 @@ data class CallSession(
     val token: String,
     val kind: String? = null,
 )
+
+/** GET /conversations/:id/active-call — a call in RINGING/ANSWERING/ONGOING/RECONNECTING. */
+@Serializable
+data class ActiveCallInfo(
+    val callId: String,
+    val conversationId: String,
+    val roomName: String,
+    val livekitUrl: String,
+    val kind: String,
+    val status: String,
+    val startedBy: String? = null,
+    val participants: List<ActiveCallParticipant> = emptyList(),
+) {
+    /** Members that actually joined media (joinedAt set), i.e. people currently in the call. */
+    val joinedCount: Int get() = participants.count { it.joinedAt != null }
+}
+
+@Serializable
+data class ActiveCallParticipant(val userId: String, val joinedAt: String? = null)

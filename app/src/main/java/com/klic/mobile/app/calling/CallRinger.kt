@@ -6,6 +6,8 @@ import android.media.AudioManager
 import android.media.MediaPlayer
 import android.net.Uri
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
@@ -21,22 +23,54 @@ import com.klic.mobile.app.R
  * unlocked and in use → heads-up only), and the Calls channel is intentionally silent, so a
  * ringer tied to the Activity left those calls ringless. [start] is idempotent (a duplicate
  * invite over the other transport won't double-ring); [stop] is safe to call from anywhere.
+ *
+ * A 65s backstop (server RING_TTL is 60s) tears the ring surfaces down even when the
+ * `call.end` push/socket event is lost (D2), leaving a missed-call notification behind.
  */
 object CallRinger {
     private var player: MediaPlayer? = null
     private var vibrator: Vibrator? = null
+    private var ringing = false
+    private val handler = Handler(Looper.getMainLooper())
+    private var backstop: Runnable? = null
+
+    private const val BACKSTOP_MS = 65_000L
 
     @Synchronized
-    fun start(context: Context) {
+    fun start(context: Context, invite: CallInvite? = null) {
         // Already ringing (e.g. the socket and FCM both delivered this invite) — don't stack.
-        if (player != null || vibrator != null) return
+        if (ringing) return
+        ringing = true
         val appContext = context.applicationContext
+        // Scheduled before the ringer-mode check: the notification is up even on a silent
+        // device, so the backstop must clear it either way.
+        scheduleBackstop(appContext, invite)
         val audio = appContext.getSystemService(AudioManager::class.java)
         when (audio.ringerMode) {
             AudioManager.RINGER_MODE_SILENT -> return
             AudioManager.RINGER_MODE_VIBRATE -> startVibration(appContext)
             else -> { startRingtone(appContext); startVibration(appContext) }
         }
+    }
+
+    /** If no accept/decline/cancel/end arrived within the ring window, stop ringing, drop the
+     *  incoming-call notification, and leave a missed-call notification in its place. */
+    private fun scheduleBackstop(appContext: Context, invite: CallInvite?) {
+        backstop?.let { handler.removeCallbacks(it) }
+        val runnable = Runnable {
+            stop()
+            CallNotifications.cancelIncomingCall(appContext)
+            if (invite != null) {
+                CallNotifications.showMessage(
+                    appContext,
+                    title = invite.displayLabel,
+                    body = if (invite.kind == "VIDEO") "Missed video call" else "Missed call",
+                    conversationId = invite.conversationId,
+                )
+            }
+        }
+        backstop = runnable
+        handler.postDelayed(runnable, BACKSTOP_MS)
     }
 
     private fun startRingtone(context: Context) {
@@ -77,6 +111,9 @@ object CallRinger {
 
     @Synchronized
     fun stop() {
+        ringing = false
+        backstop?.let { handler.removeCallbacks(it) }
+        backstop = null
         runCatching { player?.stop() }
         runCatching { player?.release() }
         player = null

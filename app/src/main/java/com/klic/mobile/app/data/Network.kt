@@ -129,6 +129,9 @@ interface KlicApi {
     @POST("calls/{id}/token")
     suspend fun joinToken(@Path("id") id: String): CallSession
 
+    @GET("conversations/{id}/active-call")
+    suspend fun activeCall(@Path("id") id: String): ActiveCallInfo
+
     @GET("calls")
     suspend fun recentCalls(): List<RecentCall>
 

@@ -252,7 +252,7 @@ class MainActivity : ComponentActivity() {
         val incoming by pendingCall.collectAsState()
         LaunchedEffect(incoming) {
             incoming?.let { invite ->
-                vm.acceptIncomingCall(invite.callId, invite.fromName)
+                vm.acceptIncomingCall(invite.callId, invite.displayLabel, isGroup = invite.isGroup)
                 pendingCall.value = null
             }
         }

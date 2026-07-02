@@ -51,10 +51,11 @@ class CallSignalingService : Service() {
                 // don't pop a second incoming-call screen. The server collapses simultaneous
                 // calls into one, so this incoming is the duplicate side of our own call.
                 if (container.activeCallConversationId.value == invite.conversationId) return@collect
-                CallNotifications.showIncomingCall(this@CallSignalingService, invite.toCallInvite())
+                val callInvite = invite.toCallInvite()
+                CallNotifications.showIncomingCall(this@CallSignalingService, callInvite)
                 // Ring from here (not the full-screen Activity) so the call rings even when the
                 // Activity never launches (unlocked/in-use device or no full-screen-intent grant).
-                CallRinger.start(applicationContext)
+                CallRinger.start(applicationContext, callInvite)
             }
         }
         scope.launch {
@@ -108,4 +109,7 @@ private fun SocketService.CallInvite.toCallInvite() = CallInvite(
     livekitUrl = livekitUrl,
     kind = kind,
     fromName = fromDisplayName,
+    conversationType = conversationType,
+    conversationTitle = conversationTitle,
+    participantCount = participantCount,
 )

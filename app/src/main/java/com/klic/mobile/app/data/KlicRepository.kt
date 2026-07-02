@@ -293,6 +293,14 @@ class KlicRepository(
 
     suspend fun joinToken(callId: String): CallSession = api.joinToken(callId)
 
+    /** The conversation's live call, or null when there is none (the endpoint 404s). */
+    suspend fun activeCall(conversationId: String): ActiveCallInfo? =
+        try {
+            api.activeCall(conversationId)
+        } catch (e: retrofit2.HttpException) {
+            if (e.code() == 404) null else throw e
+        }
+
     private suspend fun persist(res: AuthResponse) {
         tokenStore.save(res.accessToken, res.refreshToken)
         tokenStore.saveUser(json.encodeToString(User.serializer(), res.user))

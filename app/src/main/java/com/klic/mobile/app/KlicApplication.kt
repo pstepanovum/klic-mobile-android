@@ -97,9 +97,23 @@ class AppContainer(app: Application) {
         api,
     ).also { repository.e2ee = it }
     val socket = SocketService()
-    val callManager = CallManager(app) { event, callId, detail ->
-        repository.mobileDiagnostic(event, callId, detail)
-    }
+    val callManager = CallManager(
+        app,
+        diagnosticSink = { event, callId, detail -> repository.mobileDiagnostic(event, callId, detail) },
+        // Mid-call token re-fetch for the rejoin loop; 404/409/410 mean the call already
+        // ended server-side, anything else (network/5xx) is worth retrying.
+        rejoinTokenProvider = { callId ->
+            try {
+                val session = repository.joinToken(callId)
+                CallManager.RejoinTokenResult.Token(session.livekitUrl, session.token)
+            } catch (e: retrofit2.HttpException) {
+                if (e.code() in intArrayOf(404, 409, 410)) CallManager.RejoinTokenResult.CallOver
+                else CallManager.RejoinTokenResult.Transient
+            } catch (t: Throwable) {
+                CallManager.RejoinTokenResult.Transient
+            }
+        },
+    )
 
     /** Conversation id of the call the user is currently placing/in. The call service reads
      *  this to suppress a duplicate incoming-call screen for that same conversation (glare):

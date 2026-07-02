@@ -45,7 +45,9 @@ class OngoingCallService : Service() {
         started = true
 
         // Update FGS type + notification + proximity as mic/camera/connection change. The
-        // call's lifecycle (start/stop) is driven explicitly by the ViewModel.
+        // call's lifecycle (start/stop) is driven explicitly by the ViewModel. Note that
+        // isConnected stays true through "Reconnecting…" (CallManager's rejoin loop), so a
+        // network blip never drops this service's foreground priority mid-call.
         scope.launch {
             combine(manager.cameraEnabled, manager.isConnected) { camera, connected ->
                 camera to connected

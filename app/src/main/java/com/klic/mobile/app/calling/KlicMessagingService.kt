@@ -32,7 +32,7 @@ class KlicMessagingService : FirebaseMessagingService() {
                 CallNotifications.showIncomingCall(this, invite)
                 // Ring from the notification path so a backgrounded/killed device rings even if the
                 // full-screen Activity isn't launched. Idempotent if the socket also delivered this.
-                CallRinger.start(applicationContext)
+                CallRinger.start(applicationContext, invite)
             }
             "call.end", "call.cancel", "call.decline" -> {
                 CallRinger.stop()

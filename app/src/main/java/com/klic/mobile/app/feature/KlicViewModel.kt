@@ -6,6 +6,7 @@ import com.klic.mobile.app.calling.CallManager
 import com.klic.mobile.app.calling.CallNotifications
 import com.klic.mobile.app.calling.CallRinger
 import com.klic.mobile.app.calling.OngoingCallService
+import com.klic.mobile.app.data.ActiveCallInfo
 import com.klic.mobile.app.data.AttachmentInput
 import com.klic.mobile.app.data.CallSession
 import com.klic.mobile.app.data.Conversation
@@ -19,10 +20,12 @@ import com.klic.mobile.app.data.User
 import com.klic.mobile.app.data.UserProfile
 import com.klic.mobile.app.realtime.SocketService
 import com.google.firebase.messaging.FirebaseMessaging
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
@@ -54,6 +57,10 @@ class KlicViewModel(
     val callPeerName = MutableStateFlow("")
     val callPeerId = MutableStateFlow<String?>(null)
     val callStatus = MutableStateFlow("Calling...")
+    /** True while the active call belongs to a GROUP conversation (drives grid + grace UX). */
+    val callIsGroup = MutableStateFlow(false)
+    /** Live call in the currently open conversation, if any — drives the "Join call" banner. */
+    val chatActiveCall = MutableStateFlow<ActiveCallInfo?>(null)
 
     val friends = MutableStateFlow<List<User>>(emptyList())
     val friendRequests = MutableStateFlow<List<FriendRequest>>(emptyList())
@@ -80,6 +87,10 @@ class KlicViewModel(
                 runCatching { repo.ensureFreshToken() }
                 onAuthed()
             }
+            // Only now are stored tokens loaded + fresh. Call joins gate on this so an
+            // FCM-cold-started answer can't fire joinToken before/while the token rotates
+            // (a concurrent refresh burns the rotating refresh token → surprise sign-out).
+            authReady.complete(Unit)
         }
         viewModelScope.launch {
             socket.incomingMessages.collect { raw ->
@@ -109,25 +120,64 @@ class KlicViewModel(
             }
         }
         viewModelScope.launch {
-            callManager.remoteParticipantDisconnected.collect {
-                val id = activeCall.value?.callId ?: return@collect
-                if (callStatus.value == "Connected") {
-                    repo.endCall(id)
-                    finishCall(callId = id)
+            // Keep the open chat's "Join call" banner in sync: joins refresh it, terminal
+            // events clear it. (Separate from handleCallEvent, which only tracks OUR call.)
+            socket.callEvents.collect { event ->
+                when (event.type) {
+                    SocketService.CallEvent.Type.PARTICIPANT_JOINED ->
+                        if (chatActiveCall.value?.callId == event.callId) {
+                            openConversationId?.let { refreshActiveCall(it) }
+                        }
+                    SocketService.CallEvent.Type.END,
+                    SocketService.CallEvent.Type.CANCEL ->
+                        if (chatActiveCall.value?.callId == event.callId) chatActiveCall.value = null
+                    else -> Unit
                 }
             }
         }
         viewModelScope.launch {
-            callManager.isReconnecting.collect { reconnecting ->
+            // A ringing invite for the open conversation → an active call just started there.
+            socket.incomingCalls.collect { invite ->
+                if (invite.conversationId == openConversationId) refreshActiveCall(invite.conversationId)
+            }
+        }
+        viewModelScope.launch {
+            // "Reconnecting…" covers both sides: our own resume/rejoin loop, and — on a 1:1 —
+            // the only peer sitting in their 60s grace window after dropping from the SFU.
+            combine(callManager.isReconnecting, callManager.participants) { local, parts ->
+                local || (!callIsGroup.value && parts.isNotEmpty() && parts.all { it.reconnecting })
+            }.collect { reconnecting ->
                 if (activeCall.value == null) return@collect
                 if (reconnecting) callStatus.value = "Reconnecting…"
                 else if (callStatus.value == "Reconnecting…") callStatus.value = "Connected"
             }
         }
         viewModelScope.launch {
-            callManager.networkDisconnected.collect {
-                // LiveKit gave up reconnecting → end the call (best-effort server notify).
-                if (activeCall.value != null) endCall()
+            // A rejoin reconnected us to the room — re-announce media presence to the server.
+            callManager.rejoined.collect { id ->
+                if (activeCall.value?.callId == id) repo.mediaJoined(id)
+            }
+        }
+        viewModelScope.launch {
+            callManager.rejoinFailed.collect { outcome ->
+                val id = activeCall.value?.callId ?: return@collect
+                // CALL_OVER: the server already retired the call (token 404/409/410) — finish
+                // quietly. GAVE_UP: budget spent without a connection — best-effort end.
+                if (outcome == CallManager.RejoinOutcome.GAVE_UP) {
+                    viewModelScope.launch { repo.endCall(id) }
+                }
+                finishCall(callId = id)
+            }
+        }
+        viewModelScope.launch {
+            // A remote peer's 60s grace expired. 1:1 → the call is effectively over (outcome
+            // completed). Group → their tile is already gone; the call carries on.
+            callManager.peerGraceExpired.collect {
+                val id = activeCall.value?.callId ?: return@collect
+                if (!callIsGroup.value) {
+                    repo.endCall(id)
+                    finishCall(callId = id)
+                }
             }
         }
         viewModelScope.launch {
@@ -148,6 +198,8 @@ class KlicViewModel(
     private var activeCallOutgoing = false
     private var ringTimeoutJob: Job? = null
     private val finishingCallIds = mutableSetOf<String>()
+    // Completed once stored tokens are loaded (and refreshed if stale) — see init.
+    private val authReady = CompletableDeferred<Unit>()
 
     fun login(username: String, password: String) = launchAuth {
         repo.login(username, password).let { currentUser.value = it }
@@ -173,6 +225,7 @@ class KlicViewModel(
     fun callFriendDirect(userId: String, kind: String, peerName: String) =
         viewModelScope.launch {
             if (activeCall.value != null) return@launch
+            callIsGroup.value = false
             callPeerName.value = peerName
             callPeerId.value = userId
             runCatching {
@@ -235,6 +288,8 @@ class KlicViewModel(
         replyingTo.value = null
         hasMoreMessages.value = false
         isLoadingOlderMessages.value = false
+        chatActiveCall.value = null
+        refreshActiveCall(conversationId)
         // Clear any pending notification (and its launcher badge) for this conversation.
         CallNotifications.cancelMessage(container.appContext, conversationId)
         runCatching { repo.messages(conversationId) }
@@ -355,8 +410,10 @@ class KlicViewModel(
 
     fun startCall(conversationId: String, kind: String, peerName: String) = viewModelScope.launch {
         if (activeCall.value != null) return@launch
+        val convo = conversations.value.firstOrNull { it.id == conversationId }
+        callIsGroup.value = convo?.type == "GROUP"
         callPeerName.value = peerName
-        callPeerId.value = conversations.value.firstOrNull { it.id == conversationId }?.members?.firstOrNull()?.id
+        callPeerId.value = if (convo?.type == "DIRECT") convo.members.firstOrNull()?.id else null
         runCatching { repo.startCall(conversationId, kind) }
             .onSuccess {
                 container.activeCallConversationId.value = conversationId
@@ -365,7 +422,11 @@ class KlicViewModel(
     }
 
     /** Answer an incoming call (from the full-screen notification): fetch a join token. */
-    fun acceptIncomingCall(callId: String, peerName: String) = viewModelScope.launch {
+    fun acceptIncomingCall(callId: String, peerName: String, isGroup: Boolean = false) = viewModelScope.launch {
+        // On an FCM cold start this can run before the init coroutine has loaded/refreshed
+        // the stored tokens — joining then would 401 and race the rotation. Wait it out.
+        authReady.await()
+        callIsGroup.value = isGroup
         callPeerName.value = peerName
         callStatus.value = "Connecting..."
         val result = runCatching { repo.joinToken(callId) }
@@ -377,10 +438,49 @@ class KlicViewModel(
         }
     }
 
+    /** Fetch the open conversation's live call (if any) for the "Join call" banner. */
+    fun refreshActiveCall(conversationId: String) {
+        viewModelScope.launch {
+            val info = runCatching { repo.activeCall(conversationId) }.getOrNull()
+            if (openConversationId == conversationId) chatActiveCall.value = info
+        }
+    }
+
+    /** Late-join the conversation's ongoing call from the chat banner (same flow as answering). */
+    fun joinOngoingCall(conversationId: String) = viewModelScope.launch {
+        if (activeCall.value != null) return@launch
+        authReady.await()
+        val info = runCatching { repo.activeCall(conversationId) }.getOrNull()
+        if (info == null) {
+            // The call ended between render and tap.
+            if (openConversationId == conversationId) chatActiveCall.value = null
+            return@launch
+        }
+        val convo = conversations.value.firstOrNull { it.id == conversationId }
+        val title = when {
+            convo == null -> "Call"
+            !convo.title.isNullOrBlank() -> convo.title
+            convo.type == "DIRECT" -> convo.members.firstOrNull()?.displayName ?: "Call"
+            else -> convo.members.joinToString(", ") { it.displayName }.ifBlank { "Group" }
+        }
+        callIsGroup.value = convo?.type == "GROUP"
+        callPeerName.value = title
+        callPeerId.value = if (convo?.type == "DIRECT") convo.members.firstOrNull()?.id else null
+        callStatus.value = "Connecting..."
+        val result = runCatching { repo.joinToken(info.callId) }
+        result.onSuccess {
+            container.activeCallConversationId.value = conversationId
+            startActiveCall(it, title, outgoing = false)
+        }
+        if (result.isFailure && openConversationId == conversationId) chatActiveCall.value = null
+    }
+
     fun endCall() {
         val id = activeCall.value?.callId
         if (id != null) {
-            val wasConnected = callStatus.value == "Connected"
+            // "Reconnecting…" is still a live call (media was up) — hang-up must END it,
+            // not cancel/decline, so the outcome records as completed.
+            val wasConnected = callStatus.value == "Connected" || callStatus.value == "Reconnecting…"
             val wasOutgoing = activeCallOutgoing
             viewModelScope.launch {
                 when {
@@ -515,17 +615,26 @@ class KlicViewModel(
         val currentId = activeCall.value?.callId ?: return
         if (event.callId != currentId) return
         when (event.type) {
-            SocketService.CallEvent.Type.ACCEPT -> {
+            // participant-joined fires on EVERY media-joined — including our own and repeats
+            // after a rejoin — so it's filtered to others and applied idempotently. Either
+            // event stops the caller's ringback (first member in = the group call is live).
+            SocketService.CallEvent.Type.ACCEPT,
+            SocketService.CallEvent.Type.PARTICIPANT_JOINED -> {
+                if (event.userId != null && event.userId == currentUser.value?.id) return
                 cancelRingTimeout()
                 callManager.stopRingback()
-                callStatus.value = "Connected"
+                if (callStatus.value == "Calling...") callStatus.value = "Connected"
             }
             SocketService.CallEvent.Type.DECLINE -> {
+                // In a group, a decline removes just that member; the ring continues.
+                if (callIsGroup.value) return
                 callStatus.value = "Busy"
                 finishCall(delayMs = 1500, callId = currentId)
             }
             SocketService.CallEvent.Type.CANCEL,
             SocketService.CallEvent.Type.END -> finishCall(callId = currentId)
+            // In-call membership renders from the LiveKit room, not server fan-out.
+            SocketService.CallEvent.Type.PARTICIPANT_LEFT -> Unit
         }
     }
 
@@ -538,6 +647,7 @@ class KlicViewModel(
             activeCall.value = null
             activeCallOutgoing = false
             callStatus.value = "Ended"
+            callIsGroup.value = false
             container.activeCallConversationId.value = null
             OngoingCallService.stop(container.appContext)
         }

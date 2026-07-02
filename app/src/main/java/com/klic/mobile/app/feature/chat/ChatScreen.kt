@@ -26,6 +26,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Call
@@ -287,13 +288,12 @@ fun ChatScreen(
                     }
                 },
                 actions = {
-                    if (isDirect) {
-                        IconButton(onClick = { vm.startCall(conversation.id, "AUDIO", title); onCall("AUDIO") }) {
-                            Icon(Icons.Filled.Call, contentDescription = "Voice call", modifier = Modifier.size(22.dp))
-                        }
-                        IconButton(onClick = { vm.startCall(conversation.id, "VIDEO", title); onCall("VIDEO") }) {
-                            Icon(Icons.Filled.Videocam, contentDescription = "Video call", modifier = Modifier.size(24.dp))
-                        }
+                    // Groups too: POST /calls rings every conversation member.
+                    IconButton(onClick = { vm.startCall(conversation.id, "AUDIO", title); onCall("AUDIO") }) {
+                        Icon(Icons.Filled.Call, contentDescription = "Voice call", modifier = Modifier.size(22.dp))
+                    }
+                    IconButton(onClick = { vm.startCall(conversation.id, "VIDEO", title); onCall("VIDEO") }) {
+                        Icon(Icons.Filled.Videocam, contentDescription = "Video call", modifier = Modifier.size(24.dp))
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
@@ -310,6 +310,18 @@ fun ChatScreen(
                 .fillMaxWidth()
                 .fillMaxHeight(),
         ) {
+            // "Join call" banner: the conversation has a live call we're not part of yet.
+            val chatCall by vm.chatActiveCall.collectAsState()
+            val ownCall by vm.activeCall.collectAsState()
+            chatCall?.let { info ->
+                if (info.conversationId == conversation.id && ownCall?.callId != info.callId) {
+                    JoinCallBanner(
+                        joinedCount = info.joinedCount,
+                        isVideo = info.kind == "VIDEO",
+                        onJoin = { vm.joinOngoingCall(conversation.id) },
+                    )
+                }
+            }
             Box(Modifier.weight(1f).fillMaxWidth()) {
             LazyColumn(
                 state = listState,
@@ -557,4 +569,37 @@ fun ChatScreen(
         ImageViewerOverlay(url = url, onDismiss = { viewerUrl = null })
     }
     } // Box
+}
+
+/** Banner shown while this conversation has an ongoing call the user hasn't joined. */
+@Composable
+private fun JoinCallBanner(joinedCount: Int, isVideo: Boolean, onJoin: () -> Unit) {
+    Surface(
+        color = MaterialTheme.colorScheme.primaryContainer,
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp),
+        shape = RoundedCornerShape(14.dp),
+    ) {
+        Row(
+            Modifier.fillMaxWidth().clickable(onClick = onJoin).padding(horizontal = 14.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                if (isVideo) Icons.Filled.Videocam else Icons.Filled.Call,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                modifier = Modifier.size(20.dp),
+            )
+            Text(
+                if (joinedCount > 0) "Ongoing call · $joinedCount in call" else "Ongoing call",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                modifier = Modifier.padding(start = 10.dp).weight(1f),
+            )
+            Text(
+                "Join",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.primary,
+            )
+        }
+    }
 }

@@ -83,7 +83,7 @@ class IncomingCallActivity : ComponentActivity() {
             KlicTheme {
                 invite.value?.let { current ->
                     IncomingCallScreen(
-                        callerName = current.fromName,
+                        callerName = current.displayLabel,
                         isVideo = current.kind == "VIDEO",
                         onAccept = { accept(current) },
                         onDecline = { decline(current) },
