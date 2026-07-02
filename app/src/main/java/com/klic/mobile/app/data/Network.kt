@@ -78,6 +78,15 @@ interface KlicApi {
     @PUT("keys/signed-prekey")
     suspend fun rotateSignedPreKey(@Body body: RotateSignedPreKeyRequest): Response<ResponseBody>
 
+    @GET("users/{id}/keys")
+    suspend fun userKeys(@Path("id") id: String): UserKeysResponse
+
+    @GET("conversations/{id}/devices")
+    suspend fun conversationDevices(@Path("id") id: String): DeviceDirectoryResponse
+
+    @POST("conversations/{id}/messages")
+    suspend fun sendCiphertext(@Path("id") id: String, @Body body: CipherSendRequest): Message
+
     @POST("diagnostics/mobile-event")
     suspend fun mobileDiagnostic(@Body body: MobileDiagnosticRequest): Response<ResponseBody>
 

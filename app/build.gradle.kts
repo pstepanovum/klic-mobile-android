@@ -4,6 +4,7 @@ plugins {
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.google.services)
+    alias(libs.plugins.ksp)
 }
 
 fun stringBuildConfig(name: String, defaultValue: String): String {
@@ -19,8 +20,8 @@ android {
         applicationId = "com.klic.mobile.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 38
-        versionName = "0.4.6"
+        versionCode = 39
+        versionName = "0.4.7"
         buildConfigField("String", "KLIC_API_ORIGIN", stringBuildConfig("KLIC_API_ORIGIN", "https://api.89.34.230.2.sslip.io"))
         // libsignal's native lib is ~70 MB per ABI — ship arm64 only (every Android
         // phone since ~2017). Emulator debug installs come from Studio's own build.
@@ -77,6 +78,13 @@ dependencies {
     // E2EE — Signal protocol (identity keys + prekeys now; sessions arrive in Phase 2)
     implementation(libs.libsignal.android)
     coreLibraryDesugaring(libs.desugar.jdk.libs)
+
+    testImplementation(libs.junit)
+
+    // Local E2EE message store (decrypted content encrypted per-row via KeystoreCrypto)
+    implementation(libs.room.runtime)
+    implementation(libs.room.ktx)
+    ksp(libs.room.compiler)
 
     // Realtime + media
     implementation(libs.socketio.client)

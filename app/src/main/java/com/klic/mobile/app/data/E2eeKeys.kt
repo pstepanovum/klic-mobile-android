@@ -11,6 +11,7 @@ import androidx.datastore.preferences.preferencesDataStore
 import java.security.SecureRandom
 import java.util.UUID
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.Serializable
@@ -59,49 +60,113 @@ data class TopUpPreKeysRequest(
 @Serializable
 data class RotateSignedPreKeyRequest(val installId: String, val signedPreKey: SignedPreKeyDto)
 
-// ── Local key store ───────────────────────────────────────────────────────────
+// ── Bundle fetch + device directory + ciphertext send (E2EE.md §6.2–6.3) ─────
+
+@Serializable
+data class DeviceBundleDto(
+    val deviceId: Int,
+    val registrationId: Int,
+    val identityKey: String,
+    val signedPreKey: SignedPreKeyDto,
+    val preKey: OneTimePreKeyDto? = null,
+    val kyberPreKey: KyberPreKeyDto? = null,
+)
+
+@Serializable data class UserKeysResponse(val userId: String, val devices: List<DeviceBundleDto>)
+
+@Serializable
+data class DeviceDirEntry(val userId: String, val deviceId: Int, val registrationId: Int, val identityKey: String)
+
+@Serializable data class DeviceDirectoryResponse(val devices: List<DeviceDirEntry>)
+
+@Serializable
+data class CipherEnvelopeDto(val userId: String, val deviceId: Int, val type: Int, val ciphertext: String)
+
+@Serializable
+data class CipherSendRequest(
+    val kind: String = "CIPHERTEXT",
+    val senderDeviceId: Int,
+    val envelopes: List<CipherEnvelopeDto>,
+)
+
+// ── Local key state ───────────────────────────────────────────────────────────
 
 private val Context.e2eeDataStore by preferencesDataStore(name = "klic_e2ee")
 
 /**
- * This install's Signal-protocol identity: identity keypair, signed prekey, and one-time
- * EC + Kyber prekeys. Private material is AES-encrypted with a Keystore key before it
- * touches disk ([KeystoreCrypto]) and the whole store is excluded from backups.
+ * This install's Signal-protocol identity and key material. All records (prekeys,
+ * signed prekeys, Kyber keys, sessions, peer identities) live in one
+ * [E2eeStoreSnapshot] persisted AES-encrypted under an Android Keystore key
+ * ([KeystoreCrypto]); the whole DataStore is excluded from backups.
  *
- * Phase 1 scope: generate, publish, top up, rotate. Sessions (encrypt/decrypt) are Phase 2 —
- * the private prekey records are retained here so Phase 2 can process incoming PreKey
- * messages that reference them.
+ * [mutex] serializes every protocol operation — libsignal session state is
+ * read-modify-write and must never interleave.
  */
 class E2eeKeyManager(private val context: Context, private val api: KlicApi) {
-    private val mutex = Mutex()
+    val mutex = Mutex()
     private val json = Json { ignoreUnknownKeys = true }
 
+    private val schemaKey = intPreferencesKey("schemaV")
     private val installIdKey = stringPreferencesKey("installId")
     private val deviceIdKey = intPreferencesKey("deviceId")
     private val registrationIdKey = intPreferencesKey("registrationId")
     private val identityKey = stringPreferencesKey("identity") // encrypted IdentityKeyPair
-    private val signedPreKeysKey = stringPreferencesKey("signedPreKeys") // encrypted {id: record}
+    private val protocolStoreKey = stringPreferencesKey("protocolStore") // encrypted E2eeStoreSnapshot
     private val currentSignedPreKeyIdKey = intPreferencesKey("currentSignedPreKeyId")
     private val signedPreKeyCreatedAtKey = longPreferencesKey("signedPreKeyCreatedAt")
-    private val kyberLastResortKey = stringPreferencesKey("kyberLastResort") // encrypted record
-    private val preKeysKey = stringPreferencesKey("preKeys") // encrypted {id: record}
-    private val kyberPreKeysKey = stringPreferencesKey("kyberPreKeys") // encrypted {id: record}
     private val nextPreKeyIdKey = intPreferencesKey("nextPreKeyId")
     private val nextKyberIdKey = intPreferencesKey("nextKyberId")
     private val nextSignedIdKey = intPreferencesKey("nextSignedId")
 
+    private var cachedStore: KlicSignalStore? = null
+
+    /** The protocol deviceId assigned by the server, or null before first publish. */
+    suspend fun localDeviceId(): Int? = context.e2eeDataStore.data.first()[deviceIdKey]
+
     /**
-     * Bring this install's published bundle up to date. Called on every successful auth;
-     * safe to call repeatedly. Failures are logged and retried on the next auth — messaging
-     * (still plaintext until Phase 2) is never blocked on key upkeep.
+     * The libsignal store for session operations. Callers MUST hold [mutex].
+     * Null until keys have been generated and published.
+     */
+    suspend fun protocolStore(): KlicSignalStore? {
+        cachedStore?.let { return it }
+        val prefs = context.e2eeDataStore.data.first()
+        if ((prefs[schemaKey] ?: 0) != SCHEMA) return null
+        val identity = prefs[identityKey]?.let { KeystoreCrypto.decrypt(it) }
+            ?.let { IdentityKeyPair(Base64.decode(it, Base64.NO_WRAP)) } ?: return null
+        val registrationId = prefs[registrationIdKey] ?: return null
+        val snapshot = prefs[protocolStoreKey]?.let { KeystoreCrypto.decrypt(it) }
+            ?.let { json.decodeFromString<E2eeStoreSnapshot>(it) } ?: E2eeStoreSnapshot()
+        return KlicSignalStore(identity, registrationId, snapshot, ::persistSnapshot).also {
+            cachedStore = it
+        }
+    }
+
+    /** Write-through hook for [KlicSignalStore] — called from inside libsignal ops. */
+    private fun persistSnapshot(snapshot: E2eeStoreSnapshot) = runBlocking {
+        context.e2eeDataStore.edit {
+            it[protocolStoreKey] = KeystoreCrypto.encrypt(json.encodeToString(snapshot))
+        }
+    }
+
+    /**
+     * Bring this install's published bundle up to date. Called on every successful
+     * auth; safe to call repeatedly. Failures are logged and retried on next auth.
      */
     suspend fun ensureReady() = mutex.withLock {
         runCatching {
             val prefs = context.e2eeDataStore.data.first()
             when {
                 prefs[identityKey] == null -> generateAndPublish()
-                prefs[deviceIdKey] == null -> publishExisting() // earlier publish never landed
-                else -> maintain()
+                (prefs[schemaKey] ?: 0) != SCHEMA -> {
+                    // Pre-session key layout (e.g. the last-resort id collision fixed
+                    // in schema 2): no sessions exist yet, so a clean regenerate is safe.
+                    Log.i(TAG, "key schema ${prefs[schemaKey] ?: 0} -> $SCHEMA: regenerating")
+                    context.e2eeDataStore.edit { it.clear() }
+                    cachedStore = null
+                    generateAndPublish()
+                }
+                prefs[deviceIdKey] == null -> publishExisting()
+                else -> maintain(prefs[installIdKey]!!)
             }
         }.onFailure { Log.w(TAG, "key upkeep failed (will retry on next auth)", it) }
     }
@@ -114,20 +179,10 @@ class E2eeKeyManager(private val context: Context, private val api: KlicApi) {
         val installId = UUID.randomUUID().toString()
         val now = System.currentTimeMillis()
 
-        val signedPair = ECKeyPair.generate()
-        val signedRecord = SignedPreKeyRecord(
-            1, now, signedPair, identity.privateKey.calculateSignature(signedPair.publicKey.serialize()))
-
-        val kyberLastResortPair = KEMKeyPair.generate(KEMKeyType.KYBER_1024)
-        val kyberLastResort = KyberPreKeyRecord(
-            1, now, kyberLastResortPair,
-            identity.privateKey.calculateSignature(kyberLastResortPair.publicKey.serialize()))
-
+        val signedRecord = signedPreKey(identity, 1, now)
+        val kyberLastResort = kyberPreKey(identity, E2eeIds.KYBER_LAST_RESORT_ID, now)
         val preKeys = (1..PRE_KEY_BATCH).map { PreKeyRecord(it, ECKeyPair.generate()) }
-        val kyberPreKeys = (1..KYBER_BATCH).map { id ->
-            val pair = KEMKeyPair.generate(KEMKeyType.KYBER_1024)
-            KyberPreKeyRecord(id, now, pair, identity.privateKey.calculateSignature(pair.publicKey.serialize()))
-        }
+        val kyberPreKeys = (1..KYBER_BATCH).map { kyberPreKey(identity, it, now) }
 
         val response = api.publishKeys(
             PublishKeysRequest(
@@ -142,37 +197,44 @@ class E2eeKeyManager(private val context: Context, private val api: KlicApi) {
             ),
         )
 
+        val snapshot = E2eeStoreSnapshot(
+            preKeys = preKeys.associate { it.id.toString() to b64(it.serialize()) },
+            signedPreKeys = mapOf("1" to b64(signedRecord.serialize())),
+            kyberPreKeys = (kyberPreKeys + kyberLastResort).associate { it.id.toString() to b64(it.serialize()) },
+        )
         context.e2eeDataStore.edit { p ->
+            p[schemaKey] = SCHEMA
             p[installIdKey] = installId
             p[deviceIdKey] = response.deviceId
             p[registrationIdKey] = registrationId
             p[identityKey] = KeystoreCrypto.encrypt(b64(identity.serialize()))
-            p[signedPreKeysKey] = encryptRecordMap(mapOf(1 to signedRecord.serialize()))
+            p[protocolStoreKey] = KeystoreCrypto.encrypt(json.encodeToString(snapshot))
             p[currentSignedPreKeyIdKey] = 1
             p[signedPreKeyCreatedAtKey] = now
             p[nextSignedIdKey] = 2
-            p[kyberLastResortKey] = KeystoreCrypto.encrypt(b64(kyberLastResort.serialize()))
-            p[preKeysKey] = encryptRecordMap(preKeys.associate { it.id to it.serialize() })
-            p[kyberPreKeysKey] = encryptRecordMap(kyberPreKeys.associate { it.id to it.serialize() })
             p[nextPreKeyIdKey] = PRE_KEY_BATCH + 1
             p[nextKyberIdKey] = KYBER_BATCH + 1
         }
+        cachedStore = null
         Log.i(TAG, "published key bundle as device ${response.deviceId}")
     }
 
     /** A publish failed after keygen (e.g. offline at first login): retry with stored keys. */
     private suspend fun publishExisting() {
         val prefs = context.e2eeDataStore.data.first()
-        val identity = loadIdentity() ?: return resetAndRegenerate("identity undecryptable")
+        val store = protocolStoreForPublish() ?: return resetAndRegenerate("state unusable")
+        val identity = store.identityKeyPair
         val installId = prefs[installIdKey] ?: return resetAndRegenerate("installId missing")
-        val signedId = prefs[currentSignedPreKeyIdKey] ?: return resetAndRegenerate("spk missing")
-        val signedRecord = decryptRecordMap(prefs[signedPreKeysKey])[signedId]
-            ?.let { SignedPreKeyRecord(it) } ?: return resetAndRegenerate("spk record missing")
-        val kyberLastResort = prefs[kyberLastResortKey]?.let { KeystoreCrypto.decrypt(it) }
-            ?.let { KyberPreKeyRecord(Base64.decode(it, Base64.NO_WRAP)) }
+        val signedId = prefs[currentSignedPreKeyIdKey] ?: return resetAndRegenerate("spk id missing")
+
+        val signedRecord = runCatching { store.loadSignedPreKey(signedId) }.getOrNull()
+            ?: return resetAndRegenerate("spk record missing")
+        val kyberLastResort = runCatching { store.loadKyberPreKey(E2eeIds.KYBER_LAST_RESORT_ID) }.getOrNull()
             ?: return resetAndRegenerate("kyber last-resort missing")
-        val preKeys = decryptRecordMap(prefs[preKeysKey]).map { PreKeyRecord(it.value) }
-        val kyberPreKeys = decryptRecordMap(prefs[kyberPreKeysKey]).map { KyberPreKeyRecord(it.value) }
+        val preKeys = store.snapshot().preKeys.values.map { PreKeyRecord(Base64.decode(it, Base64.NO_WRAP)) }
+        val kyberPreKeys = store.snapshot().kyberPreKeys
+            .filterKeys { it != E2eeIds.KYBER_LAST_RESORT_ID.toString() }
+            .values.map { KyberPreKeyRecord(Base64.decode(it, Base64.NO_WRAP)) }
 
         val response = api.publishKeys(
             PublishKeysRequest(
@@ -190,13 +252,23 @@ class E2eeKeyManager(private val context: Context, private val api: KlicApi) {
         Log.i(TAG, "re-published key bundle as device ${response.deviceId}")
     }
 
+    /** Like [protocolStore] but tolerates a missing deviceId (publish retry path). */
+    private suspend fun protocolStoreForPublish(): KlicSignalStore? {
+        cachedStore?.let { return it }
+        val prefs = context.e2eeDataStore.data.first()
+        val identity = prefs[identityKey]?.let { KeystoreCrypto.decrypt(it) }
+            ?.let { IdentityKeyPair(Base64.decode(it, Base64.NO_WRAP)) } ?: return null
+        val registrationId = prefs[registrationIdKey] ?: return null
+        val snapshot = prefs[protocolStoreKey]?.let { KeystoreCrypto.decrypt(it) }
+            ?.let { json.decodeFromString<E2eeStoreSnapshot>(it) } ?: return null
+        return KlicSignalStore(identity, registrationId, snapshot, ::persistSnapshot).also {
+            cachedStore = it
+        }
+    }
+
     // ── Upkeep: top-up + rotation ─────────────────────────────────────────────
 
-    private suspend fun maintain() {
-        val prefs = context.e2eeDataStore.data.first()
-        val installId = prefs[installIdKey] ?: return
-        val identity = loadIdentity() ?: return resetAndRegenerate("identity undecryptable")
-
+    private suspend fun maintain(installId: String) {
         val counts = try {
             api.preKeyCount(installId)
         } catch (e: HttpException) {
@@ -206,22 +278,26 @@ class E2eeKeyManager(private val context: Context, private val api: KlicApi) {
         }
 
         if (counts.oneTimePreKeys < TOP_UP_THRESHOLD || counts.kyberPreKeys < TOP_UP_THRESHOLD) {
-            topUp(installId, identity, prefs[nextPreKeyIdKey] ?: 1, prefs[nextKyberIdKey] ?: 1)
+            topUp(installId)
         }
 
+        val prefs = context.e2eeDataStore.data.first()
         val createdAt = prefs[signedPreKeyCreatedAtKey] ?: 0
         if (System.currentTimeMillis() - createdAt > SIGNED_PRE_KEY_MAX_AGE_MS) {
-            rotateSignedPreKey(installId, identity, prefs[nextSignedIdKey] ?: 2)
+            rotateSignedPreKey(installId)
         }
     }
 
-    private suspend fun topUp(installId: String, identity: IdentityKeyPair, nextPreId: Int, nextKyberId: Int) {
+    private suspend fun topUp(installId: String) {
+        val store = protocolStoreForPublish() ?: return
+        val identity = store.identityKeyPair
+        val prefs = context.e2eeDataStore.data.first()
+        val nextPre = prefs[nextPreKeyIdKey] ?: 1
+        val nextKyber = prefs[nextKyberIdKey] ?: 1
         val now = System.currentTimeMillis()
-        val preKeys = (nextPreId until nextPreId + PRE_KEY_BATCH).map { PreKeyRecord(it, ECKeyPair.generate()) }
-        val kyberPreKeys = (nextKyberId until nextKyberId + KYBER_BATCH).map { id ->
-            val pair = KEMKeyPair.generate(KEMKeyType.KYBER_1024)
-            KyberPreKeyRecord(id, now, pair, identity.privateKey.calculateSignature(pair.publicKey.serialize()))
-        }
+
+        val preKeys = (nextPre until nextPre + PRE_KEY_BATCH).map { PreKeyRecord(it, ECKeyPair.generate()) }
+        val kyberPreKeys = (nextKyber until nextKyber + KYBER_BATCH).map { kyberPreKey(identity, it, now) }
 
         api.topUpPreKeys(
             TopUpPreKeysRequest(
@@ -231,59 +307,52 @@ class E2eeKeyManager(private val context: Context, private val api: KlicApi) {
             ),
         )
 
+        preKeys.forEach { store.storePreKey(it.id, it) }
+        kyberPreKeys.forEach { store.storeKyberPreKey(it.id, it) }
         context.e2eeDataStore.edit { p ->
-            p[preKeysKey] = encryptRecordMap(
-                decryptRecordMap(p[preKeysKey]) + preKeys.associate { it.id to it.serialize() })
-            p[kyberPreKeysKey] = encryptRecordMap(
-                decryptRecordMap(p[kyberPreKeysKey]) + kyberPreKeys.associate { it.id to it.serialize() })
-            p[nextPreKeyIdKey] = nextPreId + PRE_KEY_BATCH
-            p[nextKyberIdKey] = nextKyberId + KYBER_BATCH
+            p[nextPreKeyIdKey] = nextPre + PRE_KEY_BATCH
+            p[nextKyberIdKey] = nextKyber + KYBER_BATCH
         }
         Log.i(TAG, "topped up prekeys (+$PRE_KEY_BATCH EC, +$KYBER_BATCH kyber)")
     }
 
-    private suspend fun rotateSignedPreKey(installId: String, identity: IdentityKeyPair, nextId: Int) {
+    private suspend fun rotateSignedPreKey(installId: String) {
+        val store = protocolStoreForPublish() ?: return
+        val prefs = context.e2eeDataStore.data.first()
+        val nextId = prefs[nextSignedIdKey] ?: 2
         val now = System.currentTimeMillis()
-        val pair = ECKeyPair.generate()
-        val record = SignedPreKeyRecord(nextId, now, pair,
-            identity.privateKey.calculateSignature(pair.publicKey.serialize()))
+        val record = signedPreKey(store.identityKeyPair, nextId, now)
 
         api.rotateSignedPreKey(RotateSignedPreKeyRequest(installId, record.toDto()))
 
+        // Keep superseded records: in-flight PreKey messages may still reference them.
+        store.storeSignedPreKey(record.id, record)
         context.e2eeDataStore.edit { p ->
-            // Keep superseded records: in-flight PreKey messages may still reference them.
-            p[signedPreKeysKey] = encryptRecordMap(
-                decryptRecordMap(p[signedPreKeysKey]) + (nextId to record.serialize()))
-            p[currentSignedPreKeyIdKey] = nextId
+            p[currentSignedPreKeyIdKey] = record.id
             p[signedPreKeyCreatedAtKey] = now
-            p[nextSignedIdKey] = nextId + 1
+            p[nextSignedIdKey] = record.id + 1
         }
-        Log.i(TAG, "rotated signed prekey to id $nextId")
+        Log.i(TAG, "rotated signed prekey to id ${record.id}")
     }
 
     /** Local state is unusable (Keystore key lost, partial write): start over cleanly. */
     private suspend fun resetAndRegenerate(reason: String) {
         Log.w(TAG, "resetting E2EE keys: $reason")
         context.e2eeDataStore.edit { it.clear() }
+        cachedStore = null
         generateAndPublish()
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
-    private suspend fun loadIdentity(): IdentityKeyPair? =
-        context.e2eeDataStore.data.first()[identityKey]
-            ?.let { KeystoreCrypto.decrypt(it) }
-            ?.let { IdentityKeyPair(Base64.decode(it, Base64.NO_WRAP)) }
+    private fun signedPreKey(identity: IdentityKeyPair, id: Int, now: Long): SignedPreKeyRecord {
+        val pair = ECKeyPair.generate()
+        return SignedPreKeyRecord(id, now, pair, identity.privateKey.calculateSignature(pair.publicKey.serialize()))
+    }
 
-    /** {keyId: base64(record)} as one encrypted JSON string. */
-    private fun encryptRecordMap(records: Map<Int, ByteArray>): String =
-        KeystoreCrypto.encrypt(
-            json.encodeToString(records.entries.associate { it.key.toString() to b64(it.value) }))
-
-    private fun decryptRecordMap(stored: String?): Map<Int, ByteArray> {
-        val plain = stored?.let { KeystoreCrypto.decrypt(it) } ?: return emptyMap()
-        return json.decodeFromString<Map<String, String>>(plain)
-            .entries.associate { it.key.toInt() to Base64.decode(it.value, Base64.NO_WRAP) }
+    private fun kyberPreKey(identity: IdentityKeyPair, id: Int, now: Long): KyberPreKeyRecord {
+        val pair = KEMKeyPair.generate(KEMKeyType.KYBER_1024)
+        return KyberPreKeyRecord(id, now, pair, identity.privateKey.calculateSignature(pair.publicKey.serialize()))
     }
 
     private fun b64(bytes: ByteArray): String = Base64.encodeToString(bytes, Base64.NO_WRAP)
@@ -298,6 +367,7 @@ class E2eeKeyManager(private val context: Context, private val api: KlicApi) {
 
     private companion object {
         const val TAG = "KlicE2ee"
+        const val SCHEMA = 2 // v2: records live in the protocol-store snapshot; reserved kyber last-resort id
         const val PRE_KEY_BATCH = 100
         const val KYBER_BATCH = 50
         const val TOP_UP_THRESHOLD = 20
