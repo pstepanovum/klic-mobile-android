@@ -29,6 +29,7 @@ import androidx.compose.material.icons.filled.Cameraswitch
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MicOff
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
+import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.OpenInFull
 import androidx.compose.material.icons.filled.PhoneInTalk
 import androidx.compose.material.icons.filled.PictureInPictureAlt
@@ -70,7 +71,13 @@ import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
 @Composable
-fun CallScreen(vm: KlicViewModel, call: CallSession, peerName: String, onEnd: () -> Unit) {
+fun CallScreen(
+    vm: KlicViewModel,
+    call: CallSession,
+    peerName: String,
+    onMinimize: () -> Unit,
+    onEnd: () -> Unit,
+) {
     val scope = rememberCoroutineScope()
     val manager = vm.callManager
     val callStatus by vm.callStatus.collectAsState()
@@ -133,9 +140,17 @@ fun CallScreen(vm: KlicViewModel, call: CallSession, peerName: String, onEnd: ()
                 }
             }
         } else {
-            // "Compact" the call into a PiP window so the rest of Klic stays usable.
-            if (pip.supported) {
-                Box(Modifier.align(Alignment.TopStart).padding(16.dp)) {
+            // Minimize back into the app (floating overlay) + optional system-PiP compact.
+            Row(
+                Modifier.align(Alignment.TopStart).padding(16.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                CircleControl(
+                    painter = rememberVectorPainter(Icons.Filled.KeyboardArrowDown),
+                    contentDescription = "Minimize call",
+                    diameter = 44,
+                ) { onMinimize() }
+                if (pip.supported) {
                     CircleControl(
                         painter = rememberVectorPainter(Icons.Filled.PictureInPictureAlt),
                         contentDescription = "Compact call",
@@ -206,15 +221,14 @@ fun CallScreen(vm: KlicViewModel, call: CallSession, peerName: String, onEnd: ()
                         contentDescription = "Toggle microphone",
                     ) { scope.launch { manager.toggleMic() } }
 
-                    // Speaker / earpiece toggle — shown on a voice call (video defaults to speaker).
-                    if (!shouldShowVideo) {
-                        CircleControl(
-                            painter = rememberVectorPainter(if (speakerOn) Icons.AutoMirrored.Filled.VolumeUp else Icons.Filled.PhoneInTalk),
-                            contentDescription = "Toggle speaker",
-                            fill = if (speakerOn) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
-                            tint = if (speakerOn) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
-                        ) { manager.toggleSpeaker() }
-                    }
+                    // Speaker / earpiece toggle — on every call; auto-routing still flips it
+                    // when the video state changes (see updateAudioRouteForVideo).
+                    CircleControl(
+                        painter = rememberVectorPainter(if (speakerOn) Icons.AutoMirrored.Filled.VolumeUp else Icons.Filled.PhoneInTalk),
+                        contentDescription = "Toggle speaker",
+                        fill = if (speakerOn) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
+                        tint = if (speakerOn) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
+                    ) { manager.toggleSpeaker() }
 
                     CircleControl(
                         painter = rememberVectorPainter(Icons.Filled.CallEnd),

@@ -46,6 +46,27 @@
             </intent-filter>
         </activity>
 
+        <!-- System share target: other apps share images/videos/text into Klic -->
+        <activity
+            android:name=".feature.share.ShareActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:theme="@style/Theme.Klic">
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="image/*" />
+                <data android:mimeType="video/*" />
+                <data android:mimeType="text/plain" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND_MULTIPLE" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="image/*" />
+                <data android:mimeType="video/*" />
+            </intent-filter>
+        </activity>
+
         <!-- Full-screen incoming call (shows over the lock screen) -->
         <activity
             android:name=".calling.IncomingCallActivity"

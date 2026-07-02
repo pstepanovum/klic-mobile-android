@@ -11,6 +11,8 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.AlertDialog
@@ -55,6 +57,7 @@ import com.klic.mobile.app.feature.auth.WelcomeScreen
 import com.klic.mobile.app.feature.call.CallDialScreen
 import com.klic.mobile.app.feature.call.CallScreen
 import com.klic.mobile.app.feature.call.LocalPipController
+import com.klic.mobile.app.feature.call.MinimizedCallOverlay
 import com.klic.mobile.app.feature.call.PipController
 import com.klic.mobile.app.feature.chat.ChatScreen
 import com.klic.mobile.app.feature.conversations.ConversationsScreen
@@ -257,6 +260,7 @@ class MainActivity : ComponentActivity() {
             }
         }
 
+        Box(Modifier.fillMaxSize()) {
         Scaffold(
             bottomBar = {
                 if (showBar) {
@@ -342,10 +346,22 @@ class MainActivity : ComponentActivity() {
                     if (call == null) {
                         LaunchedEffect(Unit) { navController.popBackStack() }
                     } else {
-                        CallScreen(vm, call!!, peerName = peer) { navController.popBackStack() }
+                        CallScreen(
+                            vm, call!!, peerName = peer,
+                            onMinimize = {
+                                vm.minimizeCall()
+                                navController.popBackStack()
+                            },
+                        ) { navController.popBackStack() }
                     }
                 }
             }
+        }
+        // Floating minimized-call widget — above all navigation; tap restores the call screen.
+        MinimizedCallOverlay(vm) {
+            vm.restoreCall()
+            navController.navigate("active_call") { launchSingleTop = true }
+        }
         }
     }
 

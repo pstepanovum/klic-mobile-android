@@ -59,6 +59,11 @@ class KlicViewModel(
     val callStatus = MutableStateFlow("Calling...")
     /** True while the active call belongs to a GROUP conversation (drives grid + grace UX). */
     val callIsGroup = MutableStateFlow(false)
+    /** True while the in-call screen is collapsed into the floating overlay — the rest of the
+     *  app is fully navigable; media keeps running (CallManager is app-scoped). */
+    val callMinimized = MutableStateFlow(false)
+    /** Wall-clock millis when the call first connected — drives the overlay's live timer. */
+    val callConnectedAt = MutableStateFlow<Long?>(null)
     /** Live call in the currently open conversation, if any — drives the "Join call" banner. */
     val chatActiveCall = MutableStateFlow<ActiveCallInfo?>(null)
 
@@ -482,6 +487,16 @@ class KlicViewModel(
         if (result.isFailure && openConversationId == conversationId) chatActiveCall.value = null
     }
 
+    /** Collapse the in-call screen into the floating overlay (media untouched). */
+    fun minimizeCall() {
+        if (activeCall.value != null) callMinimized.value = true
+    }
+
+    /** Restore the full in-call screen from the overlay. */
+    fun restoreCall() {
+        callMinimized.value = false
+    }
+
     fun endCall() {
         val id = activeCall.value?.callId
         if (id != null) {
@@ -507,6 +522,7 @@ class KlicViewModel(
         viewModelScope.launch { repo.mediaJoined(callId) }
         if (activeCallOutgoing) return
         callStatus.value = "Connected"
+        markCallConnected()
     }
 
     fun onCallJoinFailed(callId: String) {
@@ -585,6 +601,11 @@ class KlicViewModel(
 
     private fun msMillis(iso: String): Long? = runCatching { Instant.parse(iso).toEpochMilli() }.getOrNull()
 
+    /** Record the moment the call first connected (idempotent across rejoins/repeat events). */
+    private fun markCallConnected() {
+        if (callConnectedAt.value == null) callConnectedAt.value = System.currentTimeMillis()
+    }
+
     private fun startActiveCall(session: CallSession, peerName: String, outgoing: Boolean) {
         if (activeCall.value != null && activeCall.value?.callId != session.callId) return
         // The call is going active — kill any incoming ring + notification so the user isn't left
@@ -596,6 +617,8 @@ class KlicViewModel(
         activeCallOutgoing = outgoing
         callPeerName.value = peerName
         callStatus.value = if (outgoing) "Calling..." else "Connecting..."
+        callMinimized.value = false
+        callConnectedAt.value = null
         activeCall.value = session
         // Play the outgoing ringback while we wait for the callee to answer (stopped on connect/end).
         if (outgoing) { startRingTimeout(session.callId); callManager.startRingback() } else cancelRingTimeout()
@@ -633,6 +656,7 @@ class KlicViewModel(
                 cancelRingTimeout()
                 callManager.stopRingback()
                 if (callStatus.value == "Calling...") callStatus.value = "Connected"
+                markCallConnected()
             }
             SocketService.CallEvent.Type.DECLINE -> {
                 // In a group, a decline removes just that member; the ring continues.
@@ -657,6 +681,8 @@ class KlicViewModel(
             activeCallOutgoing = false
             callStatus.value = "Ended"
             callIsGroup.value = false
+            callMinimized.value = false
+            callConnectedAt.value = null
             container.activeCallConversationId.value = null
             OngoingCallService.stop(container.appContext)
         }

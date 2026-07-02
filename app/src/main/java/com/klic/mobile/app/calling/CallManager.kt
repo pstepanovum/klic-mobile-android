@@ -395,9 +395,13 @@ class CallManager(
         val r = room ?: return
         localVideoTrack.value = r.localParticipant.videoTrackPublications
             .firstOrNull()?.second as? VideoTrack
+        // A muted remote publication means their camera is off (LiveKit's setCameraEnabled(false)
+        // mutes rather than unpublishes) — rendering it would freeze on the last decoded frame,
+        // so treat it as "no video" and let the UI fall back to the avatar placeholder.
         remoteVideoTrack.value = r.remoteParticipants.values
             .flatMap { it.videoTrackPublications }
-            .firstOrNull()?.second as? VideoTrack
+            .firstOrNull { (publication, track) -> track != null && !publication.muted }
+            ?.second as? VideoTrack
         refreshParticipants(r)
         diagnostic(
             "livekit.tracks.refresh",
@@ -413,7 +417,10 @@ class CallManager(
             RemoteCallParticipant(
                 userId = userId,
                 name = p.name ?: "",
-                videoTrack = p.videoTrackPublications.firstOrNull()?.second as? VideoTrack,
+                // Muted publication == camera off — no video for this tile (see refreshTracks).
+                videoTrack = p.videoTrackPublications
+                    .firstOrNull { (publication, track) -> track != null && !publication.muted }
+                    ?.second as? VideoTrack,
                 micMuted = p.audioTrackPublications.firstOrNull()?.first?.muted ?: false,
                 isSpeaking = p.isSpeaking,
             )
