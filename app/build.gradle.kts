@@ -19,8 +19,8 @@ android {
         applicationId = "com.klic.mobile.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 33
-        versionName = "0.4.1"
+        versionCode = 34
+        versionName = "0.4.2"
         buildConfigField("String", "KLIC_API_ORIGIN", stringBuildConfig("KLIC_API_ORIGIN", "https://api.89.34.230.2.sslip.io"))
     }
 
