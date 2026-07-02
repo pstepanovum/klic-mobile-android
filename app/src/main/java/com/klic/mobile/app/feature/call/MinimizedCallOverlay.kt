@@ -1,6 +1,8 @@
 package com.klic.mobile.app.feature.call
 
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
@@ -10,7 +12,6 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBarsPadding
@@ -35,18 +36,19 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.util.VelocityTracker
+import androidx.compose.ui.input.pointer.util.addPointerInputChange
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import com.klic.mobile.app.calling.LiveKitVideo
 import com.klic.mobile.app.feature.KlicViewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlin.math.roundToInt
 
 private val CallAccentGreen = Color(0xFF10B981)
 
@@ -68,7 +70,22 @@ fun MinimizedCallOverlay(vm: KlicViewModel, onRestore: () -> Unit) {
     val connectedAt by vm.callConnectedAt.collectAsState()
     val callStatus by vm.callStatus.collectAsState()
 
-    // Live mm:ss since connect; before that (or while reconnecting) show the status text.
+    // §7.4: while the whole app is compacted into the system PiP window, this minimized
+    // call renders ONLY the remote feed, full-bleed — no widget, no app chrome behind it.
+    val pip = LocalPipController.current
+    if (pip.isInPipMode) {
+        Box(Modifier.fillMaxSize().background(Color.Black), contentAlignment = Alignment.Center) {
+            val video = remoteVideo
+            if (video != null) {
+                LiveKitVideo(manager.room, video, Modifier.fillMaxSize())
+            } else {
+                Text(peerName, style = MaterialTheme.typography.labelLarge, color = Color.White)
+            }
+        }
+        return
+    }
+
+    // Live mm:ss since connect; before that (or while reconnecting/on hold) the status text.
     var nowMs by remember { mutableStateOf(System.currentTimeMillis()) }
     LaunchedEffect(Unit) {
         while (true) {
@@ -76,7 +93,7 @@ fun MinimizedCallOverlay(vm: KlicViewModel, onRestore: () -> Unit) {
             delay(1_000)
         }
     }
-    val subtitle = connectedAt?.let {
+    val subtitle = if (callStatus == "On Hold") callStatus else connectedAt?.let {
         val s = ((nowMs - it) / 1000).coerceAtLeast(0)
         "%d:%02d".format(s / 60, s % 60)
     } ?: callStatus
@@ -98,7 +115,10 @@ fun MinimizedCallOverlay(vm: KlicViewModel, onRestore: () -> Unit) {
         val hasVideo = remoteVideo != null
         Box(
             Modifier
-                .offset { IntOffset(offsetX.value.roundToInt(), offsetY.value.roundToInt()) }
+                .graphicsLayer {
+                    translationX = offsetX.value
+                    translationY = offsetY.value
+                }
                 // Hidden for the first frame, until the initial corner position is applied.
                 .alpha(if (placed) 1f else 0f)
                 .onSizeChanged { size ->
@@ -118,23 +138,43 @@ fun MinimizedCallOverlay(vm: KlicViewModel, onRestore: () -> Unit) {
                         }
                     }
                 }
+                // §7.7: 1:1 finger tracking (deltas accumulate outside the coroutine so no
+                // event is lost) + spring snap to the nearest edge with the release velocity.
                 .pointerInput(Unit) {
+                    val tracker = VelocityTracker()
+                    var dragX = 0f
+                    var dragY = 0f
                     detectDragGestures(
+                        onDragStart = {
+                            dragX = offsetX.value
+                            dragY = offsetY.value
+                            tracker.resetTracking()
+                        },
                         onDrag = { change, drag ->
                             change.consume()
+                            tracker.addPointerInputChange(change)
+                            dragX = (dragX + drag.x).coerceIn(xBounds(itemSize.width))
+                            dragY = (dragY + drag.y).coerceIn(yBounds(itemSize.height))
+                            val x = dragX
+                            val y = dragY
                             scope.launch {
-                                offsetX.snapTo((offsetX.value + drag.x).coerceIn(xBounds(itemSize.width)))
-                                offsetY.snapTo((offsetY.value + drag.y).coerceIn(yBounds(itemSize.height)))
+                                offsetX.snapTo(x)
+                                offsetY.snapTo(y)
                             }
                         },
                         onDragEnd = {
+                            val velocity = tracker.calculateVelocity()
+                            val settle = spring<Float>(
+                                dampingRatio = Spring.DampingRatioNoBouncy,
+                                stiffness = Spring.StiffnessMediumLow,
+                            )
                             val bounds = xBounds(itemSize.width)
-                            val target = if (offsetX.value + itemSize.width / 2f < maxWidthPx / 2f) {
-                                bounds.start
-                            } else {
-                                bounds.endInclusive
-                            }
-                            scope.launch { offsetX.animateTo(target) }
+                            // Project the fling a beat forward to pick the edge it's headed to.
+                            val projected = dragX + itemSize.width / 2f + velocity.x * 0.12f
+                            val targetX = if (projected < maxWidthPx / 2f) bounds.start else bounds.endInclusive
+                            val targetY = dragY.coerceIn(yBounds(itemSize.height))
+                            scope.launch { offsetX.animateTo(targetX, settle, initialVelocity = velocity.x) }
+                            scope.launch { offsetY.animateTo(targetY, settle, initialVelocity = velocity.y) }
                         },
                     )
                 }
