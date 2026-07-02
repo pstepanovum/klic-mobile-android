@@ -166,9 +166,19 @@ data class RecentCall(
     val outcome: String,
     val startedAt: String,
     val durationMs: Int? = null,
+    /** Everyone besides me who was on the call (a 1:1 peer is the single-element case). */
+    val participants: List<RecentCallPeer> = emptyList(),
+    /** Pre-group servers sent a single peer; kept as a decode fallback. */
     val peer: RecentCallPeer? = null,
 ) {
     val isVideo: Boolean get() = kind == "VIDEO"
+
+    /** The counterpart shown on the row — first fellow participant, or the legacy peer. */
+    val primaryPeer: RecentCallPeer? get() = participants.firstOrNull() ?: peer
+
+    val peerNames: String
+        get() = participants.joinToString(", ") { it.displayName }
+            .ifEmpty { peer?.displayName ?: "Unknown" }
 }
 
 @Serializable

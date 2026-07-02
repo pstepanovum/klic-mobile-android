@@ -197,6 +197,9 @@ class KlicViewModel(
     private var openConversationId: String? = null
     private var activeCallOutgoing = false
     private var ringTimeoutJob: Job? = null
+    // The in-flight server-side end/cancel/decline of the last call. A new outgoing call
+    // joins this first so POST /calls can't race it into a 409 call_exists.
+    private var serverTeardownJob: Job? = null
     private val finishingCallIds = mutableSetOf<String>()
     // Completed once stored tokens are loaded (and refreshed if stale) — see init.
     private val authReady = CompletableDeferred<Unit>()
@@ -225,6 +228,7 @@ class KlicViewModel(
     fun callFriendDirect(userId: String, kind: String, peerName: String) =
         viewModelScope.launch {
             if (activeCall.value != null) return@launch
+            serverTeardownJob?.join()
             callIsGroup.value = false
             callPeerName.value = peerName
             callPeerId.value = userId
@@ -410,6 +414,9 @@ class KlicViewModel(
 
     fun startCall(conversationId: String, kind: String, peerName: String) = viewModelScope.launch {
         if (activeCall.value != null) return@launch
+        // Let the previous call's server-side end/cancel land first, or POST /calls 409s
+        // against the call we just hung up and the tap looks dead.
+        serverTeardownJob?.join()
         val convo = conversations.value.firstOrNull { it.id == conversationId }
         callIsGroup.value = convo?.type == "GROUP"
         callPeerName.value = peerName
@@ -482,11 +489,13 @@ class KlicViewModel(
             // not cancel/decline, so the outcome records as completed.
             val wasConnected = callStatus.value == "Connected" || callStatus.value == "Reconnecting…"
             val wasOutgoing = activeCallOutgoing
-            viewModelScope.launch {
-                when {
-                    wasConnected -> repo.endCall(id)
-                    wasOutgoing -> repo.cancelCall(id)
-                    else -> repo.declineCall(id)
+            serverTeardownJob = viewModelScope.launch {
+                runCatching {
+                    when {
+                        wasConnected -> repo.endCall(id)
+                        wasOutgoing -> repo.cancelCall(id)
+                        else -> repo.declineCall(id)
+                    }
                 }
             }
         }

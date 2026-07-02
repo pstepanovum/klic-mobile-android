@@ -77,7 +77,7 @@ fun CallDialScreen(vm: KlicViewModel) {
                     item { SectionHeader("Recent") }
                     items(recents, key = { it.id }) { call ->
                         RecentCallRow(call) {
-                            val name = call.peer?.displayName ?: "Call"
+                            val name = call.peerNames
                             vm.startCall(call.conversationId, call.kind, name)
                         }
                     }
@@ -160,10 +160,10 @@ private fun RecentCallRow(call: RecentCall, onCallBack: () -> Unit) {
             .padding(12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        AvatarView(url = call.peer?.avatarUrl, name = call.peer?.displayName ?: "?", size = 50.dp)
+        AvatarView(url = call.primaryPeer?.avatarUrl, name = call.primaryPeer?.displayName ?: "?", size = 50.dp)
         Column(Modifier.weight(1f).padding(start = 14.dp)) {
             Text(
-                call.peer?.displayName ?: "Unknown",
+                call.peerNames,
                 style = MaterialTheme.typography.titleMedium,
                 color = if (missed) red else MaterialTheme.colorScheme.onSurface,
             )
