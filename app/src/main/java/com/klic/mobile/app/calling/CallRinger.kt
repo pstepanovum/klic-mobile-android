@@ -12,6 +12,7 @@ import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
 import com.klic.mobile.app.R
+import com.klic.mobile.app.data.SettingsStore
 
 /**
  * Plays a looping ringtone + vibration for an incoming call, honouring the ringer mode
@@ -45,11 +46,18 @@ object CallRinger {
         // Scheduled before the ringer-mode check: the notification is up even on a silent
         // device, so the backstop must clear it either way.
         scheduleBackstop(appContext, invite)
+        // §8.4/§8.5: calls muted for this chat (or call notifications disabled globally)
+        // → the incoming surface shows quietly — no sound, no vibration.
+        val snap = SettingsStore.snapshotBlocking()
+        val conversationId = invite?.conversationId
+        if (!snap.notifCalls || (conversationId != null && snap.callsMuted(conversationId))) return
         val audio = appContext.getSystemService(AudioManager::class.java)
+        // Per-chat ringtone (local pref, §8.4) — falls back to the bundled tone.
+        val customTone = conversationId?.let { snap.callTones[it] }?.let { Uri.parse(it) }
         when (audio.ringerMode) {
             AudioManager.RINGER_MODE_SILENT -> return
             AudioManager.RINGER_MODE_VIBRATE -> startVibration(appContext)
-            else -> { startRingtone(appContext); startVibration(appContext) }
+            else -> { startRingtone(appContext, customTone); startVibration(appContext) }
         }
     }
 
@@ -73,9 +81,9 @@ object CallRinger {
         handler.postDelayed(runnable, BACKSTOP_MS)
     }
 
-    private fun startRingtone(context: Context) {
-        // Klic's own bundled ringtone (res/raw/ringtone.wav), looped for the duration of the ring.
-        val uri = Uri.parse("android.resource://${context.packageName}/${R.raw.ringtone}")
+    private fun startRingtone(context: Context, customTone: Uri? = null) {
+        // Per-chat pick when set, else Klic's own bundled ringtone (res/raw/ringtone.wav).
+        val uri = customTone ?: Uri.parse("android.resource://${context.packageName}/${R.raw.ringtone}")
         runCatching {
             player = MediaPlayer().apply {
                 setDataSource(context, uri)

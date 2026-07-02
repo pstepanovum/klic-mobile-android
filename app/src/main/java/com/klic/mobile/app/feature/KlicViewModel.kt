@@ -8,12 +8,17 @@ import com.klic.mobile.app.calling.CallRinger
 import com.klic.mobile.app.calling.OngoingCallService
 import com.klic.mobile.app.data.ActiveCallInfo
 import com.klic.mobile.app.data.AttachmentInput
+import com.klic.mobile.app.data.AttachmentPage
 import com.klic.mobile.app.data.CallSession
 import com.klic.mobile.app.data.Conversation
+import com.klic.mobile.app.data.ConversationPrefs
 import com.klic.mobile.app.data.FriendRequest
 import com.klic.mobile.app.data.KlicRepository
 import com.klic.mobile.app.data.Message
+import com.klic.mobile.app.data.NotificationPrefs
 import com.klic.mobile.app.data.RecentCall
+import com.klic.mobile.app.data.SettingsStore
+import com.klic.mobile.app.data.StarredPage
 import com.klic.mobile.app.data.Sticker
 import com.klic.mobile.app.data.TokenStore
 import com.klic.mobile.app.data.User
@@ -259,7 +264,14 @@ class KlicViewModel(
         }
 
     fun loadConversations() = viewModelScope.launch {
-        runCatching { repo.conversations() }.onSuccess { conversations.value = it }
+        runCatching { repo.conversations() }.onSuccess { list ->
+            conversations.value = list
+            // Cache which conversations are groups so the killed-app push path can pick
+            // the right global toggle (message vs group notifications, §8.5).
+            SettingsStore.setGroupConversationIds(
+                list.filter { it.type == "GROUP" }.map { it.id }.toSet()
+            )
+        }
     }
 
     fun loadFriends() = viewModelScope.launch {
@@ -294,14 +306,35 @@ class KlicViewModel(
         }
     }
 
-    fun createGroupConversation(title: String, userIds: List<String>, onReady: (Conversation) -> Unit) =
+    fun createGroupConversation(
+        title: String,
+        userIds: List<String>,
+        avatarBytes: ByteArray? = null,
+        avatarContentType: String? = null,
+        onReady: (Conversation) -> Unit,
+    ) = viewModelScope.launch {
+        runCatching { repo.createGroupConversation(title.trim(), userIds.distinct()) }.onSuccess { c ->
+            // Cover picked during creation uploads after the fact — failures are quiet
+            // (the group exists either way; the cover can be retried from GroupInfo).
+            val withCover = if (avatarBytes != null && avatarContentType != null) {
+                runCatching { repo.uploadConversationAvatar(c.id, avatarBytes, avatarContentType) }
+                    .getOrDefault(c)
+            } else c
+            conversations.value = listOf(withCover) + conversations.value.filterNot { it.id == c.id }
+            onReady(withCover)
+        }.onFailure {
+            error.value = "Couldn't create group chat. Try again."
+        }
+    }
+
+    /** Upload + attach a new group cover from GroupInfo (§8.4). */
+    fun updateGroupCover(conversationId: String, bytes: ByteArray, contentType: String) =
         viewModelScope.launch {
-            runCatching { repo.createGroupConversation(title.trim(), userIds.distinct()) }.onSuccess { c ->
-                conversations.value = listOf(c) + conversations.value.filterNot { it.id == c.id }
-                onReady(c)
-            }.onFailure {
-                error.value = "Couldn't create group chat. Try again."
-            }
+            runCatching { repo.uploadConversationAvatar(conversationId, bytes, contentType) }
+                .onSuccess { updated ->
+                    conversations.value = conversations.value.map { if (it.id == updated.id) updated else it }
+                }
+                .onFailure { error.value = "Couldn't update the group photo. Try again." }
         }
 
     fun openChat(conversationId: String) = viewModelScope.launch {
@@ -577,6 +610,129 @@ class KlicViewModel(
     fun markRead(conversationId: String) {
         socket.emit("message:read", buildJsonObject { put("conversationId", conversationId) })
     }
+
+    // ── v0.5.1 (§8.2/§8.4/§8.5): stars, prefs, attachments, jump-to-message ──
+
+    /** Message id the open chat should scroll to next (search / starred taps). */
+    val pendingJumpMessageId = MutableStateFlow<String?>(null)
+
+    fun requestJumpTo(messageId: String) { pendingJumpMessageId.value = messageId }
+
+    /** Star/unstar — optimistic flip, reverted if the server call fails. */
+    fun toggleStar(message: Message) = viewModelScope.launch {
+        val newValue = !message.starred
+        messages.value = messages.value.map {
+            if (it.id == message.id) it.copy(starred = newValue) else it
+        }
+        val result = runCatching {
+            if (newValue) repo.starMessage(message.id) else repo.unstarMessage(message.id)
+        }
+        if (result.isFailure) {
+            messages.value = messages.value.map {
+                if (it.id == message.id) it.copy(starred = !newValue) else it
+            }
+        }
+    }
+
+    /** Global notification toggles (§8.5) — server-synced, cached for local gating. */
+    val notificationPrefs = MutableStateFlow(NotificationPrefs())
+
+    fun loadNotificationPrefs() = viewModelScope.launch {
+        runCatching { repo.notificationPrefs() }
+            .onSuccess {
+                notificationPrefs.value = it
+                SettingsStore.setNotificationToggles(it)
+            }
+            .onFailure {
+                // Server not reachable/deployed — show the local cache.
+                val s = SettingsStore.snapshot.value
+                notificationPrefs.value =
+                    NotificationPrefs(s.notifMessages, s.notifGroups, s.notifCalls, s.notifFriendRequests)
+            }
+    }
+
+    fun updateNotificationPrefs(
+        messages: Boolean? = null,
+        groups: Boolean? = null,
+        calls: Boolean? = null,
+        friendRequests: Boolean? = null,
+    ) = viewModelScope.launch {
+        val cur = notificationPrefs.value
+        val updated = cur.copy(
+            messages = messages ?: cur.messages,
+            groups = groups ?: cur.groups,
+            calls = calls ?: cur.calls,
+            friendRequests = friendRequests ?: cur.friendRequests,
+        )
+        // Optimistic + always cached locally so the on-device gating honors it offline.
+        notificationPrefs.value = updated
+        SettingsStore.setNotificationToggles(updated)
+        runCatching { repo.updateNotificationPrefs(messages, groups, calls, friendRequests) }
+    }
+
+    /** "Reset notification settings": DELETE server-side + drop local tones/toggles. */
+    fun resetNotificationSettings() = viewModelScope.launch {
+        runCatching { repo.resetNotificationPrefs() }
+        SettingsStore.resetNotificationSettings()
+        notificationPrefs.value = NotificationPrefs()
+    }
+
+    /** Per-conversation prefs, from the server when possible, else the local cache. */
+    suspend fun fetchConversationPrefs(conversationId: String): ConversationPrefs {
+        val remote = runCatching { repo.conversationPrefs(conversationId) }.getOrNull()
+        if (remote != null) {
+            SettingsStore.cacheConversationPrefs(conversationId, remote)
+            return remote
+        }
+        val s = SettingsStore.snapshot.value
+        return ConversationPrefs(
+            messagesMutedUntil = s.messagesMutedUntil[conversationId]
+                ?.let { Instant.ofEpochMilli(it).toString() },
+            muteMentions = conversationId in s.muteMentions,
+            callsMutedUntil = s.callsMutedUntil[conversationId]
+                ?.let { Instant.ofEpochMilli(it).toString() },
+        )
+    }
+
+    /**
+     * Update per-conversation mutes (partial). Applies locally even when the server
+     * call fails so mutes keep working before the endpoint is deployed.
+     */
+    suspend fun setConversationPrefs(
+        conversationId: String,
+        current: ConversationPrefs,
+        setMessagesMuted: Boolean = false,
+        messagesMutedUntil: String? = null,
+        muteMentions: Boolean? = null,
+        setCallsMuted: Boolean = false,
+        callsMutedUntil: String? = null,
+    ): ConversationPrefs {
+        val optimistic = current.copy(
+            messagesMutedUntil = if (setMessagesMuted) messagesMutedUntil else current.messagesMutedUntil,
+            muteMentions = muteMentions ?: current.muteMentions,
+            callsMutedUntil = if (setCallsMuted) callsMutedUntil else current.callsMutedUntil,
+        )
+        val result = runCatching {
+            repo.updateConversationPrefs(
+                conversationId,
+                setMessagesMuted, messagesMutedUntil,
+                muteMentions,
+                setCallsMuted, callsMutedUntil,
+            )
+        }.getOrDefault(optimistic)
+        SettingsStore.cacheConversationPrefs(conversationId, result)
+        return result
+    }
+
+    suspend fun fetchStarred(conversationId: String?, cursor: String? = null): StarredPage? =
+        runCatching { repo.starredMessages(conversationId, cursor) }.getOrNull()
+
+    suspend fun fetchAttachments(conversationId: String, kind: String?, cursor: String? = null): AttachmentPage? =
+        runCatching { repo.conversationAttachments(conversationId, kind, cursor) }.getOrNull()
+
+    /** Raw history fetch for the links scan / group search fetch-back (§8.4). */
+    suspend fun fetchMessagesBefore(conversationId: String, before: String?): List<Message>? =
+        runCatching { repo.messages(conversationId, before = before) }.getOrNull()
 
     // ── Profile ───────────────────────────────────────────────────────────────
     fun saveProfile(displayName: String, avatarBytes: ByteArray?, contentType: String?, onDone: () -> Unit) =

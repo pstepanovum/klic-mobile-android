@@ -66,6 +66,8 @@ private sealed class SettingsRoute {
     object AutoNightMode : SettingsRoute()
     object Updates : SettingsRoute()
     object Privacy : SettingsRoute()
+    object Notifications : SettingsRoute()
+    object DataStorage : SettingsRoute()
 }
 
 @Composable
@@ -154,6 +156,18 @@ fun SettingsScreen(vm: KlicViewModel, onEditProfile: () -> Unit = {}) {
                                 icon = painterResource(R.drawable.ic_line_sun),
                                 title = "Appearance",
                                 onClick = { route = SettingsRoute.Appearance },
+                            )
+                            HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
+                            SettingsRow(
+                                icon = painterResource(R.drawable.ic_line_notification),
+                                title = "Notifications",
+                                onClick = { route = SettingsRoute.Notifications },
+                            )
+                            HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
+                            SettingsRow(
+                                icon = painterResource(R.drawable.ic_line_chart),
+                                title = "Data and Storage",
+                                onClick = { route = SettingsRoute.DataStorage },
                             )
                         }
 
@@ -435,6 +449,16 @@ fun SettingsScreen(vm: KlicViewModel, onEditProfile: () -> Unit = {}) {
                             textAlign = TextAlign.Center,
                             modifier = Modifier.fillMaxWidth(),
                         )
+                    }
+
+                    SettingsRoute.Notifications -> {
+                        SubScreenHeader(title = "Notifications", onBack = { route = SettingsRoute.Main })
+                        NotificationsSettingsContent(vm)
+                    }
+
+                    SettingsRoute.DataStorage -> {
+                        SubScreenHeader(title = "Data and Storage", onBack = { route = SettingsRoute.Main })
+                        DataStorageContent(vm)
                     }
 
                     SettingsRoute.Privacy -> {

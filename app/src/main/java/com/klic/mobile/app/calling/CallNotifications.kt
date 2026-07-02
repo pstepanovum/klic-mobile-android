@@ -6,10 +6,13 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.media.AudioAttributes
+import android.net.Uri
 import androidx.core.app.NotificationCompat
 import androidx.core.app.Person
 import com.klic.mobile.app.MainActivity
 import com.klic.mobile.app.R
+import com.klic.mobile.app.data.SettingsStore
 
 object CallNotifications {
     // "calls_v2" so the silent-channel change applies on in-place updates — a channel's sound
@@ -166,7 +169,7 @@ object CallNotifications {
             context, conversationId.hashCode(), open,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
-        val notification = NotificationCompat.Builder(context, CHANNEL_MESSAGES)
+        val notification = NotificationCompat.Builder(context, messageChannelFor(context, conversationId))
             .setSmallIcon(R.drawable.ic_launcher_foreground)
             .setContentTitle(title)
             .setContentText(body)
@@ -176,6 +179,31 @@ object CallNotifications {
             .build()
         context.getSystemService(NotificationManager::class.java)
             .notify(MESSAGE_ID_BASE + conversationId.hashCode(), notification)
+    }
+
+    /**
+     * Per-chat alert tone (§8.4): a channel's sound is immutable after creation, so a
+     * conversation with a custom tone gets its own channel keyed by (conversation, tone) —
+     * changing the tone lands on a fresh channel id. No pref → the shared Messages channel.
+     */
+    private fun messageChannelFor(context: Context, conversationId: String): String {
+        if (conversationId.isEmpty()) return CHANNEL_MESSAGES
+        val tone = runCatching { SettingsStore.snapshotBlocking().messageTones[conversationId] }
+            .getOrNull() ?: return CHANNEL_MESSAGES
+        val channelId = "messages_tone_${(conversationId + tone).hashCode()}"
+        context.getSystemService(NotificationManager::class.java).createNotificationChannel(
+            NotificationChannel(channelId, "Messages (custom tone)", NotificationManager.IMPORTANCE_DEFAULT).apply {
+                setShowBadge(true)
+                setSound(
+                    Uri.parse(tone),
+                    AudioAttributes.Builder()
+                        .setUsage(AudioAttributes.USAGE_NOTIFICATION)
+                        .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                        .build(),
+                )
+            }
+        )
+        return channelId
     }
 
     fun cancelMessage(context: Context, conversationId: String) {

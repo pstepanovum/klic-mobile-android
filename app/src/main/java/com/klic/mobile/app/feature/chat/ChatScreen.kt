@@ -265,6 +265,24 @@ fun ChatScreen(
         }
     }
 
+    // Jump-to-message (§8.4): search results / starred taps land here. Fetch back
+    // through history (bounded) until the target is loaded, then scroll to it.
+    val pendingJump by vm.pendingJumpMessageId.collectAsState()
+    LaunchedEffect(pendingJump, initialScrollDone) {
+        val targetId = pendingJump ?: return@LaunchedEffect
+        if (!initialScrollDone) return@LaunchedEffect
+        var attempts = 0
+        while (vm.messages.value.none { it.id == targetId } &&
+            vm.hasMoreMessages.value && attempts < 20
+        ) {
+            vm.loadOlderMessages().join()
+            attempts++
+        }
+        val index = vm.messages.value.indexOfFirst { it.id == targetId }
+        if (index >= 0) listState.scrollToItem(index)
+        vm.pendingJumpMessageId.value = null
+    }
+
     Box(Modifier.fillMaxSize()) {
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -273,7 +291,8 @@ fun ChatScreen(
                 title = {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        modifier = if (isDirect) Modifier.clickable(onClick = onOpenProfile) else Modifier,
+                        // Direct → friend profile; group → GroupInfo (§8.4).
+                        modifier = Modifier.clickable(onClick = onOpenProfile),
                     ) {
                         AvatarView(url = peer?.avatarUrl, name = title, size = 34.dp)
                         Column(Modifier.padding(start = 10.dp)) {
@@ -352,13 +371,14 @@ fun ChatScreen(
                         isFirst = isFirst,
                         isLast  = isLast,
                         replyAuthorName = msg.replyTo?.let { if (it.senderId == me?.id) "You" else title } ?: "",
+                        highlightMentions = !isDirect,
                         onCallBack = { kind -> vm.startCall(conversation.id, kind, title); onCall(kind) },
                         onLongPress = { menuTarget = msg },
                         onReactionTap = { emoji -> vm.react(conversation.id, msg.id, emoji) },
                         onImageClick = { url -> viewerUrl = url },
                         onFileClick = { att ->
                             scope.launch {
-                                val file = AttachmentDownloads.ensureLocal(context, att)
+                                val file = AttachmentDownloads.ensureLocal(context, att, conversation.id)
                                 when {
                                     file == null -> vm.error.value = "Couldn't download the file."
                                     isPdfAttachment(att) -> pdfFile = file
@@ -555,6 +575,7 @@ fun ChatScreen(
             onReact = { emoji -> vm.react(conversation.id, target.id, emoji); menuTarget = null },
             onReply = { vm.setReplyTo(target); menuTarget = null },
             onCopy = { clipboard.setText(AnnotatedString(target.body)) },
+            onStar = { vm.toggleStar(target) },
             onDelete = { deleteTarget = target },
             onDismiss = { menuTarget = null },
         )

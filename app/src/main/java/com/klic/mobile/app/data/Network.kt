@@ -154,6 +154,61 @@ interface KlicApi {
         @Path("messageId") messageId: String,
         @Query("scope") scope: String = "everyone",
     ): Response<ResponseBody>
+
+    // ── v0.5.1 (§8.2): notification prefs, per-chat prefs, stars, attachments ──
+
+    @GET("me/notification-prefs")
+    suspend fun notificationPrefs(): NotificationPrefs
+
+    @PUT("me/notification-prefs")
+    suspend fun updateNotificationPrefs(@Body body: kotlinx.serialization.json.JsonObject): NotificationPrefs
+
+    @DELETE("me/notification-prefs")
+    suspend fun resetNotificationPrefs(): Response<ResponseBody>
+
+    @GET("conversations/{id}/prefs")
+    suspend fun conversationPrefs(@Path("id") id: String): ConversationPrefs
+
+    @PUT("conversations/{id}/prefs")
+    suspend fun updateConversationPrefs(
+        @Path("id") id: String,
+        @Body body: kotlinx.serialization.json.JsonObject,
+    ): ConversationPrefs
+
+    @POST("messages/{id}/star")
+    suspend fun starMessage(@Path("id") id: String): Response<ResponseBody>
+
+    @DELETE("messages/{id}/star")
+    suspend fun unstarMessage(@Path("id") id: String): Response<ResponseBody>
+
+    @GET("me/starred")
+    suspend fun starredMessages(
+        @Query("conversationId") conversationId: String? = null,
+        @Query("cursor") cursor: String? = null,
+        @Query("limit") limit: Int = 50,
+    ): StarredPage
+
+    @GET("conversations/{id}/attachments")
+    suspend fun conversationAttachments(
+        @Path("id") id: String,
+        @Query("kind") kind: String? = null,
+        @Query("cursor") cursor: String? = null,
+        @Query("limit") limit: Int = 50,
+    ): AttachmentPage
+
+    // Group management (existing server endpoints, first wired up for GroupInfo §8.4).
+
+    @PATCH("conversations/{id}")
+    suspend fun updateConversation(
+        @Path("id") id: String,
+        @Body body: kotlinx.serialization.json.JsonObject,
+    ): Conversation
+
+    @POST("conversations/{id}/avatar-upload")
+    suspend fun conversationAvatarUpload(
+        @Path("id") id: String,
+        @Body body: AvatarUploadRequest,
+    ): UploadTicket
 }
 
 /** Bare, synchronous refresh used by the Authenticator (no auth header, no authenticator → no recursion). */
@@ -189,6 +244,8 @@ object Network {
                 tokenStore.cachedAccess?.let { builder.header("Authorization", "Bearer $it") }
                 chain.proceed(builder.build())
             }
+            // Data-usage accounting (§8.3) — attributes API/signaling bytes.
+            .addInterceptor(DataUsage.interceptor)
             .authenticator(TokenAuthenticator(tokenStore, authApi, onSessionExpired))
             .build()
 

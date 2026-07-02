@@ -22,9 +22,17 @@ object KlicIcons {
     val check    = R.drawable.ic_line_check
     // Shared "klic check" mark — message delivery ticks (single/double).
     val klicCheck = R.drawable.ic_klic_check
+    // Combined "check and a half" glyph — delivered/read (§8.1, one asset, both paths).
+    val klicCheckDouble = R.drawable.ic_klic_check_double
     val add      = R.drawable.ic_bold_add
     val gallery  = R.drawable.ic_bold_gallery
     val document = R.drawable.ic_bold_document
+    val star     = R.drawable.ic_line_star_1
+    val starBold = R.drawable.ic_bold_star_1
+    val folder   = R.drawable.ic_line_folder
+    val notification = R.drawable.ic_line_notification
+    val chart    = R.drawable.ic_line_chart
+    val link     = R.drawable.ic_line_export
     // Tab bar — line (inactive) and bold (active) pairs
     val messageChat     = R.drawable.ic_line_message_3
     val messageChatBold = R.drawable.ic_bold_message_3

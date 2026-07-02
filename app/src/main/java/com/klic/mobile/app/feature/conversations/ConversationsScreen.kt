@@ -44,6 +44,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -57,6 +58,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import coil.compose.AsyncImage
 import com.klic.mobile.app.data.Conversation
+import com.klic.mobile.app.data.ImageUploads
 import com.klic.mobile.app.data.Message
 import com.klic.mobile.app.data.User
 import com.klic.mobile.app.feature.KlicViewModel
@@ -66,6 +68,7 @@ import com.klic.mobile.app.ui.components.KlicTextField
 import com.klic.mobile.app.ui.components.MessageTicks
 import com.klic.mobile.app.ui.components.PillButton
 import com.klic.mobile.app.ui.theme.KlicIcons
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -157,7 +160,11 @@ private fun ConversationRow(conversation: Conversation, online: Boolean, onClick
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Box(contentAlignment = Alignment.BottomEnd) {
-                AvatarView(url = member?.avatarUrl, name = title, size = 52.dp)
+                AvatarView(
+                    url = if (conversation.type == "GROUP") conversation.avatarUrl else member?.avatarUrl,
+                    name = title,
+                    size = 52.dp,
+                )
                 if (online) {
                     Box(
                         Modifier
@@ -295,6 +302,7 @@ private fun NewMessageSheet(
     var contactUsername by remember { mutableStateOf("") }
 
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val hasContactsPermission = ContextCompat.checkSelfPermission(
         context, Manifest.permission.READ_CONTACTS,
     ) == PackageManager.PERMISSION_GRANTED
@@ -551,8 +559,18 @@ private fun NewMessageSheet(
                             text = "Create",
                             enabled = groupName.isNotBlank(),
                             onClick = {
-                                vm.createGroupConversation(groupName, selectedIds.toList()) { convo ->
-                                    onOpenChat(convo)
+                                // Encode the picked cover (if any) so it uploads right after
+                                // creation — previously the pick was silently dropped (§8.4).
+                                scope.launch {
+                                    val encoded = groupAvatarUri?.let { ImageUploads.encodeAvatar(context, it) }
+                                    vm.createGroupConversation(
+                                        groupName,
+                                        selectedIds.toList(),
+                                        avatarBytes = encoded?.bytes,
+                                        avatarContentType = encoded?.contentType,
+                                    ) { convo ->
+                                        onOpenChat(convo)
+                                    }
                                 }
                             },
                         )

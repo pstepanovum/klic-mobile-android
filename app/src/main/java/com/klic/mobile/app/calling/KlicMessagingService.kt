@@ -4,6 +4,8 @@ import android.content.Intent
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
 import com.klic.mobile.app.KlicApplication
+import com.klic.mobile.app.data.SettingsStore
+import com.klic.mobile.app.data.bodyMentionsAll
 import kotlinx.coroutines.launch
 
 /**
@@ -48,14 +50,31 @@ class KlicMessagingService : FirebaseMessagingService() {
                 // The live socket already shows messages while the app is open; only post a
                 // notification (which puts the badge on the launcher icon) when backgrounded.
                 if (!container.appForeground) {
-                    CallNotifications.showMessage(
-                        this,
-                        title = data["title"] ?: "New message",
-                        body = data["body"] ?: "",
-                        conversationId = data["conversationId"] ?: "",
-                    )
+                    val conversationId = data["conversationId"] ?: ""
+                    val body = data["body"] ?: ""
+                    if (messageNotificationAllowed(conversationId, body)) {
+                        CallNotifications.showMessage(
+                            this,
+                            title = data["title"] ?: "New message",
+                            body = body,
+                            conversationId = conversationId,
+                        )
+                    }
                 }
             }
         }
+    }
+
+    /**
+     * Local mirror of the server's push gating (§8.2/§8.5): the global message/group
+     * toggle plus the per-conversation mute — except an @all mention in a group where
+     * mentions aren't muted, which rings through the mute (not through a disabled toggle).
+     */
+    private fun messageNotificationAllowed(conversationId: String, body: String): Boolean {
+        val snap = SettingsStore.snapshotBlocking()
+        val isGroup = conversationId in snap.groupConversationIds
+        if (if (isGroup) !snap.notifGroups else !snap.notifMessages) return false
+        if (!snap.messagesMuted(conversationId)) return true
+        return isGroup && bodyMentionsAll(body) && conversationId !in snap.muteMentions
     }
 }

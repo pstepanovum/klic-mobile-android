@@ -83,12 +83,20 @@ object AttachmentDownloads {
     /** attachment id → download progress 0..1; an id is present only while downloading. */
     val progress = mutableStateMapOf<String, Float>()
 
-    private val client by lazy { OkHttpClient() }
+    // Data-usage interceptor so downloads are attributed by media kind (§8.3).
+    private val client by lazy {
+        OkHttpClient.Builder().addInterceptor(com.klic.mobile.app.data.DataUsage.interceptor).build()
+    }
     private val locks = ConcurrentHashMap<String, Mutex>()
 
-    /** Local cache slot for an attachment — keyed by id, keeps the original name/extension. */
-    fun cachedFile(context: Context, att: Attachment): File {
-        val dir = File(context.cacheDir, "attachments").apply { mkdirs() }
+    /**
+     * Local cache slot for an attachment — keyed by id, keeps the original name/extension.
+     * When [conversationId] is known the file lives in a per-conversation subfolder, which
+     * is what "Manage storage" (§8.4) measures and clears.
+     */
+    fun cachedFile(context: Context, att: Attachment, conversationId: String? = null): File {
+        val root = File(context.cacheDir, "attachments")
+        val dir = (conversationId?.let { File(root, it) } ?: root).apply { mkdirs() }
         val safeName = (att.fileName ?: "file").replace(Regex("[^A-Za-z0-9._-]"), "_").takeLast(80)
         return File(dir, "${att.id}-$safeName")
     }
@@ -97,8 +105,12 @@ object AttachmentDownloads {
      * Returns the cached local copy, downloading it first if needed (presigned URL fetch).
      * Concurrent requests for the same attachment share one download. Null on failure.
      */
-    suspend fun ensureLocal(context: Context, att: Attachment): File? = withContext(Dispatchers.IO) {
-        val target = cachedFile(context, att)
+    suspend fun ensureLocal(
+        context: Context,
+        att: Attachment,
+        conversationId: String? = null,
+    ): File? = withContext(Dispatchers.IO) {
+        val target = cachedFile(context, att, conversationId)
         if (target.length() > 0L) return@withContext target
         locks.getOrPut(att.id) { Mutex() }.withLock {
             if (target.length() > 0L) return@withLock target
@@ -163,6 +175,8 @@ fun FileAttachmentView(
     isMine: Boolean,
     time: String = "",
     status: String? = null,
+    conversationId: String? = null,
+    starred: Boolean = false,
 ) {
     val containerColor = if (isMine) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
     val nameColor = if (isMine) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
@@ -174,7 +188,7 @@ fun FileAttachmentView(
     Surface(color = containerColor, shape = RoundedCornerShape(18.dp)) {
         Column(Modifier.widthIn(max = 260.dp).padding(horizontal = 12.dp, vertical = 8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                if (isAudio) AudioFilePlayButton(att, isMine) else FileLeadingIcon(isMine, downloadProgress)
+                if (isAudio) AudioFilePlayButton(att, isMine, conversationId) else FileLeadingIcon(isMine, downloadProgress)
                 Spacer(Modifier.width(10.dp))
                 Column {
                     Text(
@@ -208,6 +222,15 @@ fun FileAttachmentView(
                     horizontalArrangement = Arrangement.End,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
+                    if (starred) {
+                        Icon(
+                            painter = painterResource(KlicIcons.starBold),
+                            contentDescription = "Starred",
+                            tint = metaColor,
+                            modifier = Modifier.size(10.dp),
+                        )
+                        Spacer(Modifier.width(3.dp))
+                    }
                     Text(time, style = MaterialTheme.typography.labelSmall, color = metaColor)
                     if (isMine && status != null) {
                         Spacer(Modifier.width(3.dp))
@@ -221,7 +244,7 @@ fun FileAttachmentView(
 
 /** In-bubble play/pause for audio files — downloads to cache first, then plays the local copy. */
 @Composable
-private fun AudioFilePlayButton(att: Attachment, isMine: Boolean) {
+private fun AudioFilePlayButton(att: Attachment, isMine: Boolean, conversationId: String? = null) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val playing = AudioPlaybackManager.playingId == att.id
@@ -235,7 +258,7 @@ private fun AudioFilePlayButton(att: Attachment, isMine: Boolean) {
                 AudioPlaybackManager.stop()
             } else {
                 scope.launch {
-                    AttachmentDownloads.ensureLocal(context, att)?.let {
+                    AttachmentDownloads.ensureLocal(context, att, conversationId)?.let {
                         AudioPlaybackManager.toggle(att.id, it.absolutePath)
                     }
                 }

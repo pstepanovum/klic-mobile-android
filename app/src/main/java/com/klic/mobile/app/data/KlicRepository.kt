@@ -3,6 +3,7 @@ package com.klic.mobile.app.data
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import okhttp3.MediaType.Companion.toMediaType
@@ -17,7 +18,8 @@ class KlicRepository(
 ) {
     private val json = Json { ignoreUnknownKeys = true }
     // Bare client for presigned PUT uploads — no auth header, no base URL.
-    private val uploader = OkHttpClient()
+    // Carries the data-usage interceptor so uploads are attributed by media kind (§8.3).
+    private val uploader = OkHttpClient.Builder().addInterceptor(DataUsage.interceptor).build()
 
     var currentUser: User? = null
         private set
@@ -300,6 +302,78 @@ class KlicRepository(
         } catch (e: retrofit2.HttpException) {
             if (e.code() == 404) null else throw e
         }
+
+    // ── v0.5.1 (§8.2): notification prefs, per-chat prefs, stars, attachments ──
+
+    suspend fun notificationPrefs(): NotificationPrefs = api.notificationPrefs()
+
+    /** Partial PUT — only the provided toggles are sent. */
+    suspend fun updateNotificationPrefs(
+        messages: Boolean? = null,
+        groups: Boolean? = null,
+        calls: Boolean? = null,
+        friendRequests: Boolean? = null,
+    ): NotificationPrefs = api.updateNotificationPrefs(JsonObject(buildMap {
+        messages?.let { put("messages", JsonPrimitive(it)) }
+        groups?.let { put("groups", JsonPrimitive(it)) }
+        calls?.let { put("calls", JsonPrimitive(it)) }
+        friendRequests?.let { put("friendRequests", JsonPrimitive(it)) }
+    }))
+
+    suspend fun resetNotificationPrefs() { api.resetNotificationPrefs() }
+
+    suspend fun conversationPrefs(conversationId: String): ConversationPrefs =
+        api.conversationPrefs(conversationId)
+
+    /**
+     * Partial PUT of the per-conversation mutes. [messagesMutedUntil]/[callsMutedUntil]
+     * take an ISO instant, `JsonNull`-encoded null to unmute, or stay absent when the
+     * corresponding `set*` flag is false.
+     */
+    suspend fun updateConversationPrefs(
+        conversationId: String,
+        setMessagesMutedUntil: Boolean = false,
+        messagesMutedUntil: String? = null,
+        muteMentions: Boolean? = null,
+        setCallsMutedUntil: Boolean = false,
+        callsMutedUntil: String? = null,
+    ): ConversationPrefs = api.updateConversationPrefs(conversationId, JsonObject(buildMap {
+        if (setMessagesMutedUntil) {
+            put("messagesMutedUntil", messagesMutedUntil?.let { JsonPrimitive(it) } ?: JsonNull)
+        }
+        muteMentions?.let { put("muteMentions", JsonPrimitive(it)) }
+        if (setCallsMutedUntil) {
+            put("callsMutedUntil", callsMutedUntil?.let { JsonPrimitive(it) } ?: JsonNull)
+        }
+    }))
+
+    suspend fun starMessage(messageId: String) { api.starMessage(messageId) }
+    suspend fun unstarMessage(messageId: String) { api.unstarMessage(messageId) }
+
+    suspend fun starredMessages(conversationId: String? = null, cursor: String? = null): StarredPage =
+        api.starredMessages(conversationId, cursor)
+
+    suspend fun conversationAttachments(
+        conversationId: String,
+        kind: String? = null,
+        cursor: String? = null,
+    ): AttachmentPage = api.conversationAttachments(conversationId, kind, cursor)
+
+    // ── Group management (§8.4) ──────────────────────────────────────────────
+
+    /** Upload a new group cover and attach it — POST avatar-upload, PUT bytes, PATCH key. */
+    suspend fun uploadConversationAvatar(
+        conversationId: String,
+        bytes: ByteArray,
+        contentType: String,
+    ): Conversation {
+        val ticket = api.conversationAvatarUpload(conversationId, AvatarUploadRequest(contentType, bytes.size))
+        putToPresignedUrl(ticket.uploadUrl, bytes, contentType, "Group cover")
+        return api.updateConversation(
+            conversationId,
+            JsonObject(mapOf("avatarKey" to JsonPrimitive(ticket.key))),
+        )
+    }
 
     private suspend fun persist(res: AuthResponse) {
         tokenStore.save(res.accessToken, res.refreshToken)

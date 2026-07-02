@@ -81,6 +81,11 @@ data class Conversation(
     val members: List<Member> = emptyList(),
     val lastMessage: Message? = null,
     val unreadCount: Int = 0,
+    val avatarUrl: String? = null,      // group cover (GET /conversations/:id/avatar)
+    val description: String? = null,
+    val createdById: String? = null,    // group creator (drives the "Created by" footer)
+    val createdAt: String? = null,
+    val isAdmin: Boolean = false,       // true when the current user created this group
 )
 
 @Serializable
@@ -144,6 +149,8 @@ data class Message(
     val replyTo: ReplyPreview? = null,
     val reactions: List<Reaction> = emptyList(),
     val deletedAt: String? = null,
+    /** True when the requesting user starred this message (§8.2). */
+    val starred: Boolean = false,
     // CIPHERTEXT messages (E2EE): sender's protocol device + the envelopes
     // addressed to this user's devices (this client picks its own by deviceId).
     val senderDeviceId: Int? = null,
@@ -272,3 +279,61 @@ data class ActiveCallInfo(
 
 @Serializable
 data class ActiveCallParticipant(val userId: String, val joinedAt: String? = null)
+
+// ── v0.5.1 (§8.2): notification prefs, per-conversation prefs, stars, attachments ──
+
+/** GET/PUT /me/notification-prefs — the four global notification toggles. */
+@Serializable
+data class NotificationPrefs(
+    val messages: Boolean = true,
+    val groups: Boolean = true,
+    val calls: Boolean = true,
+    val friendRequests: Boolean = true,
+)
+
+/**
+ * GET/PUT /conversations/:id/prefs — per-conversation mutes.
+ * ISO instants or null; "Always" = 9999-12-31T00:00:00Z.
+ */
+@Serializable
+data class ConversationPrefs(
+    val messagesMutedUntil: String? = null,
+    val muteMentions: Boolean = false,
+    val callsMutedUntil: String? = null,
+)
+
+/** One row of GET /conversations/:id/attachments — attachment + message context. */
+@Serializable
+data class ConversationAttachment(
+    val id: String,
+    val kind: String,
+    val url: String,
+    val contentType: String = "",
+    val byteSize: Int = 0,
+    val width: Int? = null,
+    val height: Int? = null,
+    val durationMs: Int? = null,
+    val fileName: String? = null,
+    val messageId: String = "",
+    val senderId: String = "",
+    val createdAt: String = "",
+) {
+    fun asAttachment(): Attachment = Attachment(
+        id = id, kind = kind, url = url, contentType = contentType, byteSize = byteSize,
+        width = width, height = height, durationMs = durationMs, fileName = fileName,
+    )
+}
+
+/** GET /conversations/:id/attachments — cursor-paged envelope. */
+@Serializable
+data class AttachmentPage(
+    val items: List<ConversationAttachment> = emptyList(),
+    val nextCursor: String? = null,
+)
+
+/** GET /me/starred — cursor-paged envelope of full message payloads. */
+@Serializable
+data class StarredPage(
+    val items: List<Message> = emptyList(),
+    val nextCursor: String? = null,
+)

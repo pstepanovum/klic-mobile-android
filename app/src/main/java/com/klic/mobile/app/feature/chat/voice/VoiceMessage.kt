@@ -153,6 +153,7 @@ fun VoiceAttachmentView(
     isMine: Boolean,
     time: String = "",
     status: String? = null,
+    starred: Boolean = false,
 ) {
     val player = AudioPlaybackManager
     val playing = player.playingId == att.id
@@ -207,6 +208,10 @@ fun VoiceAttachmentView(
                     horizontalArrangement = Arrangement.End,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
+                    if (starred) {
+                        com.klic.mobile.app.feature.chat.messagelist.StarIndicator(timeColor)
+                        Spacer(Modifier.width(3.dp))
+                    }
                     Text(
                         text = time,
                         style = MaterialTheme.typography.labelSmall,
