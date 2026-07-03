@@ -12,3 +12,7 @@ captures/
 .cxx/
 .kotlin/
 .DS_Store
+
+# Translation API key lives OUTSIDE the repo (workspace root) — never commit env files
+.translate.env
+*.env

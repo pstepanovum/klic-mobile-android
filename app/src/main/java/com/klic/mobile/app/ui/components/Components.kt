@@ -37,6 +37,8 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import com.klic.mobile.app.ui.theme.KlicIcons
+import androidx.compose.ui.res.stringResource
+import com.klic.mobile.app.R
 
 /** Fully-rounded flat primary button — no shadow, no border (design rules). */
 @Composable
@@ -183,12 +185,12 @@ fun KlicCheckbox(
 
         Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
             Text(
-                "I agree to the",
+                stringResource(R.string.checkbox_agree_prefix),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Text(
-                "Privacy Policy",
+                stringResource(R.string.checkbox_privacy_policy),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.clickable(

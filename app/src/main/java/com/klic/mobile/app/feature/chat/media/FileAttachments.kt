@@ -73,6 +73,8 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
+import androidx.compose.ui.res.stringResource
+import com.klic.mobile.app.R
 
 // ── Attachment download cache (§7.3) ────────────────────────────────────────
 //
@@ -463,7 +465,7 @@ fun PdfViewerOverlay(file: File, onDismiss: () -> Unit) {
     Box(Modifier.fillMaxSize().background(Color.Black)) {
         if (renderer == null) {
             Text(
-                "Couldn't open this PDF.",
+                stringResource(R.string.file_pdf_open_failed),
                 style = MaterialTheme.typography.bodyLarge,
                 color = Color.White,
                 modifier = Modifier.align(Alignment.Center),
@@ -571,7 +573,7 @@ fun FileDetailSheet(att: Attachment, file: File, onDismiss: () -> Unit) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Spacer(Modifier.height(20.dp))
-            PillButton(text = "Open with…") {
+            PillButton(text = stringResource(R.string.file_open_with)) {
                 val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
                 val intent = Intent(Intent.ACTION_VIEW)
                     .setDataAndType(uri, att.contentType.ifBlank { "*/*" })

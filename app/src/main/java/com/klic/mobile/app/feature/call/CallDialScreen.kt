@@ -41,6 +41,8 @@ import com.klic.mobile.app.ui.components.KlicSearchBar
 import com.klic.mobile.app.ui.theme.KlicIcons
 import java.time.Duration
 import java.time.Instant
+import androidx.compose.ui.res.stringResource
+import com.klic.mobile.app.R
 
 @Composable
 fun CallDialScreen(vm: KlicViewModel) {
@@ -61,7 +63,7 @@ fun CallDialScreen(vm: KlicViewModel) {
     ) {
         Column(Modifier.widthIn(max = 680.dp).fillMaxWidth()) {
             Text(
-                "Call",
+                stringResource(R.string.tab_call),
                 style = MaterialTheme.typography.headlineMedium,
                 color = MaterialTheme.colorScheme.onBackground,
                 modifier = Modifier.padding(start = 16.dp, top = 20.dp, bottom = 8.dp),
@@ -69,24 +71,24 @@ fun CallDialScreen(vm: KlicViewModel) {
             KlicSearchBar(
                 value = searchText,
                 onValueChange = { searchText = it },
-                placeholder = "Search contacts",
+                placeholder = stringResource(R.string.call_search_contacts),
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
             )
             LazyColumn(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
                 if (searchText.isEmpty() && recents.isNotEmpty()) {
-                    item { SectionHeader("Recent") }
+                    item { SectionHeader(stringResource(R.string.call_recent)) }
                     items(recents, key = { it.id }) { call ->
                         RecentCallRow(call) {
                             val name = call.peerNames
                             vm.startCall(call.conversationId, call.kind, name)
                         }
                     }
-                    item { SectionHeader("Contacts") }
+                    item { SectionHeader(stringResource(R.string.call_contacts)) }
                 }
                 if (friends.isEmpty()) {
                     item {
                         Text(
-                            "No friends yet — add them in Friends.",
+                            stringResource(R.string.call_no_friends),
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(top = 16.dp),
@@ -142,7 +144,7 @@ fun RecentCallsList(vm: KlicViewModel) {
     Column(Modifier.fillMaxWidth()) {
         if (recents.isEmpty()) {
             Text(
-                "No recent calls.",
+                stringResource(R.string.call_no_recent),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(vertical = 12.dp),
@@ -170,7 +172,9 @@ private fun SectionHeader(title: String) {
 private fun RecentCallRow(call: RecentCall, onCallBack: () -> Unit) {
     val missed = call.outcome != "completed"
     val red = Color(0xFFE5484D)
-    val direction = if (call.outgoing) "Outgoing" else if (missed) "Missed" else "Incoming"
+    val direction = if (call.outgoing) stringResource(R.string.call_outgoing)
+                    else if (missed) stringResource(R.string.call_missed)
+                    else stringResource(R.string.call_incoming)
     val subtitle = if (!missed && call.durationMs != null) {
         "$direction · ${callDurationText(call.durationMs)} · ${relativeTime(call.startedAt)}"
     } else {

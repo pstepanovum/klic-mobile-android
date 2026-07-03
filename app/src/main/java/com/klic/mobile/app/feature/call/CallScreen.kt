@@ -71,6 +71,8 @@ import com.klic.mobile.app.feature.KlicViewModel
 import com.klic.mobile.app.ui.components.AvatarView
 import com.klic.mobile.app.ui.components.CircleControl
 import kotlinx.coroutines.launch
+import androidx.compose.ui.res.stringResource
+import com.klic.mobile.app.R
 
 @Composable
 fun CallScreen(
@@ -97,8 +99,11 @@ fun CallScreen(
     val shouldShowVideo = cameraEnabled || localVideo != null || remoteVideo != null
     // §9.7: alone in a live group room → say so, never fake an ongoing peer.
     val displayStatus =
-        if (isGroupCall && participants.isEmpty() && callStatus == "Connected") "Waiting for others…"
-        else callStatus
+        if (isGroupCall && participants.isEmpty() && callStatus == "Connected") {
+            stringResource(R.string.call_waiting_for_others)
+        } else {
+            localizedCallStatus(callStatus)
+        }
 
     // Trigger the join; the actual connect runs on CallManager's own scope, so it survives this
     // screen leaving the composition (which used to cancel it mid-connect on the emulator).
@@ -205,7 +210,7 @@ fun CallScreen(
                             // Header is hidden over remote video, but a hold must stay
                             // visible (§7.5) — dark translucent capsule over the feed.
                             Text(
-                                callStatus,
+                                localizedCallStatus(callStatus),
                                 style = MaterialTheme.typography.labelMedium,
                                 color = Color.White,
                                 modifier = Modifier
@@ -358,7 +363,7 @@ private fun ParticipantTile(vm: KlicViewModel, participant: RemoteCallParticipan
     // §9.7: every tile gets a name — LiveKit metadata first, then the cached
     // conversation member list, never a blank pill.
     val displayName = participant.name.ifBlank {
-        vm.displayNameFor(participant.userId) ?: "Member"
+        vm.displayNameFor(participant.userId) ?: stringResource(R.string.call_member)
     }
     Box(
         Modifier
@@ -390,7 +395,7 @@ private fun ParticipantTile(vm: KlicViewModel, participant: RemoteCallParticipan
                 Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.45f)),
                 contentAlignment = Alignment.Center,
             ) {
-                Text("Reconnecting…", style = MaterialTheme.typography.labelMedium, color = Color.White)
+                Text(stringResource(R.string.call_status_reconnecting), style = MaterialTheme.typography.labelMedium, color = Color.White)
             }
         }
         Row(
@@ -420,4 +425,20 @@ private fun ParticipantTile(vm: KlicViewModel, participant: RemoteCallParticipan
             }
         }
     }
+}
+
+
+/** §10.5: user-visible mapping of the internal call-status sentinels. */
+@Composable
+internal fun localizedCallStatus(status: String): String = when (status) {
+    "Calling..." -> stringResource(R.string.call_status_calling)
+    "Connecting..." -> stringResource(R.string.call_status_connecting)
+    "Connected" -> stringResource(R.string.call_status_connected)
+    "Reconnecting…" -> stringResource(R.string.call_status_reconnecting)
+    "On Hold" -> stringResource(R.string.call_status_on_hold)
+    "Busy" -> stringResource(R.string.call_status_busy)
+    "No answer" -> stringResource(R.string.call_status_no_answer)
+    "Call failed" -> stringResource(R.string.call_status_failed)
+    "Ended" -> stringResource(R.string.call_status_ended)
+    else -> status
 }

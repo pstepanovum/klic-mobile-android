@@ -83,7 +83,7 @@ fun AuthScreen(vm: KlicViewModel) {
             )
 
             Text(
-                if (isRegistering) "Create your account" else "Welcome back",
+                if (isRegistering) stringResource(R.string.auth_create_your_account) else stringResource(R.string.auth_welcome_back),
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 10.dp),
@@ -91,13 +91,13 @@ fun AuthScreen(vm: KlicViewModel) {
 
             Spacer(Modifier.height(28.dp))
 
-            KlicTextField(username, { username = it }, "Username")
+            KlicTextField(username, { username = it }, stringResource(R.string.auth_username))
             if (isRegistering) {
                 Spacer(Modifier.height(12.dp))
-                KlicTextField(displayName, { displayName = it }, "Display name")
+                KlicTextField(displayName, { displayName = it }, stringResource(R.string.auth_display_name))
             }
             Spacer(Modifier.height(12.dp))
-            KlicTextField(password, { password = it }, "Password", isPassword = true)
+            KlicTextField(password, { password = it }, stringResource(R.string.auth_password), isPassword = true)
 
             AnimatedVisibility(visible = isRegistering && password.isNotEmpty()) {
                 PasswordStrengthBar(password = password, modifier = Modifier.padding(top = 8.dp))
@@ -115,7 +115,7 @@ fun AuthScreen(vm: KlicViewModel) {
             Spacer(Modifier.height(20.dp))
 
             PillButton(
-                text = if (isRegistering) "Sign up" else "Log in",
+                text = if (isRegistering) stringResource(R.string.auth_sign_up) else stringResource(R.string.auth_log_in),
                 modifier = Modifier.then(
                     if (isRegistering && !agreedToPrivacy) Modifier.clip(CircleShape) else Modifier
                 ),
@@ -140,7 +140,7 @@ fun AuthScreen(vm: KlicViewModel) {
                 agreedToPrivacy = false
             }) {
                 Text(
-                    if (isRegistering) "I already have an account" else "Create an account",
+                    if (isRegistering) stringResource(R.string.auth_have_account) else stringResource(R.string.auth_create_account),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
@@ -158,18 +158,18 @@ fun AuthScreen(vm: KlicViewModel) {
     }
 }
 
-private data class StrengthLevel(val bars: Int, val label: String, val color: Color)
+private data class StrengthLevel(val bars: Int, val labelRes: Int, val color: Color)
 
 private fun passwordStrength(password: String): StrengthLevel {
-    if (password.isEmpty()) return StrengthLevel(0, "", Color.Transparent)
+    if (password.isEmpty()) return StrengthLevel(0, 0, Color.Transparent)
     val hasUpper   = password.any { it.isUpperCase() }
     val hasDigit   = password.any { it.isDigit() }
     val hasSpecial = password.any { !it.isLetterOrDigit() }
     return when {
-        password.length < 8                        -> StrengthLevel(1, "Weak",   Color(0xFFEF5350))
-        !hasUpper && !hasDigit                     -> StrengthLevel(2, "Fair",   Color(0xFFFF8C00))
-        hasUpper && hasDigit && hasSpecial         -> StrengthLevel(4, "Strong", Color(0xFF2ECC71))
-        else                                       -> StrengthLevel(3, "Good",   Color(0xFF8BC34A))
+        password.length < 8                -> StrengthLevel(1, R.string.auth_pw_weak,   Color(0xFFEF5350))
+        !hasUpper && !hasDigit             -> StrengthLevel(2, R.string.auth_pw_fair,   Color(0xFFFF8C00))
+        hasUpper && hasDigit && hasSpecial -> StrengthLevel(4, R.string.auth_pw_strong, Color(0xFF2ECC71))
+        else                               -> StrengthLevel(3, R.string.auth_pw_good,   Color(0xFF8BC34A))
     }
 }
 
@@ -197,7 +197,7 @@ private fun PasswordStrengthBar(password: String, modifier: Modifier = Modifier)
             )
         }
         Text(
-            strength.label,
+            if (strength.labelRes != 0) stringResource(strength.labelRes) else "",
             style = MaterialTheme.typography.labelSmall,
             color = strength.color,
             modifier = Modifier.width(40.dp),

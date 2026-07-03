@@ -49,6 +49,8 @@ import com.klic.mobile.app.ui.components.AvatarView
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import androidx.compose.ui.res.stringResource
+import com.klic.mobile.app.R
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -69,7 +71,7 @@ fun EditProfileScreen(vm: KlicViewModel, onDone: () -> Unit) {
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             TopAppBar(
-                title = { Text("Edit profile", style = MaterialTheme.typography.titleMedium) },
+                title = { Text(stringResource(R.string.settings_edit_profile), style = MaterialTheme.typography.titleMedium) },
                 navigationIcon = {
                     IconButton(onClick = onDone) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
@@ -108,7 +110,7 @@ fun EditProfileScreen(vm: KlicViewModel, onDone: () -> Unit) {
 
             Spacer(Modifier.height(24.dp))
             Text(
-                "Display name",
+                stringResource(R.string.auth_display_name),
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.fillMaxWidth(),
@@ -157,7 +159,7 @@ fun EditProfileScreen(vm: KlicViewModel, onDone: () -> Unit) {
                     contentColor = MaterialTheme.colorScheme.onPrimary,
                 ),
             ) {
-                Text(if (saving) "Saving…" else "Save", modifier = Modifier.padding(vertical = 6.dp))
+                Text(if (saving) stringResource(R.string.common_saving) else stringResource(R.string.common_save), modifier = Modifier.padding(vertical = 6.dp))
             }
         }
     }

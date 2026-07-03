@@ -70,6 +70,8 @@ import java.io.File
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import androidx.compose.ui.res.stringResource
+import com.klic.mobile.app.R
 
 // ── "Media, links, docs" tabbed browser (§8.4) ───────────────────────────────
 
@@ -82,7 +84,11 @@ fun MediaLinksDocsPage(
 
     Column(Modifier.fillMaxSize()) {
         TabRow(selectedTabIndex = tab, containerColor = MaterialTheme.colorScheme.background) {
-            listOf("Media", "Links", "Docs").forEachIndexed { index, label ->
+            listOf(
+                stringResource(R.string.info_tab_media),
+                stringResource(R.string.info_tab_links),
+                stringResource(R.string.info_tab_docs),
+            ).forEachIndexed { index, label ->
                 Tab(selected = tab == index, onClick = { tab = index }, text = { Text(label) })
             }
         }
@@ -127,7 +133,7 @@ private fun MediaTab(vm: KlicViewModel, conversationId: String) {
     LaunchedEffect(conversationId) { loadMore() }
 
     if (items.isEmpty() && !loading) {
-        EmptyTab("No media in this chat yet.")
+        EmptyTab(stringResource(R.string.info_no_media))
         return
     }
     LazyVerticalGrid(
@@ -170,7 +176,7 @@ private fun MediaTab(vm: KlicViewModel, conversationId: String) {
                     if (loading) {
                         CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp)
                     } else {
-                        TextButton(onClick = { scope.launch { loadMore() } }) { Text("More") }
+                        TextButton(onClick = { scope.launch { loadMore() } }) { Text(stringResource(R.string.common_more)) }
                     }
                 }
             }
@@ -208,7 +214,7 @@ private fun LinksTab(vm: KlicViewModel, conversationId: String) {
     LaunchedEffect(conversationId) { loadMore(pages = 4) }
 
     if (links.isEmpty() && exhausted && !loading) {
-        EmptyTab("No links found in this chat.")
+        EmptyTab(stringResource(R.string.info_no_links))
         return
     }
     LazyColumn(Modifier.fillMaxSize()) {
@@ -256,7 +262,7 @@ private fun LinksTab(vm: KlicViewModel, conversationId: String) {
                 when {
                     loading -> CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp)
                     !exhausted -> TextButton(onClick = { scope.launch { loadMore(pages = 4) } }) {
-                        Text("Search older messages")
+                        Text(stringResource(R.string.info_search_older))
                     }
                 }
             }
@@ -292,7 +298,7 @@ private fun DocsTab(vm: KlicViewModel, conversationId: String) {
     LaunchedEffect(conversationId) { loadMore() }
 
     if (items.isEmpty() && !loading) {
-        EmptyTab("No documents in this chat yet.")
+        EmptyTab(stringResource(R.string.info_no_docs))
         return
     }
     LazyColumn(Modifier.fillMaxSize()) {
@@ -305,7 +311,7 @@ private fun DocsTab(vm: KlicViewModel, conversationId: String) {
                             val att = doc.asAttachment()
                             val file = AttachmentDownloads.ensureLocal(context, att, conversationId)
                             when {
-                                file == null -> vm.error.value = "Couldn't download the file."
+                                file == null -> vm.error.value = context.getString(R.string.err_download_file)
                                 isPdfAttachment(att) -> pdfFile = file
                                 else -> fileDetail = doc to file
                             }
@@ -347,7 +353,7 @@ private fun DocsTab(vm: KlicViewModel, conversationId: String) {
                     if (loading) {
                         CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp)
                     } else {
-                        TextButton(onClick = { scope.launch { loadMore() } }) { Text("More") }
+                        TextButton(onClick = { scope.launch { loadMore() } }) { Text(stringResource(R.string.common_more)) }
                     }
                 }
             }
@@ -392,7 +398,7 @@ fun StarredMessagesPage(
     LaunchedEffect(conversationId) { loadMore() }
 
     if (items.isEmpty() && !loading) {
-        EmptyTab("No starred messages yet.\nLong-press a message and tap Star.")
+        EmptyTab(stringResource(R.string.info_no_starred))
         return
     }
     LazyColumn(Modifier.fillMaxSize()) {
@@ -448,7 +454,7 @@ fun StarredMessagesPage(
                     if (loading) {
                         CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp)
                     } else {
-                        TextButton(onClick = { scope.launch { loadMore() } }) { Text("More") }
+                        TextButton(onClick = { scope.launch { loadMore() } }) { Text(stringResource(R.string.common_more)) }
                     }
                 }
             }
@@ -472,9 +478,9 @@ fun ManageStoragePage(conversationId: String) {
         InfoCard {
             Row(Modifier.fillMaxWidth().padding(vertical = 16.dp), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
-                    Text("Cached in this chat", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurface)
+                    Text(stringResource(R.string.info_cached_in_chat), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurface)
                     Text(
-                        "Downloaded files, voice notes and documents.",
+                        stringResource(R.string.info_cached_sub),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -501,10 +507,10 @@ fun ManageStoragePage(conversationId: String) {
                 containerColor = MaterialTheme.colorScheme.surfaceVariant,
                 contentColor = MaterialTheme.colorScheme.error,
             ),
-        ) { Text("Clear chat cache", modifier = Modifier.padding(vertical = 6.dp)) }
+        ) { Text(stringResource(R.string.info_clear_chat_cache), modifier = Modifier.padding(vertical = 6.dp)) }
         Spacer(Modifier.height(10.dp))
         Text(
-            "Inline photos live in the shared image cache — clear them from Settings → Data and Storage.",
+            stringResource(R.string.info_cache_footer),
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )

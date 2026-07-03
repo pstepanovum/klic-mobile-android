@@ -69,6 +69,8 @@ import com.klic.mobile.app.ui.components.MessageTicks
 import com.klic.mobile.app.ui.components.PillButton
 import com.klic.mobile.app.ui.theme.KlicIcons
 import kotlinx.coroutines.launch
+import androidx.compose.ui.res.stringResource
+import com.klic.mobile.app.R
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -92,7 +94,7 @@ fun ConversationsScreen(vm: KlicViewModel, onOpenChat: (Conversation) -> Unit) {
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             TopAppBar(
-                title = { Text("Chats", style = MaterialTheme.typography.titleLarge) },
+                title = { Text(stringResource(R.string.tab_chats), style = MaterialTheme.typography.titleLarge) },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.background,
                 ),
@@ -100,7 +102,7 @@ fun ConversationsScreen(vm: KlicViewModel, onOpenChat: (Conversation) -> Unit) {
                     IconButton(onClick = { showNewMessageSheet = true }) {
                         Icon(
                             painter = painterResource(KlicIcons.add),
-                            contentDescription = "New Message",
+                            contentDescription = stringResource(R.string.convos_new_message),
                             modifier = Modifier.size(22.dp),
                         )
                     }
@@ -120,7 +122,7 @@ fun ConversationsScreen(vm: KlicViewModel, onOpenChat: (Conversation) -> Unit) {
                 KlicSearchBar(
                     value = searchText,
                     onValueChange = { searchText = it },
-                    placeholder = "Search chats",
+                    placeholder = stringResource(R.string.convos_search_chats),
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                 )
                 LazyColumn(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
@@ -263,17 +265,19 @@ private fun lastMessageStamp(m: Message?): String? {
 }
 
 /** One-line summary of the last message for the chat list (no emoji, per the design system). */
+@Composable
 private fun lastMessagePreview(m: Message?): String = when {
-    m == null -> "Say hi"
-    m.isDeleted -> "Message deleted"
-    m.isCallEvent -> if (m.call?.isVideo == true) "Video call" else "Voice call"
-    m.isSticker -> "Sticker"
+    m == null -> stringResource(R.string.preview_say_hi)
+    m.isDeleted -> stringResource(R.string.preview_message_deleted)
+    m.isCallEvent -> if (m.call?.isVideo == true) stringResource(R.string.preview_video_call)
+                     else stringResource(R.string.preview_voice_call)
+    m.isSticker -> stringResource(R.string.preview_sticker)
     m.body.isNotBlank() -> m.body
-    m.attachments.firstOrNull()?.kind == "IMAGE" -> "Photo"
-    m.attachments.firstOrNull()?.kind == "VIDEO" -> "Video"
-    m.attachments.firstOrNull()?.kind == "VOICE" -> "Voice message"
-    m.attachments.isNotEmpty() -> "File"
-    else -> "Say hi"
+    m.attachments.firstOrNull()?.kind == "IMAGE" -> stringResource(R.string.preview_photo)
+    m.attachments.firstOrNull()?.kind == "VIDEO" -> stringResource(R.string.preview_video)
+    m.attachments.firstOrNull()?.kind == "VOICE" -> stringResource(R.string.preview_voice_message)
+    m.attachments.isNotEmpty() -> stringResource(R.string.preview_file)
+    else -> stringResource(R.string.preview_say_hi)
 }
 
 // ─────────────────────────────────────────────────────────
@@ -334,10 +338,10 @@ private fun NewMessageSheet(
                 }
                 Text(
                     text = when (screen) {
-                        NewMsgScreen.MAIN -> "New Message"
+                        NewMsgScreen.MAIN -> stringResource(R.string.convos_new_message)
                         NewMsgScreen.NEW_GROUP_PICKER -> "${selectedIds.size} / 2,000,000 participants"
-                        NewMsgScreen.NEW_GROUP_DETAILS -> "Group Details"
-                        NewMsgScreen.NEW_CONTACT -> "New Contact"
+                        NewMsgScreen.NEW_GROUP_DETAILS -> stringResource(R.string.convos_group_details)
+                        NewMsgScreen.NEW_CONTACT -> stringResource(R.string.convos_new_contact)
                     },
                     style = MaterialTheme.typography.titleMedium,
                     modifier = Modifier
@@ -361,7 +365,7 @@ private fun NewMessageSheet(
                             KlicSearchBar(
                                 value = searchText,
                                 onValueChange = { searchText = it },
-                                placeholder = "Search",
+                                placeholder = stringResource(R.string.common_search),
                                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                             )
                         }
@@ -380,18 +384,18 @@ private fun NewMessageSheet(
                                 ) {
                                     Column(modifier = Modifier.weight(1f)) {
                                         Text(
-                                            "Allow contacts access",
+                                            stringResource(R.string.convos_allow_contacts),
                                             style = MaterialTheme.typography.bodyMedium,
                                             fontWeight = FontWeight.SemiBold,
                                             color = MaterialTheme.colorScheme.onSurface,
                                         )
                                         Text(
-                                            "See which of your contacts are on Klic.",
+                                            stringResource(R.string.convos_allow_contacts_sub),
                                             style = MaterialTheme.typography.labelSmall,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         )
                                         Text(
-                                            "Allow in Settings",
+                                            stringResource(R.string.convos_allow_in_settings),
                                             style = MaterialTheme.typography.labelSmall,
                                             fontWeight = FontWeight.SemiBold,
                                             color = MaterialTheme.colorScheme.primary,
@@ -420,14 +424,14 @@ private fun NewMessageSheet(
                         item {
                             NewMsgActionRow(
                                 iconRes = KlicIcons.user,
-                                label = "New Group",
+                                label = stringResource(R.string.convos_new_group),
                                 onClick = { screen = NewMsgScreen.NEW_GROUP_PICKER },
                             )
                         }
                         item {
                             NewMsgActionRow(
                                 iconRes = KlicIcons.addUser,
-                                label = "New Contact",
+                                label = stringResource(R.string.convos_new_contact),
                                 onClick = { screen = NewMsgScreen.NEW_CONTACT },
                             )
                         }
@@ -507,7 +511,7 @@ private fun NewMessageSheet(
                         }
                         item {
                             PillButton(
-                                text = "Next",
+                                text = stringResource(R.string.common_next),
                                 enabled = selectedIds.isNotEmpty(),
                                 modifier = Modifier.padding(top = 16.dp, bottom = 32.dp),
                                 onClick = { screen = NewMsgScreen.NEW_GROUP_DETAILS },
@@ -552,11 +556,11 @@ private fun NewMessageSheet(
                         KlicTextField(
                             value = groupName,
                             onValueChange = { groupName = it },
-                            placeholder = "Group Name",
+                            placeholder = stringResource(R.string.convos_group_name),
                         )
                         Spacer(Modifier.height(16.dp))
                         PillButton(
-                            text = "Create",
+                            text = stringResource(R.string.common_create),
                             enabled = groupName.isNotBlank(),
                             onClick = {
                                 // Encode the picked cover (if any) so it uploads right after
@@ -588,11 +592,11 @@ private fun NewMessageSheet(
                         KlicTextField(
                             value = contactUsername,
                             onValueChange = { contactUsername = it },
-                            placeholder = "Username",
+                            placeholder = stringResource(R.string.auth_username),
                         )
                         Spacer(Modifier.height(12.dp))
                         PillButton(
-                            text = "Send Request",
+                            text = stringResource(R.string.friends_send_request),
                             onClick = { vm.addFriend(contactUsername) },
                         )
                         friendStatus?.let { status ->

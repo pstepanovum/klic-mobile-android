@@ -43,6 +43,8 @@ import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
+import androidx.compose.ui.res.stringResource
+import com.klic.mobile.app.R
 
 /** Sub-pages reachable from a chat info screen (§8.4). */
 enum class ChatInfoSub { MEDIA, STARRED, STORAGE }
@@ -142,29 +144,29 @@ fun ChatInfoSectionsCard(
     InfoCard {
         InfoRowItem(
             icon = painterResource(KlicIcons.gallery),
-            title = "Media, links, docs",
+            title = stringResource(R.string.info_media_links_docs),
             onClick = { onOpen(ChatInfoSub.MEDIA) },
         )
         InfoDivider()
         InfoRowItem(
             icon = painterResource(KlicIcons.star),
-            title = "Starred",
+            title = stringResource(R.string.info_starred),
             onClick = { onOpen(ChatInfoSub.STARRED) },
         )
         InfoDivider()
         InfoRowItem(
             icon = painterResource(KlicIcons.folder),
-            title = "Manage storage",
+            title = stringResource(R.string.info_manage_storage),
             onClick = { onOpen(ChatInfoSub.STORAGE) },
         )
         InfoDivider()
         InfoRowItem(
             icon = painterResource(KlicIcons.document),
-            title = "Save to Photos",
+            title = stringResource(R.string.info_save_to_photos),
             value = when (saveMode) {
-                SettingsStore.SAVE_ALWAYS -> "Always"
-                SettingsStore.SAVE_NEVER -> "Never"
-                else -> "Default (Off)"
+                SettingsStore.SAVE_ALWAYS -> stringResource(R.string.info_always)
+                SettingsStore.SAVE_NEVER -> stringResource(R.string.info_never)
+                else -> stringResource(R.string.info_default_off)
             },
             onClick = { showSaveSheet = true },
         )
@@ -172,11 +174,11 @@ fun ChatInfoSectionsCard(
 
     if (showSaveSheet) {
         KlicSelectionSheet(
-            title = "Save to Photos",
+            title = stringResource(R.string.info_save_to_photos),
             options = listOf(
-                KlicSheetOption(SettingsStore.SAVE_DEFAULT, "Default (Off)"),
-                KlicSheetOption(SettingsStore.SAVE_ALWAYS, "Always"),
-                KlicSheetOption(SettingsStore.SAVE_NEVER, "Never"),
+                KlicSheetOption(SettingsStore.SAVE_DEFAULT, stringResource(R.string.info_default_off)),
+                KlicSheetOption(SettingsStore.SAVE_ALWAYS, stringResource(R.string.info_always)),
+                KlicSheetOption(SettingsStore.SAVE_NEVER, stringResource(R.string.info_never)),
             ),
             selectedValue = saveMode,
             onSelect = { mode ->
@@ -207,11 +209,11 @@ fun ChatNotificationsCard(
 
     LaunchedEffect(conversationId) { prefs = vm.fetchConversationPrefs(conversationId) }
 
-    InfoSectionLabel("NOTIFICATIONS")
+    InfoSectionLabel(stringResource(R.string.info_notifications_label))
     InfoCard {
         InfoRowItem(
             icon = painterResource(KlicIcons.message),
-            title = "Mute messages",
+            title = stringResource(R.string.info_mute_messages),
             value = muteLabel(prefs.messagesMutedUntil),
             onClick = { showMessagesMuteSheet = true },
         )
@@ -222,9 +224,9 @@ fun ChatNotificationsCard(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Column(Modifier.weight(1f)) {
-                    Text("Mute @all mentions", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurface)
+                    Text(stringResource(R.string.info_mute_all_mentions), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurface)
                     Text(
-                        "When off, @all rings through a mute.",
+                        stringResource(R.string.info_mute_all_sub),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -242,29 +244,29 @@ fun ChatNotificationsCard(
         InfoDivider()
         InfoRowItem(
             icon = painterResource(KlicIcons.notification),
-            title = "Alert tone",
-            value = if (settings.messageTones[conversationId] != null) "Custom" else "Default",
+            title = stringResource(R.string.info_alert_tone),
+            value = if (settings.messageTones[conversationId] != null) stringResource(R.string.info_custom) else stringResource(R.string.common_default),
             onClick = { showMessageToneSheet = true },
         )
         InfoDivider()
         InfoRowItem(
             icon = painterResource(KlicIcons.phone),
-            title = "Mute calls",
+            title = stringResource(R.string.info_mute_calls),
             value = muteLabel(prefs.callsMutedUntil),
             onClick = { showCallsMuteSheet = true },
         )
         InfoDivider()
         InfoRowItem(
             icon = painterResource(KlicIcons.video),
-            title = "Ringtone",
-            value = if (settings.callTones[conversationId] != null) "Custom" else "Default",
+            title = stringResource(R.string.info_ringtone),
+            value = if (settings.callTones[conversationId] != null) stringResource(R.string.info_custom) else stringResource(R.string.common_default),
             onClick = { showCallToneSheet = true },
         )
     }
 
     if (showMessagesMuteSheet) {
         MuteSelectionSheet(
-            title = "Mute messages",
+            title = stringResource(R.string.info_mute_messages),
             muted = isMuted(prefs.messagesMutedUntil),
             onPick = { untilIso ->
                 scope.launch {
@@ -280,7 +282,7 @@ fun ChatNotificationsCard(
     }
     if (showCallsMuteSheet) {
         MuteSelectionSheet(
-            title = "Mute call notifications",
+            title = stringResource(R.string.info_mute_call_notifications),
             muted = isMuted(prefs.callsMutedUntil),
             onPick = { untilIso ->
                 scope.launch {
@@ -296,7 +298,7 @@ fun ChatNotificationsCard(
     }
     if (showMessageToneSheet) {
         KlicTonePickerSheet(
-            title = "Alert tone",
+            title = stringResource(R.string.info_alert_tone),
             ringtoneType = RingtoneManager.TYPE_NOTIFICATION,
             selectedUri = settings.messageTones[conversationId],
             onPick = { uri ->
@@ -308,7 +310,7 @@ fun ChatNotificationsCard(
     }
     if (showCallToneSheet) {
         KlicTonePickerSheet(
-            title = "Ringtone",
+            title = stringResource(R.string.info_ringtone),
             ringtoneType = RingtoneManager.TYPE_RINGTONE,
             selectedUri = settings.callTones[conversationId],
             onPick = { uri ->
@@ -323,13 +325,19 @@ fun ChatNotificationsCard(
 internal fun isMuted(untilIso: String?): Boolean =
     untilIso?.let { runCatching { Instant.parse(it).isAfter(Instant.now()) }.getOrDefault(false) } == true
 
+@Composable
 internal fun muteLabel(untilIso: String?): String {
-    if (!isMuted(untilIso)) return "Off"
-    val until = runCatching { Instant.parse(untilIso!!) }.getOrNull() ?: return "Off"
+    if (!isMuted(untilIso)) return stringResource(R.string.common_off)
+    val until = runCatching { Instant.parse(untilIso!!) }.getOrNull()
+        ?: return stringResource(R.string.common_off)
     // The "Always" sentinel sits absurdly far in the future.
-    if (until.isAfter(Instant.now().plus(365L * 50, ChronoUnit.DAYS))) return "Always"
-    return "Until " + DateTimeFormatter.ofPattern("MMM d, h:mm a")
-        .format(until.atZone(ZoneId.systemDefault()))
+    if (until.isAfter(Instant.now().plus(365L * 50, ChronoUnit.DAYS))) {
+        return stringResource(R.string.info_always)
+    }
+    return stringResource(
+        R.string.info_muted_until,
+        DateTimeFormatter.ofPattern("MMM d, h:mm a").format(until.atZone(ZoneId.systemDefault())),
+    )
 }
 
 // Values for the mute duration sheet — mapped to ISO instants on pick.
@@ -349,10 +357,10 @@ internal fun MuteSelectionSheet(
     KlicSelectionSheet(
         title = title,
         options = buildList {
-            add(KlicSheetOption(MUTE_8H, "8 hours"))
-            add(KlicSheetOption(MUTE_WEEK, "1 week"))
-            add(KlicSheetOption(MUTE_ALWAYS, "Always"))
-            if (muted) add(KlicSheetOption(MUTE_OFF, "Unmute", accent = true))
+            add(KlicSheetOption(MUTE_8H, stringResource(R.string.info_mute_8h)))
+            add(KlicSheetOption(MUTE_WEEK, stringResource(R.string.info_mute_1w)))
+            add(KlicSheetOption(MUTE_ALWAYS, stringResource(R.string.info_always)))
+            if (muted) add(KlicSheetOption(MUTE_OFF, stringResource(R.string.info_unmute), accent = true))
         },
         selectedValue = null,
         onSelect = { value ->

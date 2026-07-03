@@ -53,6 +53,8 @@ import androidx.compose.ui.unit.dp
 import com.klic.mobile.app.ui.components.AvatarView
 import com.klic.mobile.app.ui.theme.KlicIcons
 import kotlinx.coroutines.withTimeoutOrNull
+import androidx.compose.ui.res.stringResource
+import com.klic.mobile.app.R
 
 /** Which action the composer's hold-to-record button performs. */
 enum class CaptureMode { AUDIO, VIDEO }
@@ -190,7 +192,7 @@ fun ComposerBar(
             value = draft,
             onValueChange = onChange,
             modifier = Modifier.weight(1f).focusRequester(focusRequester),
-            placeholder = { Text("Message", color = MaterialTheme.colorScheme.onSurfaceVariant) },
+            placeholder = { Text(stringResource(R.string.composer_message), color = MaterialTheme.colorScheme.onSurfaceVariant) },
             maxLines = 4,
             // Fully rounded capsule, matching the Login-page inputs (§9.8).
             shape = CircleShape,
@@ -317,7 +319,7 @@ fun RecordingBar(elapsed: Float, onCancel: () -> Unit, onSend: () -> Unit) {
         )
         Spacer(Modifier.weight(1f))
         Text(
-            "Recording…",
+            stringResource(R.string.composer_recording),
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )

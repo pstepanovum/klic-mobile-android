@@ -32,6 +32,8 @@ import com.klic.mobile.app.ui.components.PillButton
 import com.klic.mobile.app.ui.theme.Bangers
 import com.klic.mobile.app.update.AppUpdater
 import kotlinx.coroutines.launch
+import androidx.compose.ui.res.stringResource
+import com.klic.mobile.app.R
 
 /**
  * Mandatory, non-dismissable update gate. Rendered over the entire app whenever a newer
@@ -97,7 +99,7 @@ fun ForceUpdateScreen(release: AppUpdater.Release) {
             )
 
             Text(
-                "Update Your App",
+                stringResource(R.string.update_title),
                 style = MaterialTheme.typography.headlineMedium.copy(
                     fontFamily = Bangers,
                     fontWeight = FontWeight.Normal,
@@ -109,7 +111,7 @@ fun ForceUpdateScreen(release: AppUpdater.Release) {
             )
 
             Text(
-                "A new version of Klic is required to keep calling and chatting. Update now to continue.",
+                stringResource(R.string.update_body),
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,
@@ -117,7 +119,7 @@ fun ForceUpdateScreen(release: AppUpdater.Release) {
             )
 
             Text(
-                "New version ${release.versionName}",
+                stringResource(R.string.update_new_version, release.versionName),
                 style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.primary,
                 textAlign = TextAlign.Center,
@@ -126,7 +128,7 @@ fun ForceUpdateScreen(release: AppUpdater.Release) {
 
             if (needsPermission) {
                 Text(
-                    "Allow Klic to install apps, then tap Update again.",
+                    stringResource(R.string.update_allow_install),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.error,
                     textAlign = TextAlign.Center,
@@ -153,7 +155,7 @@ fun ForceUpdateScreen(release: AppUpdater.Release) {
                         .padding(horizontal = 4.dp),
                 )
                 Text(
-                    "Downloading… ${(progress * 100).toInt()}%",
+                    stringResource(R.string.update_downloading, (progress * 100).toInt()),
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = 12.dp),
@@ -163,7 +165,7 @@ fun ForceUpdateScreen(release: AppUpdater.Release) {
             }
 
             Text(
-                "You're on ${AppUpdater.currentVersion}",
+                stringResource(R.string.update_current_version, AppUpdater.currentVersion),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 16.dp, bottom = 48.dp),

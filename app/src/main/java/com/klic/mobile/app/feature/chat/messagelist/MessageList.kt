@@ -79,6 +79,7 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import androidx.compose.ui.res.stringResource
 
 // MARK: - Message bubble
 
@@ -698,27 +699,29 @@ private fun imageAspect(att: Attachment): Float {
 }
 
 // Compact preview text for the composer's reply bar.
+@Composable
 internal fun messagePreview(m: Message): String = when {
     m.body.isNotBlank() -> m.body
-    m.isSticker -> "Sticker"
-    m.attachments.firstOrNull()?.kind == "IMAGE" -> "Photo"
-    m.attachments.firstOrNull()?.kind == "VOICE" -> "Voice message"
-    m.attachments.firstOrNull()?.kind == "VIDEO" -> "Video"
-    m.attachments.isNotEmpty() -> "File"
-    else -> "Message"
+    m.isSticker -> stringResource(R.string.preview_sticker)
+    m.attachments.firstOrNull()?.kind == "IMAGE" -> stringResource(R.string.preview_photo)
+    m.attachments.firstOrNull()?.kind == "VOICE" -> stringResource(R.string.preview_voice_message)
+    m.attachments.firstOrNull()?.kind == "VIDEO" -> stringResource(R.string.preview_video)
+    m.attachments.isNotEmpty() -> stringResource(R.string.preview_file)
+    else -> stringResource(R.string.preview_message)
 }
 
 // Presence subtitle for the chat header: "Online" or "last seen …".
+@Composable
 internal fun presenceSubtitle(presence: com.klic.mobile.app.realtime.SocketService.Presence?): String? {
     if (presence == null) return null
-    if (presence.online) return "Online"
+    if (presence.online) return stringResource(R.string.presence_online)
     val ms = presence.lastSeenMs ?: return null
     val date = Instant.ofEpochMilli(ms).atZone(ZoneId.systemDefault())
     val time = DateTimeFormatter.ofPattern("HH:mm").format(date)
     return when (date.toLocalDate()) {
-        LocalDate.now() -> "last seen $time"
-        LocalDate.now().minusDays(1) -> "last seen yesterday"
-        else -> "last seen ${DateTimeFormatter.ofPattern("MMM d").format(date)}"
+        LocalDate.now() -> stringResource(R.string.presence_last_seen_at, time)
+        LocalDate.now().minusDays(1) -> stringResource(R.string.presence_last_seen_yesterday)
+        else -> stringResource(R.string.presence_last_seen_on, DateTimeFormatter.ofPattern("MMM d").format(date))
     }
 }
 
@@ -747,6 +750,7 @@ private fun SystemNotice(text: String) {
 
 @Composable
 internal fun DateSeparator(isoDate: String) {
+    val label = dateLabelText(isoDate)
     Box(
         modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
         contentAlignment = Alignment.Center,
@@ -756,7 +760,7 @@ internal fun DateSeparator(isoDate: String) {
             color = MaterialTheme.colorScheme.surfaceVariant,
         ) {
             Text(
-                dateLabel(isoDate),
+                label,
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp),
@@ -774,12 +778,14 @@ internal fun shortTime(iso: String): String = runCatching {
     DateTimeFormatter.ofPattern("h:mm a").format(instant.atZone(ZoneId.systemDefault()))
 }.getOrDefault("")
 
-private fun dateLabel(iso: String): String = runCatching {
-    val date = Instant.parse(iso).atZone(ZoneId.systemDefault()).toLocalDate()
+@Composable
+private fun dateLabelText(iso: String): String {
+    val date = runCatching { Instant.parse(iso).atZone(ZoneId.systemDefault()).toLocalDate() }.getOrNull()
+        ?: return ""
     val today = LocalDate.now()
-    when (date) {
-        today            -> "Today"
-        today.minusDays(1) -> "Yesterday"
-        else             -> DateTimeFormatter.ofPattern("MMMM d").format(date)
+    return when (date) {
+        today              -> stringResource(R.string.date_today)
+        today.minusDays(1) -> stringResource(R.string.date_yesterday)
+        else               -> DateTimeFormatter.ofPattern("MMMM d").format(date)
     }
-}.getOrDefault("")
+}

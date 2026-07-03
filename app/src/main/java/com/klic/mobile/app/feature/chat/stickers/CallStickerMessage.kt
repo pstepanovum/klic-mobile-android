@@ -30,6 +30,8 @@ import com.klic.mobile.app.data.CallEvent
 import com.klic.mobile.app.data.Message
 import com.klic.mobile.app.data.Sticker
 import com.klic.mobile.app.ui.components.rememberStableImageRequest
+import androidx.compose.ui.res.stringResource
+import com.klic.mobile.app.R
 
 /** A centered, tappable call-log row (Telegram/WhatsApp style). Tap calls the peer back. */
 @Composable
@@ -37,14 +39,14 @@ fun CallEventBubble(call: CallEvent, outgoing: Boolean, time: String, onCallBack
     val video = call.isVideo
     val missed = call.outcome != "completed"
     val title = when {
-        missed && outgoing -> "${if (video) "Video" else "Voice"} call"
-        missed -> "Missed ${if (video) "video" else "voice"} call"
-        else -> "${if (video) "Video" else "Voice"} call"
+        missed && outgoing -> if (video) stringResource(R.string.call_event_video) else stringResource(R.string.call_event_voice)
+        missed -> if (video) stringResource(R.string.call_event_missed_video) else stringResource(R.string.call_event_missed_voice)
+        else -> if (video) stringResource(R.string.call_event_video) else stringResource(R.string.call_event_voice)
     }
     val detail = when {
         !missed -> callDuration(call.durationMs)
-        outgoing -> "No answer"
-        else -> "Tap to call back"
+        outgoing -> stringResource(R.string.call_status_no_answer)
+        else -> stringResource(R.string.call_event_tap_to_call_back)
     }
     val tint = if (missed) Color(0xFFE5484D) else MaterialTheme.colorScheme.primary
 

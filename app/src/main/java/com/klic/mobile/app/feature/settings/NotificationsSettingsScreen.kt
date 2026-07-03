@@ -26,6 +26,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.klic.mobile.app.feature.KlicViewModel
+import androidx.compose.ui.res.stringResource
+import com.klic.mobile.app.R
 
 /**
  * Settings → global "Notifications" page (§8.5): four enable toggles synced with
@@ -41,26 +43,26 @@ fun NotificationsSettingsContent(vm: KlicViewModel) {
 
     SettingsCard {
         NotificationToggleRow(
-            title = "Message notifications",
-            subtitle = "Direct messages from friends",
+            title = stringResource(R.string.notif_messages_title),
+            subtitle = stringResource(R.string.notif_messages_sub),
             checked = prefs.messages,
         ) { vm.updateNotificationPrefs(messages = it) }
         HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
         NotificationToggleRow(
-            title = "Group notifications",
-            subtitle = "Messages in group chats",
+            title = stringResource(R.string.notif_groups_title),
+            subtitle = stringResource(R.string.notif_groups_sub),
             checked = prefs.groups,
         ) { vm.updateNotificationPrefs(groups = it) }
         HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
         NotificationToggleRow(
-            title = "Call notifications",
-            subtitle = "Incoming voice and video calls",
+            title = stringResource(R.string.notif_calls_title),
+            subtitle = stringResource(R.string.notif_calls_sub),
             checked = prefs.calls,
         ) { vm.updateNotificationPrefs(calls = it) }
         HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
         NotificationToggleRow(
-            title = "Friend-request notifications",
-            subtitle = "New friend requests",
+            title = stringResource(R.string.notif_friend_requests_title),
+            subtitle = stringResource(R.string.notif_friend_requests_sub),
             checked = prefs.friendRequests,
         ) { vm.updateNotificationPrefs(friendRequests = it) }
     }
@@ -74,10 +76,10 @@ fun NotificationsSettingsContent(vm: KlicViewModel) {
             containerColor = MaterialTheme.colorScheme.surfaceVariant,
             contentColor = MaterialTheme.colorScheme.error,
         ),
-    ) { Text("Reset notification settings", modifier = Modifier.padding(vertical = 6.dp)) }
+    ) { Text(stringResource(R.string.notif_reset), modifier = Modifier.padding(vertical = 6.dp)) }
     Spacer(Modifier.height(10.dp))
     Text(
-        "Turns everything back on and removes custom per-chat tones.",
+        stringResource(R.string.notif_reset_sub),
         style = MaterialTheme.typography.labelSmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
@@ -85,15 +87,15 @@ fun NotificationsSettingsContent(vm: KlicViewModel) {
     if (confirmReset) {
         AlertDialog(
             onDismissRequest = { confirmReset = false },
-            title = { Text("Reset notification settings?") },
-            text = { Text("All notification toggles return to on, and per-chat alert tones and ringtones go back to default.") },
+            title = { Text(stringResource(R.string.notif_reset_confirm_title)) },
+            text = { Text(stringResource(R.string.notif_reset_confirm_body)) },
             confirmButton = {
                 TextButton(onClick = {
                     confirmReset = false
                     vm.resetNotificationSettings()
-                }) { Text("Reset", color = MaterialTheme.colorScheme.error) }
+                }) { Text(stringResource(R.string.common_reset), color = MaterialTheme.colorScheme.error) }
             },
-            dismissButton = { TextButton(onClick = { confirmReset = false }) { Text("Cancel") } },
+            dismissButton = { TextButton(onClick = { confirmReset = false }) { Text(stringResource(R.string.common_cancel)) } },
         )
     }
 }

@@ -45,6 +45,10 @@ class KlicViewModel(
 ) : ViewModel() {
 
     val currentUser = MutableStateFlow<User?>(null)
+
+    /** Localized user-facing message helper (§10.5). */
+    private fun str(res: Int, vararg args: Any?): String =
+        container.appContext.getString(res, *args)
     val isAuthenticated = MutableStateFlow(false)
     val error = MutableStateFlow<String?>(null)
     val themeMode = MutableStateFlow(container.themeMode)
@@ -308,10 +312,10 @@ class KlicViewModel(
         if (name.isEmpty()) return@launch
         val user = runCatching { repo.findUser(name) }.getOrNull()
         if (user == null) {
-            friendStatus.value = "No user named \"$name\"."
+            friendStatus.value = str(com.klic.mobile.app.R.string.err_no_user_named, name)
         } else {
             runCatching { repo.sendFriendRequest(user.id) }
-            friendStatus.value = "Request sent to ${user.displayName}."
+            friendStatus.value = str(com.klic.mobile.app.R.string.friends_request_sent, user.displayName)
         }
     }
 
@@ -345,8 +349,8 @@ class KlicViewModel(
                     .onFailure { e ->
                         error.value = when (e) {
                             is com.klic.mobile.app.data.CoverUploadException ->
-                                "Group created, but the photo failed at ${e.step}."
-                            else -> "Group created, but the photo upload failed."
+                                str(com.klic.mobile.app.R.string.err_group_created_photo_step, e.step)
+                            else -> str(com.klic.mobile.app.R.string.err_group_created_photo)
                         }
                     }
                     .getOrDefault(c)
@@ -354,7 +358,7 @@ class KlicViewModel(
             conversations.value = listOf(withCover) + conversations.value.filterNot { it.id == c.id }
             onReady(withCover)
         }.onFailure {
-            error.value = "Couldn't create group chat. Try again."
+            error.value = str(com.klic.mobile.app.R.string.err_create_group)
         }
     }
 
@@ -370,8 +374,9 @@ class KlicViewModel(
                 .onFailure { e ->
                     error.value = when (e) {
                         is com.klic.mobile.app.data.CoverUploadException ->
-                            "Group photo failed at ${e.step}. ${e.cause?.message ?: ""}".trim()
-                        else -> "Couldn't update the group photo. ${e.message ?: "Try again."}"
+                            (str(com.klic.mobile.app.R.string.err_group_photo_step, e.step) +
+                                " " + (e.cause?.message ?: "")).trim()
+                        else -> str(com.klic.mobile.app.R.string.err_group_photo, e.message ?: "")
                     }
                 }
         }
@@ -392,7 +397,7 @@ class KlicViewModel(
                         c.copy(members = c.members + removed)
                     } else c
                 }
-                error.value = "Couldn't remove ${removed.displayName}. Try again."
+                error.value = str(com.klic.mobile.app.R.string.err_remove_member, removed.displayName)
             }
     }
 
@@ -510,7 +515,7 @@ class KlicViewModel(
             replyingTo.value = null
             runCatching { repo.uploadVoice(conversationId, bytes, durationMs, waveform) }
                 .onSuccess { upsertMessage(it) }
-                .onFailure { error.value = "Couldn't send voice message. Try again." }
+                .onFailure { error.value = str(com.klic.mobile.app.R.string.err_send_voice) }
         }
 
     fun sendImage(conversationId: String, bytes: ByteArray, contentType: String, width: Int? = null, height: Int? = null) =
@@ -518,7 +523,7 @@ class KlicViewModel(
             replyingTo.value = null
             runCatching { repo.uploadImage(conversationId, bytes, contentType, width, height) }
                 .onSuccess { upsertMessage(it) }
-                .onFailure { error.value = "Couldn't send photo. Try again." }
+                .onFailure { error.value = str(com.klic.mobile.app.R.string.err_send_photo) }
         }
 
     // ── Optimistic uploads (§9.1) ─────────────────────────────────────────────
@@ -1009,7 +1014,7 @@ class KlicViewModel(
 
     // Wraps a suspend auth call with error handling.
     private fun launchAuth(block: suspend () -> Unit) = viewModelScope.launch {
-        runCatching { block() }.onFailure { error.value = "Could not sign in. Check your details." }
+        runCatching { block() }.onFailure { error.value = str(com.klic.mobile.app.R.string.err_sign_in) }
     }
 
     // ── v0.5.3 (§10.4): privacy & security ────────────────────────────────────
@@ -1025,10 +1030,10 @@ class KlicViewModel(
         runCatching { repo.blockUser(userId) }
             .onSuccess {
                 loadBlocks(); loadFriends(); loadConversations()
-                friendStatus.value = "$displayName blocked."
+                friendStatus.value = str(com.klic.mobile.app.R.string.privacy_blocked_toast, displayName)
                 onDone()
             }
-            .onFailure { error.value = "Couldn't block $displayName. ${it.message ?: ""}".trim() }
+            .onFailure { error.value = (str(com.klic.mobile.app.R.string.err_block, displayName) + " " + (it.message ?: "")).trim() }
     }
 
     fun unblockUser(userId: String) = viewModelScope.launch {
@@ -1037,7 +1042,7 @@ class KlicViewModel(
         runCatching { repo.unblockUser(userId) }
             .onFailure {
                 blockedUsers.value = before
-                error.value = "Couldn't unblock. Try again."
+                error.value = str(com.klic.mobile.app.R.string.err_unblock)
             }
     }
 
@@ -1051,7 +1056,7 @@ class KlicViewModel(
         runCatching { repo.deletePasskey(id) }
             .onFailure {
                 passkeyList.value = before
-                error.value = "Couldn't remove the passkey. Try again."
+                error.value = str(com.klic.mobile.app.R.string.err_passkey_remove)
             }
     }
 
@@ -1059,21 +1064,21 @@ class KlicViewModel(
     fun addPasskey(activityContext: android.content.Context) = viewModelScope.launch {
         runCatching { container.passkeyManager.register(activityContext) }
             .onSuccess { loadPasskeys(); friendStatus.value = null }
-            .onFailure { error.value = it.message ?: "Couldn't add a passkey." }
+            .onFailure { error.value = it.message ?: str(com.klic.mobile.app.R.string.err_passkey_add) }
     }
 
     /** Passkey sign-in from the login screen (§10.4). */
     fun loginWithPasskey(activityContext: android.content.Context) = viewModelScope.launch {
         runCatching { container.passkeyManager.signIn(activityContext) }
             .onSuccess { currentUser.value = it; onAuthed() }
-            .onFailure { error.value = it.message ?: "Passkey sign-in failed." }
+            .onFailure { error.value = it.message ?: str(com.klic.mobile.app.R.string.err_passkey_login) }
     }
 
     /** "Automatically delete my account" window (months, null = off). */
     fun setDeleteIfAwayMonths(months: Int?) = viewModelScope.launch {
         runCatching { repo.setDeleteIfAwayMonths(months) }
             .onSuccess { currentUser.value = it }
-            .onFailure { error.value = "Couldn't save the auto-delete setting." }
+            .onFailure { error.value = str(com.klic.mobile.app.R.string.err_auto_delete) }
     }
 
     /** "Delete Account Now": DELETE /me → wipe local state + sign out. */
@@ -1091,7 +1096,7 @@ class KlicViewModel(
                 isAuthenticated.value = false
                 onDone()
             }
-            .onFailure { error.value = "Couldn't delete the account. ${it.message ?: ""}".trim() }
+            .onFailure { error.value = (str(com.klic.mobile.app.R.string.err_delete_account) + " " + (it.message ?: "")).trim() }
     }
 
     /** Sync Contacts ON: hash device emails/phones and upload (hashes only). */
@@ -1104,14 +1109,14 @@ class KlicViewModel(
             }
             .onFailure {
                 SettingsStore.setContactsSyncEnabled(false)
-                error.value = "Contact sync failed. ${it.message ?: ""}".trim()
+                error.value = (str(com.klic.mobile.app.R.string.err_contact_sync) + " " + (it.message ?: "")).trim()
             }
     }
 
     fun deleteSyncedContacts() = viewModelScope.launch {
         runCatching { repo.deleteContactHashes() }
             .onSuccess { SettingsStore.setContactsSyncEnabled(false) }
-            .onFailure { error.value = "Couldn't delete synced contacts. Try again." }
+            .onFailure { error.value = str(com.klic.mobile.app.R.string.err_delete_contacts) }
     }
 
     // ── v0.5.3 (§10.4): drafts + frequent contacts ────────────────────────────
