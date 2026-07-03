@@ -34,22 +34,32 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.klic.mobile.app.data.Conversation
 import com.klic.mobile.app.data.UserProfile
 import com.klic.mobile.app.feature.KlicViewModel
 import com.klic.mobile.app.feature.chatinfo.ChatInfoSectionsCard
 import com.klic.mobile.app.feature.chatinfo.ChatInfoSub
 import com.klic.mobile.app.feature.chatinfo.ChatNotificationsCard
+import com.klic.mobile.app.feature.chatinfo.InfoCard
+import com.klic.mobile.app.feature.chatinfo.InfoDivider
+import com.klic.mobile.app.feature.chatinfo.InfoSectionLabel
 import com.klic.mobile.app.feature.chatinfo.ManageStoragePage
 import com.klic.mobile.app.feature.chatinfo.MediaLinksDocsPage
 import com.klic.mobile.app.feature.chatinfo.StarredMessagesPage
 import com.klic.mobile.app.ui.components.AvatarView
 import com.klic.mobile.app.ui.theme.KlicIcons
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -63,6 +73,7 @@ fun ProfileScreen(
     onBack: () -> Unit,
     onCall: (String) -> Unit,
     onMessage: (() -> Unit)? = null,
+    onOpenGroup: ((String) -> Unit)? = null,
 ) {
     val conversations by vm.conversations.collectAsState()
     val member = conversations.firstOrNull { it.id == conversationId }?.members?.firstOrNull()
@@ -71,7 +82,13 @@ fun ProfileScreen(
     var profile by remember { mutableStateOf<UserProfile?>(null) }
     var sub by remember { mutableStateOf<ChatInfoSub?>(null) }
 
-    LaunchedEffect(member?.id) { member?.id?.let { profile = vm.fetchProfile(it) } }
+    LaunchedEffect(member?.id) {
+        member?.id?.let { id ->
+            // §9.9: render the cached profile instantly, then refresh in the background.
+            vm.cachedProfile(id)?.let { profile = it }
+            vm.fetchProfile(id)?.let { profile = it }
+        }
+    }
     BackHandler(enabled = sub != null) { sub = null }
 
     Scaffold(
@@ -138,14 +155,21 @@ fun ProfileScreen(
                             .padding(20.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
                     ) {
-                        Spacer(Modifier.height(12.dp))
-                        AvatarView(url = profile?.avatarUrl ?: member.avatarUrl, name = member.displayName, size = 132.dp)
-                        Spacer(Modifier.height(16.dp))
-                        Text(member.displayName, style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.onBackground)
-                        Spacer(Modifier.height(4.dp))
-                        Text("@${member.username}", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        // §9.6: same header layout as the user's own profile — avatar,
+                        // display name, copyable @username capsule, presence line.
+                        Spacer(Modifier.height(8.dp))
+                        AvatarView(url = profile?.avatarUrl ?: member.avatarUrl, name = member.displayName, size = 110.dp)
+                        Spacer(Modifier.height(10.dp))
+                        Text(
+                            member.displayName,
+                            style = MaterialTheme.typography.titleLarge,
+                            color = MaterialTheme.colorScheme.onBackground,
+                            textAlign = TextAlign.Center,
+                        )
+                        Spacer(Modifier.height(6.dp))
+                        CopyableUsername(username = member.username)
                         presenceText(online, lastSeenMs)?.let { text ->
-                            Spacer(Modifier.height(4.dp))
+                            Spacer(Modifier.height(6.dp))
                             Text(
                                 text,
                                 style = MaterialTheme.typography.labelMedium,
@@ -153,7 +177,7 @@ fun ProfileScreen(
                                 textAlign = TextAlign.Center,
                             )
                         }
-                        Spacer(Modifier.height(28.dp))
+                        Spacer(Modifier.height(24.dp))
                         Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                             CallActionButton(KlicIcons.phone, "Audio") {
                                 vm.startCall(conversationId, "AUDIO", member.displayName); onCall("AUDIO")
@@ -171,11 +195,92 @@ fun ProfileScreen(
                         ChatNotificationsCard(vm, conversationId, isGroup = false)
                         Spacer(Modifier.height(16.dp))
                         ChatInfoSectionsCard(conversationId) { sub = it }
+
+                        // §9.6: groups in common — GROUP conversations this friend is in,
+                        // derived from the cached conversations list.
+                        val groupsInCommon = remember(conversations, member.id) {
+                            conversations.filter { c ->
+                                c.type == "GROUP" && c.members.any { it.id == member.id }
+                            }
+                        }
+                        if (groupsInCommon.isNotEmpty()) {
+                            Spacer(Modifier.height(16.dp))
+                            Box(Modifier.fillMaxWidth()) { InfoSectionLabel("GROUPS IN COMMON") }
+                            InfoCard {
+                                groupsInCommon.forEachIndexed { index, group ->
+                                    GroupInCommonRow(group) { onOpenGroup?.invoke(group.id) }
+                                    if (index != groupsInCommon.lastIndex) InfoDivider()
+                                }
+                            }
+                        }
                         Spacer(Modifier.height(24.dp))
                     }
                 }
             }
         }
+    }
+}
+
+/** One "Groups in common" row: cover, title, member count — tap opens the group chat (§9.6). */
+@Composable
+private fun GroupInCommonRow(group: Conversation, onClick: () -> Unit) {
+    val title = group.title?.takeIf { it.isNotBlank() }
+        ?: group.members.joinToString(", ") { it.displayName }.ifBlank { "Group" }
+    Row(
+        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        AvatarView(url = group.avatarUrl, name = title, size = 40.dp)
+        Column(Modifier.weight(1f).padding(start = 12.dp)) {
+            Text(title, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurface)
+            Text(
+                "${group.members.size + 1} members",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+/** Copyable @username capsule — mirrors the one on the user's own profile (§9.6). */
+@Composable
+private fun CopyableUsername(username: String) {
+    val clipboardManager = LocalClipboardManager.current
+    val scope = rememberCoroutineScope()
+    var copied by remember { mutableStateOf(false) }
+
+    Row(
+        modifier = Modifier
+            .clip(CircleShape)
+            .background(
+                if (copied) MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
+                else MaterialTheme.colorScheme.surfaceVariant,
+            )
+            .clickable(
+                indication = null,
+                interactionSource = remember { MutableInteractionSource() },
+            ) {
+                clipboardManager.setText(AnnotatedString(username))
+                copied = true
+                scope.launch { delay(1500); copied = false }
+            }
+            .padding(horizontal = 10.dp, vertical = 5.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Text(
+            "@$username",
+            style = MaterialTheme.typography.labelMedium,
+            color = if (copied) MaterialTheme.colorScheme.primary
+                    else MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Icon(
+            painter = painterResource(if (copied) KlicIcons.check else KlicIcons.copy),
+            contentDescription = null,
+            modifier = Modifier.size(13.dp),
+            tint = if (copied) MaterialTheme.colorScheme.primary
+                   else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f),
+        )
     }
 }
 

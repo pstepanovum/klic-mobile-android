@@ -90,10 +90,15 @@ fun CallScreen(
     val localVideo by manager.localVideoTrack.collectAsState()
     val participants by manager.participants.collectAsState()
     val peerId by vm.callPeerId.collectAsState()
+    val isGroupCall by vm.callIsGroup.collectAsState()
     val isVideo = call.kind == "VIDEO"
     // 2+ remotes → tile grid; 0–1 remotes → today's fullscreen 1:1 layout.
     val gridMode = participants.size >= 2
     val shouldShowVideo = cameraEnabled || localVideo != null || remoteVideo != null
+    // §9.7: alone in a live group room → say so, never fake an ongoing peer.
+    val displayStatus =
+        if (isGroupCall && participants.isEmpty() && callStatus == "Connected") "Waiting for others…"
+        else callStatus
 
     // Trigger the join; the actual connect runs on CallManager's own scope, so it survives this
     // screen leaving the composition (which used to cancel it mid-connect on the emulator).
@@ -187,7 +192,7 @@ fun CallScreen(
                             )
                             Spacer(Modifier.height(6.dp))
                             Text(
-                                callStatus,
+                                displayStatus,
                                 style = MaterialTheme.typography.labelMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier
@@ -350,7 +355,11 @@ fun CallScreen(
 @Composable
 private fun ParticipantTile(vm: KlicViewModel, participant: RemoteCallParticipant) {
     val manager = vm.callManager
-    val displayName = participant.name.ifBlank { "Unknown" }
+    // §9.7: every tile gets a name — LiveKit metadata first, then the cached
+    // conversation member list, never a blank pill.
+    val displayName = participant.name.ifBlank {
+        vm.displayNameFor(participant.userId) ?: "Member"
+    }
     Box(
         Modifier
             .aspectRatio(3f / 4f)

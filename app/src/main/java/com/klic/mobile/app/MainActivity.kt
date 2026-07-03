@@ -401,6 +401,12 @@ class MainActivity : ComponentActivity() {
                         onMessage = {
                             navController.navigate("chat/$id") { popUpTo("home") }
                         },
+                        onOpenGroup = { groupId ->
+                            navController.navigate("chat/$groupId") {
+                                popUpTo("home")
+                                launchSingleTop = true
+                            }
+                        },
                     )
                 }
                 composable("active_call") {

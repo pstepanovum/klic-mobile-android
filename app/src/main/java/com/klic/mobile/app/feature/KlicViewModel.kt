@@ -833,8 +833,23 @@ class KlicViewModel(
         runCatching { repo.updateProfile(showLastSeen = value) }.onSuccess { currentUser.value = it }
     }
 
+    // §9.9: profiles render instantly from this session cache, refreshed in background.
+    private val profileCache = mutableMapOf<String, UserProfile>()
+
+    fun cachedProfile(userId: String): UserProfile? = profileCache[userId]
+
     suspend fun fetchProfile(userId: String): UserProfile? =
         runCatching { repo.userProfile(userId) }.getOrNull()
+            ?.also { profileCache[userId] = it }
+
+    /** Display name for any known user — me, or a member of any cached conversation. */
+    fun displayNameFor(userId: String): String? {
+        if (userId == currentUser.value?.id) return currentUser.value?.displayName
+        return conversations.value.asSequence()
+            .flatMap { it.members.asSequence() }
+            .firstOrNull { it.id == userId }
+            ?.displayName
+    }
 
     // Advance ticks on the user's own messages when a read/delivered receipt arrives.
     private fun applyReceipt(receipt: SocketService.Receipt, read: Boolean) {
