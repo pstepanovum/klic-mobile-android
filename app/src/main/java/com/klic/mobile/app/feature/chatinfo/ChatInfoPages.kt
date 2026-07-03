@@ -63,6 +63,7 @@ import com.klic.mobile.app.feature.chat.media.PdfViewerOverlay
 import com.klic.mobile.app.feature.chat.media.formatByteSize
 import com.klic.mobile.app.feature.chat.media.isPdfAttachment
 import com.klic.mobile.app.feature.chat.messagelist.messagePreview
+import com.klic.mobile.app.ui.components.rememberStableImageRequest
 import com.klic.mobile.app.ui.theme.KlicIcons
 import kotlinx.coroutines.launch
 import java.io.File
@@ -95,19 +96,29 @@ fun MediaLinksDocsPage(
 
 @Composable
 private fun MediaTab(vm: KlicViewModel, conversationId: String) {
-    var items by remember { mutableStateOf<List<ConversationAttachment>>(emptyList()) }
-    var cursor by remember { mutableStateOf<String?>(null) }
-    var loading by remember { mutableStateOf(true) }
-    var exhausted by remember { mutableStateOf(false) }
+    // §9.9: seed from the cached first page so re-entry renders instantly; the
+    // initial loadMore() then REPLACES the first page with fresh data.
+    var items by remember(conversationId) {
+        mutableStateOf(
+            vm.cachedAttachments(conversationId, null)?.items
+                ?.filter { it.kind == "IMAGE" || it.kind == "VIDEO" }
+                ?: emptyList()
+        )
+    }
+    var cursor by remember(conversationId) { mutableStateOf<String?>(null) }
+    var loading by remember(conversationId) { mutableStateOf(true) }
+    var exhausted by remember(conversationId) { mutableStateOf(false) }
     var viewerUrl by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
 
     suspend fun loadMore() {
         loading = true
+        val firstPage = cursor == null
         // No kind filter — one paged stream, filtered to visual media client-side.
         val page = vm.fetchAttachments(conversationId, kind = null, cursor = cursor)
         if (page == null) { exhausted = true; loading = false; return }
-        items = items + page.items.filter { it.kind == "IMAGE" || it.kind == "VIDEO" }
+        val fresh = page.items.filter { it.kind == "IMAGE" || it.kind == "VIDEO" }
+        items = if (firstPage) fresh else items + fresh
         cursor = page.nextCursor
         exhausted = page.nextCursor == null
         loading = false
@@ -134,7 +145,8 @@ private fun MediaTab(vm: KlicViewModel, conversationId: String) {
                     .clickable { if (att.kind == "IMAGE") viewerUrl = att.url },
             ) {
                 AsyncImage(
-                    model = att.url,
+                    // §9.9: stable cache key — the grid never re-downloads thumbnails.
+                    model = rememberStableImageRequest(att.url),
                     contentDescription = if (att.kind == "VIDEO") "Video" else "Photo",
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.fillMaxSize(),
@@ -255,19 +267,23 @@ private fun LinksTab(vm: KlicViewModel, conversationId: String) {
 @Composable
 private fun DocsTab(vm: KlicViewModel, conversationId: String) {
     val context = LocalContext.current
-    var items by remember { mutableStateOf<List<ConversationAttachment>>(emptyList()) }
-    var cursor by remember { mutableStateOf<String?>(null) }
-    var loading by remember { mutableStateOf(true) }
-    var exhausted by remember { mutableStateOf(false) }
+    // §9.9: cached first page renders instantly; the refresh replaces it.
+    var items by remember(conversationId) {
+        mutableStateOf(vm.cachedAttachments(conversationId, "FILE")?.items ?: emptyList())
+    }
+    var cursor by remember(conversationId) { mutableStateOf<String?>(null) }
+    var loading by remember(conversationId) { mutableStateOf(true) }
+    var exhausted by remember(conversationId) { mutableStateOf(false) }
     var pdfFile by remember { mutableStateOf<File?>(null) }
     var fileDetail by remember { mutableStateOf<Pair<ConversationAttachment, File>?>(null) }
     val scope = rememberCoroutineScope()
 
     suspend fun loadMore() {
         loading = true
+        val firstPage = cursor == null
         val page = vm.fetchAttachments(conversationId, kind = "FILE", cursor = cursor)
         if (page == null) { exhausted = true; loading = false; return }
-        items = items + page.items
+        items = if (firstPage) page.items else items + page.items
         cursor = page.nextCursor
         exhausted = page.nextCursor == null
         loading = false
@@ -353,17 +369,21 @@ fun StarredMessagesPage(
     senderName: (String) -> String,
     onOpenMessage: (Message) -> Unit,
 ) {
-    var items by remember { mutableStateOf<List<Message>>(emptyList()) }
-    var cursor by remember { mutableStateOf<String?>(null) }
-    var loading by remember { mutableStateOf(true) }
-    var exhausted by remember { mutableStateOf(false) }
+    // §9.9: cached first page renders instantly; the refresh replaces it.
+    var items by remember(conversationId) {
+        mutableStateOf(vm.cachedStarred(conversationId)?.items ?: emptyList())
+    }
+    var cursor by remember(conversationId) { mutableStateOf<String?>(null) }
+    var loading by remember(conversationId) { mutableStateOf(true) }
+    var exhausted by remember(conversationId) { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
     suspend fun loadMore() {
         loading = true
+        val firstPage = cursor == null
         val page = vm.fetchStarred(conversationId, cursor)
         if (page == null) { exhausted = true; loading = false; return }
-        items = items + page.items
+        items = if (firstPage) page.items else items + page.items
         cursor = page.nextCursor
         exhausted = page.nextCursor == null
         loading = false

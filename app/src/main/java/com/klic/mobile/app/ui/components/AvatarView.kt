@@ -31,8 +31,9 @@ fun AvatarView(url: String?, name: String, size: Dp = 40.dp, modifier: Modifier 
         url?.let {
             ImageRequest.Builder(context)
                 .data(it)
-                .memoryCacheKey(it)
-                .diskCacheKey(it)
+                // §9.9: presign-stable keys — avatars never re-download on re-entry.
+                .memoryCacheKey(stableImageKey(it))
+                .diskCacheKey(stableImageKey(it))
                 .memoryCachePolicy(CachePolicy.ENABLED)
                 .diskCachePolicy(CachePolicy.ENABLED)
                 .networkCachePolicy(CachePolicy.ENABLED)

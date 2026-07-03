@@ -66,6 +66,8 @@ import com.klic.mobile.app.feature.chat.stickers.StickerBubble
 import com.klic.mobile.app.feature.chat.voice.VoiceAttachmentView
 import com.klic.mobile.app.feature.chat.voice.durationText
 import com.klic.mobile.app.ui.components.MessageTicks
+import com.klic.mobile.app.ui.components.rememberStableImageRequest
+import com.klic.mobile.app.ui.components.stableImageKey
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -341,7 +343,8 @@ private fun BentoImageGrid(
         var manuallyRequested by remember(att.id) { mutableStateOf(false) }
         val cached = remember(att.url) {
             runCatching {
-                context.imageLoader.diskCache?.openSnapshot(att.url)?.use { true } ?: false
+                // §9.9: the disk cache is keyed on the presign-stable URL.
+                context.imageLoader.diskCache?.openSnapshot(stableImageKey(att.url))?.use { true } ?: false
             }.getOrDefault(false)
         }
         val allowed = cached || manuallyRequested ||
@@ -357,7 +360,7 @@ private fun BentoImageGrid(
         ) {
             if (allowed) {
                 AsyncImage(
-                    model = att.url,
+                    model = rememberStableImageRequest(att.url),
                     contentDescription = "Image",
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.fillMaxSize(),

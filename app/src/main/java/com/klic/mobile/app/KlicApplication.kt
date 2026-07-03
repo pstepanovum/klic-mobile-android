@@ -79,6 +79,9 @@ class KlicApplication : Application(), ImageLoaderFactory {
                     .maxSizeBytes(256L * 1024 * 1024)
                     .build()
             }
+            // §9.9: presigned media responses carry no cache headers — serve straight
+            // from the disk cache instead of revalidating on every re-entry.
+            .respectCacheHeaders(false)
             .crossfade(false)
             .build()
 }

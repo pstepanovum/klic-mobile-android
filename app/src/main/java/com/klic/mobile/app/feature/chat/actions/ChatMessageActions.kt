@@ -46,6 +46,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import com.klic.mobile.app.ui.components.rememberStableImageRequest
 import com.klic.mobile.app.data.Message
 import com.klic.mobile.app.data.Reaction
 import com.klic.mobile.app.data.ReplyPreview
@@ -270,7 +271,8 @@ fun ImageViewerOverlay(url: String, onDismiss: () -> Unit) {
         contentAlignment = Alignment.Center,
     ) {
         AsyncImage(
-            model = url,
+            // §9.9: same stable key as the inline bubble — the viewer opens from cache.
+            model = rememberStableImageRequest(url),
             contentDescription = "Image",
             contentScale = ContentScale.Fit,
             modifier = Modifier

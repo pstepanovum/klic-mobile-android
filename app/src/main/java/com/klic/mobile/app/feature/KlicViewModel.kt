@@ -124,6 +124,7 @@ class KlicViewModel(
                     chatActiveCall.value = null
                     replyingTo.value = null
                 }
+                messageCache.remove(convId)
             }
         }
         viewModelScope.launch {
@@ -229,6 +230,13 @@ class KlicViewModel(
         }
         viewModelScope.launch {
             socket.deliveredReceipts.collect { applyReceipt(it, read = false) }
+        }
+        viewModelScope.launch {
+            // §9.9: write-through — every message-list mutation (send, socket event,
+            // pagination, delete…) lands in the per-conversation cache automatically.
+            messages.collect { list ->
+                openConversationId?.let { messageCache[it] = list }
+            }
         }
     }
 
@@ -373,17 +381,26 @@ class KlicViewModel(
             }
     }
 
+    // §9.9: last-known message list per conversation — re-opening a chat renders
+    // instantly from here while the fresh page loads in the background.
+    private val messageCache = mutableMapOf<String, List<Message>>()
+
     fun openChat(conversationId: String) = viewModelScope.launch {
         openConversationId = conversationId
         replyingTo.value = null
-        hasMoreMessages.value = false
         isLoadingOlderMessages.value = false
         chatActiveCall.value = null
         refreshActiveCall(conversationId)
         // Clear any pending notification (and its launcher badge) for this conversation.
         CallNotifications.cancelMessage(container.appContext, conversationId)
+        // Cache-first render (§9.9), then refresh; socket events stay authoritative.
+        val cached = messageCache[conversationId]
+        messages.value = cached?.filterNot { m -> m.id in hiddenIds } ?: emptyList()
+        hasMoreMessages.value = (cached?.size ?: 0) >= 50
         runCatching { repo.messages(conversationId) }
             .onSuccess { msgs ->
+                // A different chat may have been opened while this fetch was in flight.
+                if (openConversationId != conversationId) return@onSuccess
                 messages.value = msgs.reversed().filterNot { m -> m.id in hiddenIds }
                 hasMoreMessages.value = msgs.size >= 50
             }
@@ -807,11 +824,24 @@ class KlicViewModel(
         return result
     }
 
+    // §9.9: first pages of the chat-info attachment tabs + starred lists, cached for
+    // instant render on re-entry (refreshed in background by the pages themselves).
+    private val attachmentPageCache = mutableMapOf<String, AttachmentPage>()
+    private val starredPageCache = mutableMapOf<String, StarredPage>()
+
+    fun cachedStarred(conversationId: String?): StarredPage? =
+        starredPageCache[conversationId ?: "all"]
+
+    fun cachedAttachments(conversationId: String, kind: String?): AttachmentPage? =
+        attachmentPageCache["$conversationId:${kind ?: "all"}"]
+
     suspend fun fetchStarred(conversationId: String?, cursor: String? = null): StarredPage? =
         runCatching { repo.starredMessages(conversationId, cursor) }.getOrNull()
+            ?.also { if (cursor == null) starredPageCache[conversationId ?: "all"] = it }
 
     suspend fun fetchAttachments(conversationId: String, kind: String?, cursor: String? = null): AttachmentPage? =
         runCatching { repo.conversationAttachments(conversationId, kind, cursor) }.getOrNull()
+            ?.also { if (cursor == null) attachmentPageCache["$conversationId:${kind ?: "all"}"] = it }
 
     /** Raw history fetch for the links scan / group search fetch-back (§8.4). */
     suspend fun fetchMessagesBefore(conversationId: String, before: String?): List<Message>? =

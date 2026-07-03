@@ -29,6 +29,7 @@ import coil.compose.AsyncImage
 import com.klic.mobile.app.data.CallEvent
 import com.klic.mobile.app.data.Message
 import com.klic.mobile.app.data.Sticker
+import com.klic.mobile.app.ui.components.rememberStableImageRequest
 
 /** A centered, tappable call-log row (Telegram/WhatsApp style). Tap calls the peer back. */
 @Composable
@@ -81,7 +82,8 @@ fun StickerBubble(message: Message, isMine: Boolean, time: String?) {
         horizontalAlignment = if (isMine) Alignment.End else Alignment.Start,
     ) {
         AsyncImage(
-            model = message.stickerUrl,
+            // §9.9: stable cache key survives the sticker URL's rotating presign query.
+            model = rememberStableImageRequest(message.stickerUrl),
             contentDescription = "Sticker",
             modifier = Modifier.size(124.dp),
         )
@@ -107,7 +109,7 @@ fun StickerPickerSheet(stickers: List<Sticker>, onPick: (String) -> Unit) {
     ) {
         items(stickers, key = { it.id }) { sticker ->
             AsyncImage(
-                model = sticker.url,
+                model = rememberStableImageRequest(sticker.url),
                 contentDescription = sticker.id,
                 modifier = Modifier
                     .size(96.dp)
