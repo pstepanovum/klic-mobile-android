@@ -83,6 +83,8 @@ internal fun MessageBubble(
     replyAuthorName: String = "",
     /** Group chats highlight "@all" mentions in bubble bodies (§8.4). */
     highlightMentions: Boolean = false,
+    /** Member display names that highlight like @all when mentioned (§9.5). */
+    mentionNames: List<String> = emptyList(),
     onCallBack: (String) -> Unit = {},
     onLongPress: () -> Unit = {},
     onReactionTap: (String) -> Unit = {},
@@ -186,7 +188,7 @@ internal fun MessageBubble(
                                 modifier = Modifier.width(240.dp).padding(horizontal = 6.dp, vertical = 6.dp),
                             ) {
                                 Text(
-                                    bodyWithMentions(message.body, highlightMentions, mentionAccent(isMine)),
+                                    bodyWithMentions(message.body, highlightMentions, mentionAccent(isMine), mentionNames),
                                     color = textColor,
                                     style = MaterialTheme.typography.bodyLarge,
                                     modifier = Modifier.weight(1f, fill = false),
@@ -284,7 +286,7 @@ internal fun MessageBubble(
                         Row(verticalAlignment = Alignment.Bottom) {
                             if (message.body.isNotBlank()) {
                                 Text(
-                                    bodyWithMentions(message.body, highlightMentions, mentionAccent(isMine)),
+                                    bodyWithMentions(message.body, highlightMentions, mentionAccent(isMine), mentionNames),
                                     color = textColor,
                                     style = MaterialTheme.typography.bodyLarge,
                                     modifier = Modifier.weight(1f, fill = false),
@@ -476,10 +478,15 @@ internal fun StarIndicator(tint: Color) {
 private fun mentionAccent(isMine: Boolean): Color =
     if (isMine) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.primary
 
-/** Highlights "@all" tokens (accent + semibold) when [highlight] is on (§8.4). */
-internal fun bodyWithMentions(body: String, highlight: Boolean, accent: Color): AnnotatedString {
+/** Highlights "@all" and member-name mentions (accent + semibold) when [highlight] is on (§9.5). */
+internal fun bodyWithMentions(
+    body: String,
+    highlight: Boolean,
+    accent: Color,
+    names: List<String> = emptyList(),
+): AnnotatedString {
     if (!highlight) return AnnotatedString(body)
-    val matches = mentionAllRanges(body)
+    val matches = mentionAllRanges(body) + names.flatMap { mentionNameRanges(body, it) }
     if (matches.isEmpty()) return AnnotatedString(body)
     return buildAnnotatedString {
         append(body)
@@ -491,6 +498,15 @@ internal fun bodyWithMentions(body: String, highlight: Boolean, accent: Color): 
             )
         }
     }
+}
+
+/** Character ranges of "@Display Name" mentions for one member name (§9.5). */
+internal fun mentionNameRanges(body: String, name: String): List<IntRange> {
+    if (name.isBlank()) return emptyList()
+    return Regex("""(^|\s)(@${Regex.escape(name)})""", RegexOption.IGNORE_CASE)
+        .findAll(body)
+        .mapNotNull { it.groups[2]?.range }
+        .toList()
 }
 
 /** Character ranges of "@all" tokens (same regex as the server's push gating). */

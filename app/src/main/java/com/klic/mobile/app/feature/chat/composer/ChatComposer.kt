@@ -4,6 +4,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -14,6 +15,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -44,20 +46,96 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
+import com.klic.mobile.app.ui.components.AvatarView
 import com.klic.mobile.app.ui.theme.KlicIcons
 import kotlinx.coroutines.withTimeoutOrNull
 
 /** Which action the composer's hold-to-record button performs. */
 enum class CaptureMode { AUDIO, VIDEO }
 
+// MARK: - Mentions (§9.5)
+
+/** One row of the @mention suggestion strip. */
+data class MentionCandidate(
+    val display: String,
+    val username: String? = null,
+    val avatarUrl: String? = null,
+    val isAll: Boolean = false,
+)
+
+/** The "@prefix" token sitting immediately before the cursor, if any. */
+data class MentionQuery(val start: Int, val prefix: String)
+
+/**
+ * Finds an active mention being typed at [cursor]: an "@" at the start of the text or
+ * after whitespace, with no whitespace between it and the cursor.
+ */
+fun mentionQueryAt(text: String, cursor: Int): MentionQuery? {
+    if (cursor < 0 || cursor > text.length) return null
+    val upToCursor = text.substring(0, cursor)
+    val at = upToCursor.lastIndexOf('@')
+    if (at == -1) return null
+    if (at > 0 && !upToCursor[at - 1].isWhitespace()) return null
+    val prefix = upToCursor.substring(at + 1)
+    if (prefix.any { it.isWhitespace() }) return null
+    return MentionQuery(at, prefix)
+}
+
+/** Replaces the active mention token with "@Name " and parks the cursor after it. */
+fun insertMention(value: TextFieldValue, query: MentionQuery, name: String): TextFieldValue {
+    val insertion = "@$name "
+    val end = value.selection.start.coerceIn(query.start, value.text.length)
+    val newText = value.text.replaceRange(query.start, end, insertion)
+    return value.copy(text = newText, selection = TextRange(query.start + insertion.length))
+}
+
+/** Horizontal suggestion strip shown ABOVE the composer while typing an @mention. */
+@Composable
+fun MentionSuggestionStrip(
+    candidates: List<MentionCandidate>,
+    onPick: (MentionCandidate) -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState())
+            .padding(horizontal = 12.dp, vertical = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        candidates.forEach { candidate ->
+            Row(
+                modifier = Modifier
+                    .background(MaterialTheme.colorScheme.surfaceVariant, CircleShape)
+                    .clickable { onPick(candidate) }
+                    .padding(horizontal = 12.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                if (!candidate.isAll) {
+                    AvatarView(url = candidate.avatarUrl, name = candidate.display, size = 20.dp)
+                }
+                Text(
+                    if (candidate.isAll) "@all" else candidate.display,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = if (candidate.isAll) MaterialTheme.colorScheme.primary
+                            else MaterialTheme.colorScheme.onSurface,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
+        }
+    }
+}
+
 // MARK: - Composer
 
 @Composable
 fun ComposerBar(
-    draft: String,
-    onChange: (String) -> Unit,
+    draft: TextFieldValue,
+    onChange: (TextFieldValue) -> Unit,
     onSend: () -> Unit,
     onAttach: () -> Unit,
     onStickers: () -> Unit,
@@ -127,7 +205,7 @@ fun ComposerBar(
             ),
         )
 
-        val canSend = hasPendingAttachments || draft.isNotBlank()
+        val canSend = hasPendingAttachments || draft.text.isNotBlank()
         if (canSend) {
             IconButton(
                 onClick = onSend,

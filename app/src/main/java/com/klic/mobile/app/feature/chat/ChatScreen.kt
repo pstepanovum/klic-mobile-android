@@ -62,6 +62,7 @@ import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
@@ -76,7 +77,11 @@ import com.klic.mobile.app.feature.chat.actions.TypingBubble
 import com.klic.mobile.app.feature.chat.composer.AttachSheet
 import com.klic.mobile.app.feature.chat.composer.CaptureMode
 import com.klic.mobile.app.feature.chat.composer.ComposerBar
+import com.klic.mobile.app.feature.chat.composer.MentionCandidate
+import com.klic.mobile.app.feature.chat.composer.MentionSuggestionStrip
 import com.klic.mobile.app.feature.chat.composer.RecordingBar
+import com.klic.mobile.app.feature.chat.composer.insertMention
+import com.klic.mobile.app.feature.chat.composer.mentionQueryAt
 import com.klic.mobile.app.feature.chat.media.AttachmentDownloads
 import com.klic.mobile.app.feature.chat.media.FileDetailSheet
 import com.klic.mobile.app.feature.chat.media.PdfViewerOverlay
@@ -112,7 +117,7 @@ fun ChatScreen(
     val messages by vm.messages.collectAsState()
     val me by vm.currentUser.collectAsState()
     val presenceMap by vm.presence.collectAsState()
-    var draft by remember { mutableStateOf("") }
+    var draft by remember(conversation.id) { mutableStateOf(TextFieldValue("")) }
     val peer = conversation.members.firstOrNull()
     val isDirect = conversation.type == "DIRECT"
     val title = when {
@@ -124,6 +129,11 @@ fun ChatScreen(
         isDirect -> peer?.id?.let { presenceSubtitle(presenceMap[it]) }
         conversation.members.isNotEmpty() -> "${conversation.members.size + 1} members"
         else -> null
+    }
+    // §9.5: member names highlighted as mentions in bubbles (groups only).
+    val mentionableNames = remember(conversation.id, conversation.members, me?.displayName) {
+        if (isDirect) emptyList()
+        else conversation.members.map { it.displayName } + listOfNotNull(me?.displayName)
     }
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
@@ -375,6 +385,7 @@ fun ChatScreen(
                         isLast  = isLast,
                         replyAuthorName = msg.replyTo?.let { if (it.senderId == me?.id) "You" else title } ?: "",
                         highlightMentions = !isDirect,
+                        mentionNames = mentionableNames,
                         onCallBack = { kind -> vm.startCall(conversation.id, kind, title); onCall(kind) },
                         onLongPress = { menuTarget = msg },
                         onReactionTap = { emoji -> vm.react(conversation.id, msg.id, emoji) },
@@ -486,19 +497,40 @@ fun ChatScreen(
                         onCancel = { vm.setReplyTo(null) },
                     )
                 }
+                // §9.5: typing "@" in a group composer offers members + @all above the input.
+                val mentionQuery = if (isDirect) null else mentionQueryAt(draft.text, draft.selection.start)
+                if (mentionQuery != null) {
+                    val candidates = buildList {
+                        if ("all".startsWith(mentionQuery.prefix, ignoreCase = true)) {
+                            add(MentionCandidate("all", isAll = true))
+                        }
+                        conversation.members
+                            .filter {
+                                mentionQuery.prefix.isEmpty() ||
+                                    it.displayName.startsWith(mentionQuery.prefix, ignoreCase = true) ||
+                                    it.username.startsWith(mentionQuery.prefix, ignoreCase = true)
+                            }
+                            .forEach { add(MentionCandidate(it.displayName, it.username, it.avatarUrl)) }
+                    }
+                    if (candidates.isNotEmpty()) {
+                        MentionSuggestionStrip(candidates) { pick ->
+                            draft = insertMention(draft, mentionQuery, pick.display)
+                        }
+                    }
+                }
                 ComposerBar(
                     draft    = draft,
-                    onChange = { draft = it; vm.setTyping(conversation.id, it.isNotBlank()) },
+                    onChange = { draft = it; vm.setTyping(conversation.id, it.text.isNotBlank()) },
                     onSend   = {
                         if (pendingMedia.isNotEmpty()) {
                             val toSend = pendingMedia
-                            val caption = draft.trim().takeIf { it.isNotBlank() }
+                            val caption = draft.text.trim().takeIf { it.isNotBlank() }
                             pendingMedia = emptyList()
-                            draft = ""
+                            draft = TextFieldValue("")
                             // Optimistic pill takes over (§9.1); the composer frees up instantly.
                             vm.sendAttachments(conversation.id, caption, toSend.map { it.attachment })
-                        } else if (draft.isNotBlank()) {
-                            vm.send(conversation.id, draft.trim()); draft = ""
+                        } else if (draft.text.isNotBlank()) {
+                            vm.send(conversation.id, draft.text.trim()); draft = TextFieldValue("")
                         }
                     },
                     onAttach = { showAttachSheet = true },
