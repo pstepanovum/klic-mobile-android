@@ -79,6 +79,7 @@ import com.klic.mobile.app.feature.chat.actions.ReplyComposerBar
 import com.klic.mobile.app.feature.chat.actions.TypingBubble
 import com.klic.mobile.app.feature.chat.composer.CaptureMode
 import com.klic.mobile.app.feature.chat.composer.KlicAttachmentSheet
+import com.klic.mobile.app.feature.chat.composer.KlicCameraCapture
 import com.klic.mobile.app.feature.chat.composer.ComposerBar
 import com.klic.mobile.app.feature.chat.composer.MentionCandidate
 import com.klic.mobile.app.feature.chat.composer.MentionSuggestionStrip
@@ -155,6 +156,8 @@ fun ChatScreen(
 
     val focusManager = LocalFocusManager.current
     var showAttachSheet by remember { mutableStateOf(false) }
+    // §11.2: in-app camera capture (photo + video) opened from the attach sheet's tile.
+    var showCamera by remember { mutableStateOf(false) }
     var showStickerSheet by remember { mutableStateOf(false) }
     var tempCameraUri by remember { mutableStateOf<Uri?>(null) }
     var tempVideoUri by remember { mutableStateOf<Uri?>(null) }
@@ -397,7 +400,12 @@ fun ChatScreen(
                 verticalArrangement = Arrangement.spacedBy(2.dp),
             ) {
                 items(messages.indices.toList()) { idx ->
-                    val msg = messages[idx]
+                    val raw = messages[idx]
+                    // §11.6: read receipts OFF → blue ticks hide in DMs both ways
+                    // (own messages cap at "delivered"; the server stops peer events).
+                    val msg = if (isDirect && me?.readReceipts == false && raw.status == "read") {
+                        raw.copy(status = "delivered")
+                    } else raw
                     val isMine = msg.senderId == me?.id
                     val isFirst = idx == 0 || messages[idx - 1].senderId != msg.senderId
                     val isLast  = idx == messages.size - 1 || messages[idx + 1].senderId != msg.senderId
@@ -603,15 +611,18 @@ fun ChatScreen(
     }
 
     if (showAttachSheet) {
-        // §10.11: ONE Klic attachment sheet — Gallery | Files tabs.
+        // §10.11/§11.2: ONE Klic attachment sheet — camera tile + Gallery | Files tabs.
         KlicAttachmentSheet(
-            onPickedMedia = { uris ->
+            onSendMedia = { uris ->
+                // §11.2 bulk send: stage in SELECTION ORDER, then one message per item
+                // through the upload-pill pipeline.
                 scope.launch {
-                    val drafts = uris.mapNotNull { loadMediaDraft(context, it) }
-                    if (drafts.isEmpty()) vm.error.value = context.getString(R.string.err_read_media)
-                    else pendingMedia = pendingMedia + drafts
+                    val staged = uris.mapNotNull { loadMediaDraft(context, it)?.attachment }
+                    if (staged.isEmpty()) vm.error.value = context.getString(R.string.err_read_media)
+                    else vm.sendAttachmentsSequentially(conversation.id, staged)
                 }
             },
+            onOpenCamera = { showCamera = true },
             onSystemGallery = {
                 mediaLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo))
             },
@@ -627,6 +638,27 @@ fun ChatScreen(
                 }
             },
             onDismiss = { showAttachSheet = false },
+        )
+    }
+
+    if (showCamera) {
+        // §11.2: full in-app capture — the result joins the SAME pre-send flow
+        // (pending-media bar with edit/caption) as gallery picks.
+        KlicCameraCapture(
+            onCaptured = { uri, isVideo ->
+                showCamera = false
+                scope.launch {
+                    val draft = if (isVideo) loadVideoDraft(context, uri) else loadImageDraft(context, uri)
+                    if (draft != null) {
+                        pendingMedia = pendingMedia + draft
+                    } else {
+                        vm.error.value = context.getString(
+                            if (isVideo) R.string.err_read_video else R.string.err_read_photo
+                        )
+                    }
+                }
+            },
+            onClose = { showCamera = false },
         )
     }
 

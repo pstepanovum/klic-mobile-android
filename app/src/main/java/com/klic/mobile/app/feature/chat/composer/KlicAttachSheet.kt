@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -27,6 +28,7 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.CircleShape
@@ -78,15 +80,18 @@ private enum class GalleryAlbum { RECENTS, FAVORITES, VIDEOS, SELFIES }
 private enum class AttachTab { GALLERY, FILES }
 
 /**
- * §10.11: THE attachment sheet — one Klic bottom sheet (drag-to-expand) with
- * Gallery | Files tabs. Gallery = MediaStore grid newest-first with multi-select,
- * album dropdown (Recents/Favorites/Videos/Selfies) and a system-picker fallback.
- * Files = system document picker + ML Kit document scanner (multi-page PDF).
+ * §10.11/§11.2: THE attachment sheet — one Klic bottom sheet (drag-to-expand) with
+ * Gallery | Files tabs. Gallery = live camera tile (top-left, 2 rows tall) + MediaStore
+ * grid newest-first with ordered multi-select ("Send N" fires one message per item,
+ * in order, through the upload-pill pipeline), album dropdown (Recents/Favorites/
+ * Videos/Selfies) and a system-picker fallback. Files = system document picker +
+ * ML Kit document scanner (multi-page PDF).
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun KlicAttachmentSheet(
-    onPickedMedia: (List<Uri>) -> Unit,
+    onSendMedia: (List<Uri>) -> Unit,
+    onOpenCamera: () -> Unit,
     onSystemGallery: () -> Unit,
     onSelectFiles: () -> Unit,
     onScannedPdf: (Uri) -> Unit,
@@ -122,6 +127,10 @@ fun KlicAttachmentSheet(
             onScannedPdf(pdfUri)
             onDismiss()
         }
+    }
+
+    fun toggle(uri: Uri) {
+        selected = if (uri in selected) selected - uri else selected + uri
     }
 
     ModalBottomSheet(
@@ -176,7 +185,7 @@ fun KlicAttachmentSheet(
                             ) { Text(stringResource(R.string.attach_allow_access)) }
                         }
                     } else {
-                        // Header: album dropdown pill.
+                        // Header: album dropdown pill + live selection counter.
                         Row(
                             Modifier.fillMaxWidth(),
                             verticalAlignment = Alignment.CenterVertically,
@@ -199,73 +208,74 @@ fun KlicAttachmentSheet(
                                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                             }
+                            Spacer(Modifier.weight(1f))
+                            if (selected.isNotEmpty()) {
+                                Text(
+                                    stringResource(R.string.attach_selected_count, selected.size),
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.primary,
+                                )
+                            }
                         }
                         Spacer(Modifier.height(8.dp))
                         LazyVerticalGrid(
                             columns = GridCells.Fixed(3),
                             verticalArrangement = Arrangement.spacedBy(3.dp),
                             horizontalArrangement = Arrangement.spacedBy(3.dp),
-                            modifier = Modifier.fillMaxWidth().height(380.dp),
+                            modifier = Modifier.fillMaxWidth().height(400.dp),
                         ) {
-                            items(items, key = { it.uri }) { item ->
-                                val index = selected.indexOf(item.uri)
-                                Box(
-                                    Modifier
-                                        .aspectRatio(1f)
-                                        .clip(RoundedCornerShape(10.dp))
-                                        .clickable {
-                                            selected = if (index >= 0) selected - item.uri
-                                                       else selected + item.uri
-                                        },
+                            // §11.2: camera tile — first column, spanning two rows, with a
+                            // LIVE preview; the first four gallery items fill the 2x2 beside it.
+                            item(key = "camera_block", span = { GridItemSpan(maxLineSpan) }) {
+                                Row(
+                                    Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(3.dp),
                                 ) {
-                                    AsyncImage(
-                                        model = item.uri,
-                                        contentDescription = null,
-                                        contentScale = ContentScale.Crop,
-                                        modifier = Modifier.fillMaxSize(),
+                                    CameraPreviewTile(
+                                        modifier = Modifier.weight(1f).aspectRatio(0.5f),
+                                        onOpenCamera = { onOpenCamera(); onDismiss() },
                                     )
-                                    if (item.isVideo) {
-                                        Box(
-                                            Modifier
-                                                .align(Alignment.BottomStart)
-                                                .padding(4.dp)
-                                                .background(Color.Black.copy(alpha = 0.55f), CircleShape)
-                                                .padding(horizontal = 6.dp, vertical = 2.dp),
-                                        ) {
-                                            Text(
-                                                durationText(item.durationMs.toInt()),
-                                                style = MaterialTheme.typography.labelSmall,
-                                                color = Color.White,
-                                            )
-                                        }
-                                    }
-                                    Box(
-                                        Modifier
-                                            .align(Alignment.TopEnd)
-                                            .padding(6.dp)
-                                            .size(22.dp)
-                                            .background(
-                                                if (index >= 0) MaterialTheme.colorScheme.primary
-                                                else Color.Black.copy(alpha = 0.35f),
-                                                CircleShape,
-                                            ),
-                                        contentAlignment = Alignment.Center,
+                                    Column(
+                                        Modifier.weight(2f).aspectRatio(1f),
+                                        verticalArrangement = Arrangement.spacedBy(3.dp),
                                     ) {
-                                        if (index >= 0) {
-                                            Text(
-                                                "${index + 1}",
-                                                style = MaterialTheme.typography.labelSmall,
-                                                color = MaterialTheme.colorScheme.onPrimary,
-                                            )
+                                        listOf(0 to 1, 2 to 3).forEach { (a, b) ->
+                                            Row(
+                                                Modifier.weight(1f).fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.spacedBy(3.dp),
+                                            ) {
+                                                listOf(a, b).forEach { index ->
+                                                    Box(Modifier.weight(1f).fillMaxHeight()) {
+                                                        items.getOrNull(index)?.let { item ->
+                                                            GalleryCell(
+                                                                item = item,
+                                                                selectionIndex = selected.indexOf(item.uri),
+                                                                modifier = Modifier.fillMaxSize(),
+                                                                onToggle = { toggle(item.uri) },
+                                                            )
+                                                        }
+                                                    }
+                                                }
+                                            }
                                         }
                                     }
                                 }
                             }
+                            items(items.drop(4), key = { it.uri }) { item ->
+                                GalleryCell(
+                                    item = item,
+                                    selectionIndex = selected.indexOf(item.uri),
+                                    modifier = Modifier.aspectRatio(1f),
+                                    onToggle = { toggle(item.uri) },
+                                )
+                            }
                         }
                         Spacer(Modifier.height(12.dp))
                         if (selected.isNotEmpty()) {
+                            // §11.2: bulk send — one message per item, selection order,
+                            // through the existing upload-pill pipeline.
                             Button(
-                                onClick = { onPickedMedia(selected); onDismiss() },
+                                onClick = { onSendMedia(selected); onDismiss() },
                                 modifier = Modifier.fillMaxWidth(),
                                 shape = CircleShape,
                             ) {
@@ -367,10 +377,69 @@ fun KlicAttachmentSheet(
     }
 }
 
+/** One gallery cell: thumbnail, video-duration pill, numbered selection badge. */
+@Composable
+private fun GalleryCell(
+    item: GalleryItem,
+    selectionIndex: Int,
+    modifier: Modifier = Modifier,
+    onToggle: () -> Unit,
+) {
+    Box(
+        modifier
+            .clip(RoundedCornerShape(10.dp))
+            .clickable(onClick = onToggle),
+    ) {
+        AsyncImage(
+            model = item.uri,
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier.fillMaxSize(),
+        )
+        if (item.isVideo) {
+            Box(
+                Modifier
+                    .align(Alignment.BottomStart)
+                    .padding(4.dp)
+                    .background(Color.Black.copy(alpha = 0.55f), CircleShape)
+                    .padding(horizontal = 6.dp, vertical = 2.dp),
+            ) {
+                Text(
+                    durationText(item.durationMs.toInt()),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color.White,
+                )
+            }
+        }
+        // Numbered check badge — the number is the SEND ORDER (§11.2).
+        Box(
+            Modifier
+                .align(Alignment.TopEnd)
+                .padding(6.dp)
+                .size(22.dp)
+                .background(
+                    if (selectionIndex >= 0) MaterialTheme.colorScheme.primary
+                    else Color.Black.copy(alpha = 0.35f),
+                    CircleShape,
+                ),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (selectionIndex >= 0) {
+                Text(
+                    "${selectionIndex + 1}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onPrimary,
+                )
+            }
+        }
+    }
+}
+
 @Composable
 private fun TabCapsule(label: String, active: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
     Box(
         modifier
+            .clip(CircleShape)
             .background(
                 if (active) MaterialTheme.colorScheme.surface else Color.Transparent,
                 CircleShape,

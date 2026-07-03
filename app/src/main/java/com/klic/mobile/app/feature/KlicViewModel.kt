@@ -546,6 +546,28 @@ class KlicViewModel(
         startUpload(task)
     }
 
+    /**
+     * §11.2 bulk send from the attach sheet: ONE message per item, sent strictly in
+     * selection order — each pill uploads and lands before the next one starts.
+     */
+    fun sendAttachmentsSequentially(conversationId: String, items: List<AttachmentInput>) {
+        if (items.isEmpty()) return
+        replyingTo.value = null
+        val tasks = items.map {
+            UploadTask(
+                id = java.util.UUID.randomUUID().toString(),
+                conversationId = conversationId,
+                body = null,
+                attachments = listOf(it),
+                replyToId = null,
+            )
+        }
+        uploadTasks.value = uploadTasks.value + tasks
+        viewModelScope.launch {
+            for (task in tasks) startUpload(task).join()
+        }
+    }
+
     fun retryUpload(taskId: String) {
         val task = uploadTasks.value.firstOrNull { it.id == taskId && it.failed } ?: return
         updateUploadTask(taskId) { it.copy(failed = false, progress = 0f) }
@@ -869,19 +891,51 @@ class KlicViewModel(
         runCatching { repo.messages(conversationId, before = before) }.getOrNull()
 
     // ── Profile ───────────────────────────────────────────────────────────────
-    fun saveProfile(displayName: String, avatarBytes: ByteArray?, contentType: String?, onDone: () -> Unit) =
-        viewModelScope.launch {
-            runCatching {
-                val key = if (avatarBytes != null && contentType != null) {
-                    repo.uploadAvatar(avatarBytes, contentType)
-                } else null
-                repo.updateProfile(displayName = displayName, avatarKey = key)
-            }.onSuccess { currentUser.value = it; onDone() }
-                .onFailure { error.value = "Couldn't save profile. Try again." }
-        }
 
-    fun setShowLastSeen(value: Boolean) = viewModelScope.launch {
-        runCatching { repo.updateProfile(showLastSeen = value) }.onSuccess { currentUser.value = it }
+    /**
+     * §11.4/§11.5: save the edited profile — display name, @username, About, links and
+     * (optionally) a new avatar. Only changed fields are PATCHed. Server rejections
+     * (e.g. "Username is taken") surface through [onError] for inline display.
+     */
+    fun saveProfile(
+        displayName: String,
+        username: String? = null,
+        setAbout: Boolean = false,
+        about: String? = null,
+        links: List<String>? = null,
+        avatarBytes: ByteArray? = null,
+        contentType: String? = null,
+        onDone: () -> Unit = {},
+        onError: (String?) -> Unit = { error.value = str(com.klic.mobile.app.R.string.err_save_profile) },
+    ) = viewModelScope.launch {
+        runCatching {
+            val key = if (avatarBytes != null && contentType != null) {
+                repo.uploadAvatar(avatarBytes, contentType)
+            } else null
+            repo.updateProfile(
+                displayName = displayName,
+                avatarKey = key,
+                username = username,
+                setAbout = setAbout,
+                about = about,
+                links = links,
+            )
+        }.onSuccess { currentUser.value = it; onDone() }
+            .onFailure { onError(repo.serverMessage(it)) }
+    }
+
+    /** §11.6: PATCH /me with one privacy visibility (EVERYBODY / FRIENDS / NOBODY). */
+    fun setPrivacyVisibility(field: String, value: String) = viewModelScope.launch {
+        runCatching { repo.updatePrivacySetting(field, value) }
+            .onSuccess { currentUser.value = it }
+            .onFailure { error.value = str(com.klic.mobile.app.R.string.err_save_privacy) }
+    }
+
+    /** §11.6: PATCH /me with one privacy toggle (silenceUnknownCallers / readReceipts). */
+    fun setPrivacyToggle(field: String, value: Boolean) = viewModelScope.launch {
+        runCatching { repo.updatePrivacySetting(field, value) }
+            .onSuccess { currentUser.value = it }
+            .onFailure { error.value = str(com.klic.mobile.app.R.string.err_save_privacy) }
     }
 
     // §9.9: profiles render instantly from this session cache, refreshed in background.
