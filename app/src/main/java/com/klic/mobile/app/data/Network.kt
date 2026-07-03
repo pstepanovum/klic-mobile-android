@@ -258,6 +258,22 @@ interface KlicApi {
 
     @DELETE("me")
     suspend fun deleteAccount(): Response<ResponseBody>
+
+    // ── v0.5.5 (§12.1/§12.2): reports + email verification ──
+
+    @GET("me")
+    suspend fun me(): User
+
+    @POST("reports")
+    suspend fun createReport(@Body body: CreateReportRequest): CreateReportResponse
+
+    // Non-Response return: a non-2xx throws HttpException with the server's error
+    // body intact, so "Email already in use" surfaces via serverMessage().
+    @POST("me/email/google")
+    suspend fun linkGoogleEmail(@Body body: GoogleEmailRequest): ResponseBody
+
+    @DELETE("me/email")
+    suspend fun removeEmail(): Response<ResponseBody>
 }
 
 /** Bare, synchronous refresh used by the Authenticator (no auth header, no authenticator → no recursion). */

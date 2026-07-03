@@ -517,6 +517,48 @@ class KlicRepository(
         if (!res.isSuccessful) error("Account deletion failed (${res.code()})")
     }
 
+    // ── v0.5.5 (§12.1): safety reports ────────────────────────────────────────
+
+    /**
+     * Submit a report: user, message, or (with neither target) an app-problem report.
+     * Throws on failure — the sheet surfaces the server's message (e.g. the daily cap).
+     */
+    suspend fun submitReport(
+        category: String,
+        targetUserId: String? = null,
+        messageId: String? = null,
+        details: String? = null,
+    ): String = api.createReport(CreateReportRequest(
+        category = category,
+        targetUserId = targetUserId,
+        messageId = messageId,
+        details = details?.trim()?.takeIf { it.isNotEmpty() },
+    )).id
+
+    // ── v0.5.5 (§12.2): email add/verify via Google ──────────────────────────
+
+    /** Refresh the cached self user from GET /me (now carries email/emailVerified). */
+    suspend fun refreshMe(): User {
+        val user = api.me()
+        currentUser = user
+        tokenStore.saveUser(json.encodeToString(User.serializer(), user))
+        return user
+    }
+
+    /** POST the Google ID token, then refresh /me so the row shows the verified email.
+     *  Non-2xx throws HttpException — "Email already in use" surfaces via serverMessage(). */
+    suspend fun linkGoogleEmail(idToken: String): User {
+        api.linkGoogleEmail(GoogleEmailRequest(idToken))
+        return refreshMe()
+    }
+
+    /** DELETE /me/email — clears email + emailVerified, then refreshes /me. */
+    suspend fun removeEmail(): User {
+        val res = api.removeEmail()
+        if (!res.isSuccessful) error("Email removal failed (${res.code()})")
+        return refreshMe()
+    }
+
     private suspend fun persist(res: AuthResponse) {
         tokenStore.save(res.accessToken, res.refreshToken)
         tokenStore.saveUser(json.encodeToString(User.serializer(), res.user))

@@ -107,6 +107,8 @@ dependencies {
     implementation(libs.androidx.security.crypto)
     implementation(libs.androidx.credentials)
     implementation(libs.androidx.credentials.play.services)
+    // v0.5.5 (§12.2): Google ID token for email verification (Sign in with Google).
+    implementation(libs.googleid)
     implementation(libs.androidx.browser)
     implementation(libs.androidx.appcompat)
 

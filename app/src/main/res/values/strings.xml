@@ -538,4 +538,55 @@
     <string name="privacy_read_receipts">Read receipts</string>
     <string name="privacy_read_receipts_sub">When off, you won\'t send or see read receipts in direct chats. Groups always send them.</string>
     <string name="err_save_privacy">Couldn\'t save the privacy setting. Try again.</string>
+
+    <!-- v0.5.5 §12.1: safety & reporting -->
+    <string name="settings_report_problem">Report a Problem</string>
+    <string name="report_user_row">Report %1$s</string>
+    <string name="report_user_title">Report %1$s</string>
+    <string name="report_message_action">Report message</string>
+    <string name="report_message_title">Report message</string>
+    <string name="report_problem_title">Report a problem</string>
+    <string name="report_pick_reason">What\'s wrong?</string>
+    <string name="report_details_placeholder">Add details (optional)</string>
+    <string name="report_submit">Submit report</string>
+    <string name="report_submitted">Thanks — your report has been submitted.</string>
+    <string name="report_submitted_sub">Our team will review it. Reports are confidential.</string>
+    <string name="report_block_user">Block @%1$s</string>
+    <string name="report_failed">Couldn\'t submit the report. Try again.</string>
+    <string name="report_cat_spam">Spam</string>
+    <string name="report_cat_harassment">Harassment or bullying</string>
+    <string name="report_cat_hate_speech">Hate speech</string>
+    <string name="report_cat_violence">Violence or threats</string>
+    <string name="report_cat_sexual_content">Sexual content</string>
+    <string name="report_cat_child_safety">Child safety</string>
+    <string name="report_cat_scam_fraud">Scam or fraud</string>
+    <string name="report_cat_impersonation">Impersonation</string>
+    <string name="report_cat_illegal_activity">Illegal activity</string>
+    <string name="report_cat_other">Something else</string>
+
+    <!-- v0.5.5 §12.2: email add + verify via Google -->
+    <string name="settings_email">Email</string>
+    <string name="settings_email_add">Add email</string>
+    <string name="settings_email_verified">Verified</string>
+    <string name="settings_email_remove">Remove</string>
+    <string name="settings_email_remove_title">Remove email?</string>
+    <string name="settings_email_remove_body">%1$s will be unlinked from your account.</string>
+    <string name="email_google_cancelled">Sign-in was cancelled.</string>
+    <string name="email_google_no_account">No Google account is available on this device.</string>
+    <string name="email_google_unavailable">Google sign-in isn\'t available right now.</string>
+    <string name="email_link_failed">Couldn\'t link the email. Try again.</string>
+    <string name="email_remove_failed">Couldn\'t remove the email. Try again.</string>
+
+    <!-- v0.5.5 §12.3: chat themes -->
+    <string name="theme_pattern">Pattern</string>
+    <string name="theme_pattern_opacity">Pattern opacity</string>
+    <string name="theme_gradient">Gradient</string>
+    <string name="theme_gradient_none">None</string>
+    <string name="theme_gradient_intensity">Gradient intensity</string>
+    <string name="theme_bubble_color">Bubble color</string>
+    <string name="theme_reset">Reset theme</string>
+    <string name="theme_footer">Your theme applies to all chats on this device.</string>
+    <string name="theme_preview_incoming_1">Hey! Have you seen the new chat themes?</string>
+    <string name="theme_preview_outgoing">Just picked mine — what do you think?</string>
+    <string name="theme_preview_incoming_2">Looks great 😍</string>
 </resources>
