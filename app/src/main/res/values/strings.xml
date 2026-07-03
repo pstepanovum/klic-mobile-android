@@ -486,4 +486,56 @@
     <string name="err_read_scan">Couldn\'t read the scanned document.</string>
     <string name="err_download_file">Couldn\'t download the file.</string>
     <string name="notif_connected_for_calls">Connected for calls</string>
+
+    <!-- v0.5.4 §11.2: attachment sheet v2 + in-app camera -->
+    <string name="attach_camera">Camera</string>
+    <string name="attach_selected_count">%1$d selected</string>
+    <string name="camera_hint">Tap for photo, hold for video</string>
+    <string name="camera_flip">Flip camera</string>
+    <string name="camera_unavailable">The camera isn\'t available right now.</string>
+    <string name="camera_capture_failed">Couldn\'t capture. Try again.</string>
+
+    <!-- v0.5.4 §11.3: passcode sheets -->
+    <string name="applock_choose_passcode">Choose a passcode</string>
+
+    <!-- v0.5.4 §11.4/§11.5: profile edit — username, About, links, photo adjust -->
+    <string name="profile_username_invalid">3–32 characters: lowercase letters, numbers, dots and underscores. No leading or trailing dot.</string>
+    <string name="err_save_profile">Couldn\'t save profile. Try again.</string>
+    <string name="profile_change_photo">Change photo</string>
+    <string name="profile_about">About</string>
+    <string name="profile_about_placeholder">Say something about yourself</string>
+    <string name="about_preset_free">Free to chat</string>
+    <string name="about_preset_slow">Slow to respond</string>
+    <string name="about_preset_traveling">Traveling</string>
+    <string name="about_preset_at_work">At work</string>
+    <string name="about_preset_busy">Busy</string>
+    <string name="about_preset_battery">Battery about to die</string>
+    <string name="about_custom">Custom…</string>
+    <string name="about_custom_title">Your About</string>
+    <string name="about_clear">Clear About</string>
+    <string name="profile_links">Links</string>
+    <string name="profile_add_link">Add link</string>
+    <string name="profile_edit_link">Edit link</string>
+    <string name="profile_remove_link">Remove link</string>
+    <string name="profile_link_placeholder">https://example.com</string>
+    <string name="profile_link_invalid">Enter a valid link starting with http:// or https:// (max 200 characters).</string>
+    <string name="adjust_title">Move and scale</string>
+    <string name="adjust_use_photo">Use photo</string>
+
+    <!-- v0.5.4 §11.6: privacy controls -->
+    <string name="privacy_privacy_section">Privacy</string>
+    <string name="privacy_everybody">Everybody</string>
+    <string name="privacy_my_friends">My friends</string>
+    <string name="privacy_nobody">Nobody</string>
+    <string name="privacy_last_seen_online">Last seen &amp; online</string>
+    <string name="privacy_about_row">About</string>
+    <string name="privacy_profile_picture">Profile picture</string>
+    <string name="privacy_links_row">Links</string>
+    <string name="privacy_groups_row">Groups</string>
+    <string name="privacy_status_row">Status</string>
+    <string name="privacy_silence_unknown">Silence unknown callers</string>
+    <string name="privacy_silence_unknown_sub">Calls from people who aren\'t your friends won\'t ring. They still show in Recent Calls.</string>
+    <string name="privacy_read_receipts">Read receipts</string>
+    <string name="privacy_read_receipts_sub">When off, you won\'t send or see read receipts in direct chats. Groups always send them.</string>
+    <string name="err_save_privacy">Couldn\'t save the privacy setting. Try again.</string>
 </resources>
