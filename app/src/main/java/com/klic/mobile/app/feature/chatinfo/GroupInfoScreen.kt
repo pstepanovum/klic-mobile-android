@@ -65,7 +65,9 @@ import com.klic.mobile.app.feature.chat.messagelist.messagePreview
 import com.klic.mobile.app.ui.components.AvatarView
 import com.klic.mobile.app.ui.components.KlicSearchBar
 import com.klic.mobile.app.ui.theme.KlicIcons
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import androidx.compose.ui.res.stringResource
 import com.klic.mobile.app.R
 
@@ -205,19 +207,12 @@ private fun GroupInfoMain(
     val conversationId = conversation.id
     var memberSheet by remember { mutableStateOf<Member?>(null) }
     var removeTarget by remember { mutableStateOf<Member?>(null) }
+    // §11.5: adjust step (pinch-zoom in a rounded-square mask) before the cover upload.
+    var adjustCoverUri by remember { mutableStateOf<android.net.Uri?>(null) }
 
     // Group cover upload (§8.4) — server-side only the creator may edit.
     val coverPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
-        if (uri != null) {
-            scope.launch {
-                val encoded = ImageUploads.encodeAvatar(context, uri)
-                if (encoded == null) {
-                    vm.error.value = context.getString(R.string.group_photo_read_failed)
-                } else {
-                    vm.updateGroupCover(conversationId, encoded.bytes, encoded.contentType)
-                }
-            }
-        }
+        if (uri != null) adjustCoverUri = uri
     }
 
     Column(
@@ -312,6 +307,7 @@ private fun GroupInfoMain(
                     username = member.username,
                     avatarUrl = member.avatarUrl,
                     isAdmin = conversation.createdById == member.id,
+                    about = member.about,
                     onClick = { memberSheet = member },
                 )
                 if (index != conversation.members.lastIndex) InfoDivider()
@@ -340,6 +336,27 @@ private fun GroupInfoMain(
             }
         }
         Spacer(Modifier.height(28.dp))
+    }
+
+    // §11.5: crop the picked cover to a square via the adjust sheet, then upload
+    // through the EXISTING presign/PUT/PATCH chain (§10.1 step errors intact).
+    adjustCoverUri?.let { uri ->
+        com.klic.mobile.app.ui.components.ImageAdjustSheet(
+            uri = uri,
+            mask = com.klic.mobile.app.ui.components.AdjustMask.ROUNDED_SQUARE,
+            onDone = { bitmap ->
+                adjustCoverUri = null
+                scope.launch {
+                    val encoded = withContext(Dispatchers.IO) { ImageUploads.encodeBitmap(bitmap) }
+                    if (encoded == null) {
+                        vm.error.value = context.getString(R.string.group_photo_read_failed)
+                    } else {
+                        vm.updateGroupCover(conversationId, encoded.bytes, encoded.contentType)
+                    }
+                }
+            },
+            onDismiss = { adjustCoverUri = null },
+        )
     }
 
     // Member action sheet — admins get the danger-zone "Remove from group" (§9.3).
@@ -406,6 +423,7 @@ private fun MemberRow(
     username: String,
     avatarUrl: String?,
     isAdmin: Boolean = false,
+    about: String? = null,
     onClick: (() -> Unit)? = null,
 ) {
     Row(
@@ -419,6 +437,16 @@ private fun MemberRow(
         Column(Modifier.weight(1f).padding(start = 12.dp)) {
             Text(name, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurface)
             Text("@$username", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            // §11.5: the member's About/status line, when their visibility allows it.
+            about?.takeIf { it.isNotBlank() }?.let {
+                Text(
+                    it,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
         }
         if (isAdmin) {
             Text(
@@ -465,6 +493,16 @@ private fun MemberActionSheet(
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
+                    // §11.5: About/status line inside the member sheet.
+                    member.about?.takeIf { it.isNotBlank() }?.let {
+                        Text(
+                            it,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
                 }
             }
             if (canRemove) {

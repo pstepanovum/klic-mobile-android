@@ -182,6 +182,16 @@ fun ProfileScreen(
                                 textAlign = TextAlign.Center,
                             )
                         }
+                        // §11.5: About/status line, when the friend's visibility allows it.
+                        (profile?.about ?: member.about)?.takeIf { it.isNotBlank() }?.let { aboutText ->
+                            Spacer(Modifier.height(8.dp))
+                            Text(
+                                aboutText,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                textAlign = TextAlign.Center,
+                            )
+                        }
                         Spacer(Modifier.height(24.dp))
                         Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                             CallActionButton(KlicIcons.phone, stringResource(R.string.action_audio)) {
@@ -200,6 +210,36 @@ fun ProfileScreen(
                         ChatNotificationsCard(vm, conversationId, isGroup = false)
                         Spacer(Modifier.height(16.dp))
                         ChatInfoSectionsCard(conversationId) { sub = it }
+
+                        // §11.5: profile links, when the friend's visibility allows them.
+                        val profileLinks = profile?.links.orEmpty()
+                        if (profileLinks.isNotEmpty()) {
+                            val linkContext = androidx.compose.ui.platform.LocalContext.current
+                            Spacer(Modifier.height(16.dp))
+                            Box(Modifier.fillMaxWidth()) { InfoSectionLabel(stringResource(R.string.profile_links)) }
+                            InfoCard {
+                                profileLinks.forEachIndexed { index, link ->
+                                    Row(
+                                        Modifier
+                                            .fillMaxWidth()
+                                            .clickable {
+                                                com.klic.mobile.app.data.LinkOpener.open(linkContext, link)
+                                            }
+                                            .padding(vertical = 12.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                    ) {
+                                        Text(
+                                            link,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = MaterialTheme.colorScheme.primary,
+                                            maxLines = 1,
+                                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                                        )
+                                    }
+                                    if (index != profileLinks.lastIndex) InfoDivider()
+                                }
+                            }
+                        }
 
                         // §9.6: groups in common — GROUP conversations this friend is in,
                         // derived from the cached conversations list.

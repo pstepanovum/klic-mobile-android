@@ -48,6 +48,38 @@ object ImageUploads {
         quality: Int = 85,
     ): EncodedImage? = encodeImage(context, uri, maxDimension, quality)
 
+    /**
+     * §11.5: decode a picked photo for the pinch-zoom adjust step. Forces a SOFTWARE
+     * allocation (the crop draws it onto a software Canvas) and bounds it to 4096px.
+     */
+    fun decodeForAdjust(context: Context, uri: Uri): Bitmap? = runCatching {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            val source = ImageDecoder.createSource(context.contentResolver, uri)
+            ImageDecoder.decodeBitmap(source) { decoder, info, _ ->
+                decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
+                decoder.isMutableRequired = false
+                val maxSide = max(info.size.width, info.size.height)
+                if (maxSide > 4096) decoder.setTargetSampleSize((maxSide / 4096f).roundToInt().coerceAtLeast(1))
+            }
+        } else {
+            context.contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it) }
+        }
+    }.getOrNull()
+
+    /** §11.5: JPEG-encode an already-cropped bitmap (adjusted avatar / group cover). */
+    fun encodeBitmap(bitmap: Bitmap, quality: Int = 85): EncodedImage? {
+        val bytes = java.io.ByteArrayOutputStream().use { out ->
+            if (!bitmap.compress(Bitmap.CompressFormat.JPEG, quality, out)) return null
+            out.toByteArray()
+        }
+        return EncodedImage(
+            bytes = bytes,
+            contentType = "image/jpeg",
+            width = bitmap.width,
+            height = bitmap.height,
+        )
+    }
+
     private fun decodeBitmap(resolver: ContentResolver, uri: Uri): Bitmap? =
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             val source = ImageDecoder.createSource(resolver, uri)

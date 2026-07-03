@@ -14,6 +14,18 @@ data class User(
     val showLastSeen: Boolean? = null,   // present on /me + auth responses
     /** §10.4: auto-delete window in months (null = off); PATCH /me round-trips it. */
     val deleteIfAwayMonths: Int? = null,
+    // ── v0.5.4 (§11.5): profile about/status line + links ──
+    val about: String? = null,
+    val links: List<String>? = null,
+    // ── v0.5.4 (§11.6): privacy controls (EVERYBODY / FRIENDS / NOBODY) ──
+    val lastSeenVisibility: String? = null,
+    val aboutVisibility: String? = null,
+    val avatarVisibility: String? = null,
+    val linksVisibility: String? = null,
+    val groupsVisibility: String? = null,
+    val statusVisibility: String? = null,
+    val silenceUnknownCallers: Boolean? = null,
+    val readReceipts: Boolean? = null,
 )
 
 /** A friend's profile (GET /users/:id). lastSeenAt/online are null when hidden by privacy. */
@@ -25,6 +37,9 @@ data class UserProfile(
     val avatarUrl: String? = null,
     val lastSeenAt: String? = null,
     val online: Boolean? = null,
+    /** §11.5: about + links, present when the subject's visibility allows it. */
+    val about: String? = null,
+    val links: List<String>? = null,
 )
 
 @Serializable
@@ -73,6 +88,8 @@ data class Member(
     val username: String,
     val displayName: String,
     val avatarUrl: String? = null,
+    /** §11.5: About/status line, present when the member's visibility allows it. */
+    val about: String? = null,
 )
 
 @Serializable
