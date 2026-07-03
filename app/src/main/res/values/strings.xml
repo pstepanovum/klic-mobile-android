@@ -108,4 +108,43 @@
     <string name="profile_block_format">Block %1$s</string>
     <string name="profile_block">Block</string>
     <string name="profile_block_confirm">They won\'t be able to message or call you. You can unblock them later in Settings → Privacy and Security.</string>
+
+    <!-- Media viewer (§10.9) -->
+    <string name="viewer_share">Share</string>
+    <string name="viewer_share_failed">Couldn\'t share this file.</string>
+    <string name="viewer_forward">Forward</string>
+    <string name="viewer_forward_to">Forward to…</string>
+    <string name="viewer_forward_failed">Couldn\'t forward this file.</string>
+    <string name="viewer_forwarded">Forwarded.</string>
+    <string name="viewer_star">Star</string>
+    <string name="viewer_unstar">Unstar</string>
+    <string name="viewer_reply">Reply</string>
+
+    <!-- Pickers -->
+    <string name="picker_frequent">Frequent</string>
+    <string name="picker_send_count">Send (%1$d)</string>
+
+    <!-- Attachment sheet (§10.11) -->
+    <string name="attach_tab_gallery">Gallery</string>
+    <string name="attach_tab_files">Files</string>
+    <string name="attach_gallery_permission">Allow photo access to pick from your gallery.</string>
+    <string name="attach_allow_access">Allow access</string>
+    <string name="attach_select_from_gallery">Select from Gallery</string>
+    <string name="attach_select_from_files">Select from Files</string>
+    <string name="attach_scan_document">Scan Document</string>
+    <string name="attach_scan_unavailable">Document scanning isn\'t available on this device — use Select from Files instead.</string>
+    <string name="attach_album_title">Show</string>
+    <string name="attach_album_recents">Recents</string>
+    <string name="attach_album_favorites">Favorites</string>
+    <string name="attach_album_videos">Videos</string>
+    <string name="attach_album_selfies">Selfies</string>
+
+    <!-- Media editor (§10.9) -->
+    <string name="editor_undo">Undo</string>
+    <string name="editor_crop_free">Free</string>
+    <string name="editor_rotate">Rotate 90°</string>
+    <string name="editor_quality_hd">HD</string>
+    <string name="editor_quality_standard">Standard</string>
+    <string name="editor_add_caption">Add a caption</string>
+    <string name="editor_text">Text</string>
 </resources>

@@ -74,12 +74,11 @@ import com.klic.mobile.app.data.Attachment
 import com.klic.mobile.app.data.Conversation
 import com.klic.mobile.app.data.Message
 import com.klic.mobile.app.feature.KlicViewModel
-import com.klic.mobile.app.feature.chat.actions.ImageViewerOverlay
 import com.klic.mobile.app.feature.chat.actions.MessageActionsOverlay
 import com.klic.mobile.app.feature.chat.actions.ReplyComposerBar
 import com.klic.mobile.app.feature.chat.actions.TypingBubble
-import com.klic.mobile.app.feature.chat.composer.AttachSheet
 import com.klic.mobile.app.feature.chat.composer.CaptureMode
+import com.klic.mobile.app.feature.chat.composer.KlicAttachmentSheet
 import com.klic.mobile.app.feature.chat.composer.ComposerBar
 import com.klic.mobile.app.feature.chat.composer.MentionCandidate
 import com.klic.mobile.app.feature.chat.composer.MentionSuggestionStrip
@@ -88,6 +87,8 @@ import com.klic.mobile.app.feature.chat.composer.insertMention
 import com.klic.mobile.app.feature.chat.composer.mentionQueryAt
 import com.klic.mobile.app.feature.chat.media.AttachmentDownloads
 import com.klic.mobile.app.feature.chat.media.FileDetailSheet
+import com.klic.mobile.app.feature.chat.media.MediaEditorDialog
+import com.klic.mobile.app.feature.chat.media.MediaViewerOverlay
 import com.klic.mobile.app.feature.chat.media.PdfViewerOverlay
 import com.klic.mobile.app.feature.chat.media.PendingMediaBar
 import com.klic.mobile.app.feature.chat.media.PendingMediaDraft
@@ -166,7 +167,9 @@ fun ChatScreen(
     val clipboard = LocalClipboardManager.current
     var menuTarget by remember { mutableStateOf<Message?>(null) }
     var deleteTarget by remember { mutableStateOf<Message?>(null) }
-    var viewerUrl by remember { mutableStateOf<String?>(null) }
+    var viewerTarget by remember { mutableStateOf<Pair<Message, Attachment>?>(null) }
+    // §10.9 pre-send editor target (staged draft id).
+    var editorTarget by remember { mutableStateOf<PendingMediaDraft?>(null) }
     // §7.3: FILE attachments are downloaded to cache and viewed in-app, never opened by URL.
     var pdfFile by remember { mutableStateOf<File?>(null) }
     var fileDetail by remember { mutableStateOf<Pair<Attachment, File>?>(null) }
@@ -411,7 +414,7 @@ fun ChatScreen(
                         onCallBack = { kind -> vm.startCall(conversation.id, kind, title); onCall(kind) },
                         onLongPress = { menuTarget = msg },
                         onReactionTap = { emoji -> vm.react(conversation.id, msg.id, emoji) },
-                        onImageClick = { url -> viewerUrl = url },
+                        onMediaClick = { att -> viewerTarget = msg to att },
                         onFileClick = { att ->
                             scope.launch {
                                 val file = AttachmentDownloads.ensureLocal(context, att, conversation.id)
@@ -510,6 +513,7 @@ fun ChatScreen(
                     PendingMediaBar(
                         items = pendingMedia,
                         onRemove = { id -> pendingMedia = pendingMedia.filterNot { it.id == id } },
+                        onEdit = { id -> editorTarget = pendingMedia.firstOrNull { it.id == id } },
                     )
                 }
                 replyingTo?.let { target ->
@@ -597,29 +601,31 @@ fun ChatScreen(
     }
 
     if (showAttachSheet) {
-        ModalBottomSheet(
-            onDismissRequest = { showAttachSheet = false },
-            sheetState = sheetState,
-            containerColor = MaterialTheme.colorScheme.surface,
-        ) {
-            AttachSheet(
-                onPhotos = {
-                    scope.launch { sheetState.hide() }.invokeOnCompletion { showAttachSheet = false }
-                    mediaLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo))
-                },
-                onCamera = {
-                    scope.launch { sheetState.hide() }.invokeOnCompletion { showAttachSheet = false }
-                    val file = File.createTempFile("klic_", ".jpg", context.cacheDir)
-                    val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
-                    tempCameraUri = uri
-                    cameraLauncher.launch(uri)
-                },
-                onFile = {
-                    scope.launch { sheetState.hide() }.invokeOnCompletion { showAttachSheet = false }
-                    fileLauncher.launch(arrayOf("*/*"))
-                },
-            )
-        }
+        // §10.11: ONE Klic attachment sheet — Gallery | Files tabs.
+        KlicAttachmentSheet(
+            onPickedMedia = { uris ->
+                scope.launch {
+                    val drafts = uris.mapNotNull { loadMediaDraft(context, it) }
+                    if (drafts.isEmpty()) vm.error.value = "Couldn't read selected media."
+                    else pendingMedia = pendingMedia + drafts
+                }
+            },
+            onSystemGallery = {
+                mediaLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo))
+            },
+            onSelectFiles = { fileLauncher.launch(arrayOf("*/*")) },
+            onScannedPdf = { uri ->
+                scope.launch {
+                    val attachment = loadFileAttachment(context, uri)
+                    if (attachment != null) {
+                        vm.sendAttachments(conversation.id, null, listOf(attachment))
+                    } else {
+                        vm.error.value = "Couldn't read the scanned document."
+                    }
+                }
+            },
+            onDismiss = { showAttachSheet = false },
+        )
     }
 
     if (showStickerSheet) {
@@ -672,12 +678,33 @@ fun ChatScreen(
         )
     }
 
-    viewerUrl?.let { url ->
-        ImageViewerOverlay(url = url, onDismiss = { viewerUrl = null })
+    viewerTarget?.let { (msg, att) ->
+        MediaViewerOverlay(
+            vm = vm,
+            message = msg,
+            att = att,
+            conversationId = conversation.id,
+            onReply = { /* reply bar appears in this same chat */ },
+            onDismiss = { viewerTarget = null },
+        )
     }
 
     pdfFile?.let { file ->
         PdfViewerOverlay(file = file, onDismiss = { pdfFile = null })
+    }
+
+    // §10.9: pre-send media editor (caption + draw/text/crop/quality).
+    editorTarget?.let { target ->
+        MediaEditorDialog(
+            draft = target,
+            initialCaption = draft.text,
+            onDone = { updated, caption ->
+                pendingMedia = pendingMedia.map { if (it.id == updated.id) updated else it }
+                draft = TextFieldValue(caption, selection = androidx.compose.ui.text.TextRange(caption.length))
+                editorTarget = null
+            },
+            onDismiss = { editorTarget = null },
+        )
     }
 
     fileDetail?.let { (att, file) ->

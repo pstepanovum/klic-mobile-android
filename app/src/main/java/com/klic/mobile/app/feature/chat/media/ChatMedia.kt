@@ -19,6 +19,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -139,7 +140,12 @@ private fun queryDisplayName(context: Context, uri: Uri): String? =
     }.getOrNull()
 
 @Composable
-fun PendingMediaBar(items: List<PendingMediaDraft>, onRemove: (String) -> Unit) {
+fun PendingMediaBar(
+    items: List<PendingMediaDraft>,
+    onRemove: (String) -> Unit,
+    /** §10.9: opens the pre-send media editor for one staged item. */
+    onEdit: (String) -> Unit = {},
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -177,6 +183,23 @@ fun PendingMediaBar(items: List<PendingMediaDraft>, onRemove: (String) -> Unit) 
                             .align(Alignment.BottomStart)
                             .padding(6.dp)
                             .size(16.dp),
+                    )
+                }
+                // §10.9: pencil — pre-send edit (caption/draw/text/crop/quality).
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(6.dp)
+                        .size(22.dp)
+                        .background(Color.Black.copy(alpha = 0.55f), CircleShape)
+                        .clickable { onEdit(item.id) },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Edit,
+                        contentDescription = "Edit",
+                        tint = Color.White,
+                        modifier = Modifier.size(12.dp),
                     )
                 }
                 Box(

@@ -64,6 +64,8 @@ import com.klic.mobile.app.feature.chat.actions.DeletedBubble
 import com.klic.mobile.app.feature.chat.actions.ReactionPillsRow
 import com.klic.mobile.app.feature.chat.actions.ReplyQuote
 import com.klic.mobile.app.feature.chat.media.FileAttachmentView
+import com.klic.mobile.app.feature.chat.media.PdfFileBubbleView
+import com.klic.mobile.app.feature.chat.media.isPdfAttachment
 import com.klic.mobile.app.feature.chat.media.formatByteSize
 import com.klic.mobile.app.feature.chat.media.isAudioAttachment
 import com.klic.mobile.app.feature.chat.stickers.CallEventBubble
@@ -95,7 +97,8 @@ internal fun MessageBubble(
     onCallBack: (String) -> Unit = {},
     onLongPress: () -> Unit = {},
     onReactionTap: (String) -> Unit = {},
-    onImageClick: (String) -> Unit = {},
+    /** §10.9: opens the media viewer on the tapped IMAGE or VIDEO attachment. */
+    onMediaClick: (Attachment) -> Unit = {},
     onFileClick: (Attachment) -> Unit = {},
 ) {
     if (message.isDeleted) { DeletedBubble(isMine); return }
@@ -162,7 +165,7 @@ internal fun MessageBubble(
                         // No caption: bare image/bento with the overlay time + ticks pill.
                         message.replyTo?.let { ReplyQuote(it, replyAuthorName) }
                         Box(Modifier.clip(RoundedCornerShape(16.dp))) {
-                            BentoImageGrid(imageAtts, tileRadius = 12.dp, onImageClick = onImageClick, onLongPress = onLongPress)
+                            BentoImageGrid(imageAtts, tileRadius = 12.dp, onImageClick = onMediaClick, onLongPress = onLongPress)
                             MediaTimePill(
                                 time = time,
                                 status = status,
@@ -189,7 +192,7 @@ internal fun MessageBubble(
                                     ReplyQuote(it, replyAuthorName, onPrimary = isMine)
                                 }
                             }
-                            BentoImageGrid(imageAtts, tileRadius = 14.dp, onImageClick = onImageClick, onLongPress = onLongPress)
+                            BentoImageGrid(imageAtts, tileRadius = 14.dp, onImageClick = onMediaClick, onLongPress = onLongPress)
                             Row(
                                 verticalAlignment = Alignment.Bottom,
                                 modifier = Modifier.width(240.dp).padding(horizontal = 6.dp, vertical = 6.dp),
@@ -228,7 +231,7 @@ internal fun MessageBubble(
                             .aspectRatio(imageAspect(videoAtt))
                             .clip(RoundedCornerShape(16.dp))
                             .background(Color(0xFF1A1A1A))
-                            .combinedClickable(onClick = {}, onLongClick = onLongPress),
+                            .combinedClickable(onClick = { onMediaClick(videoAtt) }, onLongClick = onLongPress),
                     ) {
                         Icon(
                             imageVector = Icons.Filled.PlayArrow,
@@ -264,14 +267,26 @@ internal fun MessageBubble(
                             onLongClick = onLongPress,
                         ),
                     ) {
-                        FileAttachmentView(
-                            att = fileAtt,
-                            isMine = isMine,
-                            time = time,
-                            status = status,
-                            conversationId = message.conversationId,
-                            starred = message.starred,
-                        )
+                        // §10.10: PDFs preview their first page; other files keep the pill.
+                        if (isPdfAttachment(fileAtt)) {
+                            PdfFileBubbleView(
+                                att = fileAtt,
+                                isMine = isMine,
+                                time = time,
+                                status = status,
+                                conversationId = message.conversationId,
+                                starred = message.starred,
+                            )
+                        } else {
+                            FileAttachmentView(
+                                att = fileAtt,
+                                isMine = isMine,
+                                time = time,
+                                status = status,
+                                conversationId = message.conversationId,
+                                starred = message.starred,
+                            )
+                        }
                     }
                 }
 
@@ -348,7 +363,7 @@ internal fun MessageBubble(
 private fun BentoImageGrid(
     atts: List<Attachment>,
     tileRadius: Dp,
-    onImageClick: (String) -> Unit,
+    onImageClick: (Attachment) -> Unit,
     onLongPress: () -> Unit,
 ) {
     val spacing = 2.dp
@@ -374,7 +389,7 @@ private fun BentoImageGrid(
             modifier
                 .clip(RoundedCornerShape(tileRadius))
                 .combinedClickable(
-                    onClick = { if (allowed) onImageClick(att.url) else manuallyRequested = true },
+                    onClick = { if (allowed) onImageClick(att) else manuallyRequested = true },
                     onLongClick = onLongPress,
                 ),
         ) {

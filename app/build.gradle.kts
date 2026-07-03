@@ -97,9 +97,10 @@ dependencies {
     // Animations
     implementation(libs.lottie.compose)
 
-    // Image loading (avatars, SVG stickers)
+    // Image loading (avatars, SVG stickers) + video grid thumbnails (§10.11)
     implementation(libs.coil.compose)
     implementation(libs.coil.svg)
+    implementation(libs.coil.video)
 
     // v0.5.3 (§10.4): app lock (EncryptedSharedPreferences), passkeys (CredentialManager),
     // in-app browser (Custom Tabs); per-app locales (§10.5).

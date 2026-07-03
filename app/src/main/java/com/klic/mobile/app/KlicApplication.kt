@@ -70,7 +70,11 @@ class KlicApplication : Application(), ImageLoaderFactory {
     // App-wide Coil loader that can decode the SVG sticker pack served from the API.
     override fun newImageLoader(): ImageLoader =
         ImageLoader.Builder(this)
-            .components { add(SvgDecoder.Factory()) }
+            .components {
+                add(SvgDecoder.Factory())
+                // §10.11: video thumbnails in the attachment-sheet gallery grid.
+                add(coil.decode.VideoFrameDecoder.Factory())
+            }
             // Attribute image/sticker fetches in the data-usage counters (§8.3).
             .okHttpClient { okhttp3.OkHttpClient.Builder().addInterceptor(DataUsage.interceptor).build() }
             .memoryCache {
