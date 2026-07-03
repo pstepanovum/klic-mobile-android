@@ -207,6 +207,8 @@ private fun GroupInfoMain(
     val conversationId = conversation.id
     var memberSheet by remember { mutableStateOf<Member?>(null) }
     var removeTarget by remember { mutableStateOf<Member?>(null) }
+    // §12.1: member picked "Report" on the action sheet.
+    var reportTarget by remember { mutableStateOf<Member?>(null) }
     // §11.5: adjust step (pinch-zoom in a rounded-square mask) before the cover upload.
     var adjustCoverUri by remember { mutableStateOf<android.net.Uri?>(null) }
 
@@ -359,7 +361,8 @@ private fun GroupInfoMain(
         )
     }
 
-    // Member action sheet — admins get the danger-zone "Remove from group" (§9.3).
+    // Member action sheet — admins get the danger-zone "Remove from group" (§9.3);
+    // everyone gets "Report" (§12.1).
     memberSheet?.let { member ->
         MemberActionSheet(
             member = member,
@@ -369,7 +372,23 @@ private fun GroupInfoMain(
                 memberSheet = null
                 removeTarget = member
             },
+            onReport = {
+                memberSheet = null
+                reportTarget = member
+            },
             onDismiss = { memberSheet = null },
+        )
+    }
+
+    reportTarget?.let { member ->
+        com.klic.mobile.app.feature.report.ReportSheet(
+            vm = vm,
+            target = com.klic.mobile.app.feature.report.ReportTarget.User(
+                userId = member.id,
+                displayName = member.displayName,
+                username = member.username,
+            ),
+            onDismiss = { reportTarget = null },
         )
     }
 
@@ -461,7 +480,8 @@ private fun MemberRow(
     }
 }
 
-/** Rounded member sheet: identity header + admin-only "Remove from group" (§9.3). */
+/** Rounded member sheet: identity header, "Report" (§12.1) + admin-only
+ *  "Remove from group" (§9.3). */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun MemberActionSheet(
@@ -469,6 +489,7 @@ private fun MemberActionSheet(
     isCreator: Boolean,
     canRemove: Boolean,
     onRemove: () -> Unit,
+    onReport: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     ModalBottomSheet(
@@ -505,13 +526,27 @@ private fun MemberActionSheet(
                     }
                 }
             }
-            if (canRemove) {
-                Column(
-                    Modifier
-                        .fillMaxWidth()
-                        .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(20.dp))
-                        .padding(horizontal = 18.dp),
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(20.dp))
+                    .padding(horizontal = 18.dp),
+            ) {
+                // §12.1: report this member — the shared report sheet, user target.
+                Row(
+                    Modifier.fillMaxWidth().clickable(onClick = onReport).padding(vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
+                    Text(
+                        stringResource(R.string.report_user_row, member.displayName),
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+                if (canRemove) {
+                    androidx.compose.material3.HorizontalDivider(
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f),
+                    )
                     Row(
                         Modifier.fillMaxWidth().clickable(onClick = onRemove).padding(vertical = 14.dp),
                         verticalAlignment = Alignment.CenterVertically,
@@ -523,8 +558,8 @@ private fun MemberActionSheet(
                         )
                     }
                 }
-                Spacer(Modifier.height(12.dp))
             }
+            Spacer(Modifier.height(12.dp))
             Button(
                 onClick = onDismiss,
                 modifier = Modifier.fillMaxWidth(),
