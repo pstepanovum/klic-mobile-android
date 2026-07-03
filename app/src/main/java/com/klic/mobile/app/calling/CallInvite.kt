@@ -14,6 +14,8 @@ data class CallInvite(
     val conversationType: String = "DIRECT",
     val conversationTitle: String = "",
     val participantCount: Int = 0,
+    /** §11.6: caller isn't a friend and the callee silences unknown callers — no ring. */
+    val silenced: Boolean = false,
 ) {
     val isGroup: Boolean get() = conversationType == "GROUP"
 
@@ -31,6 +33,7 @@ data class CallInvite(
         putString("conversationType", conversationType)
         putString("conversationTitle", conversationTitle)
         putInt("participantCount", participantCount)
+        putBoolean("silenced", silenced)
     }
 
     companion object {
@@ -44,6 +47,7 @@ data class CallInvite(
             conversationType = d["conversationType"] ?: "DIRECT",
             conversationTitle = d["conversationTitle"].orEmpty(),
             participantCount = d["participantCount"]?.toIntOrNull() ?: 0,
+            silenced = d["silenced"] == "true" || d["silenced"] == "1",
         )
 
         fun fromIntent(intent: Intent): CallInvite? {
@@ -58,6 +62,7 @@ data class CallInvite(
                 conversationType = intent.getStringExtra("conversationType") ?: "DIRECT",
                 conversationTitle = intent.getStringExtra("conversationTitle").orEmpty(),
                 participantCount = intent.getIntExtra("participantCount", 0),
+                silenced = intent.getBooleanExtra("silenced", false),
             )
         }
     }

@@ -68,16 +68,47 @@ class KlicRepository(
         displayName: String? = null,
         showLastSeen: Boolean? = null,
         avatarKey: String? = null,
+        username: String? = null,
+        setAbout: Boolean = false,
+        about: String? = null,
+        links: List<String>? = null,
     ): User {
         val body = JsonObject(buildMap {
             displayName?.let { put("displayName", JsonPrimitive(it)) }
             showLastSeen?.let { put("showLastSeen", JsonPrimitive(it)) }
             avatarKey?.let { put("avatarKey", JsonPrimitive(it)) }
+            username?.let { put("username", JsonPrimitive(it)) }
+            if (setAbout) put("about", about?.let { JsonPrimitive(it) } ?: JsonNull)
+            links?.let { list ->
+                put("links", kotlinx.serialization.json.JsonArray(list.map { JsonPrimitive(it) }))
+            }
         })
+        return patchMe(body)
+    }
+
+    /** §11.6: PATCH /me with one privacy field (visibility enum string or toggle). */
+    suspend fun updatePrivacySetting(field: String, value: String): User =
+        patchMe(JsonObject(mapOf(field to JsonPrimitive(value))))
+
+    suspend fun updatePrivacySetting(field: String, value: Boolean): User =
+        patchMe(JsonObject(mapOf(field to JsonPrimitive(value))))
+
+    private suspend fun patchMe(body: JsonObject): User {
         val user = api.updateProfile(body)
         currentUser = user
         tokenStore.saveUser(json.encodeToString(User.serializer(), user))
         return user
+    }
+
+    /** Best-effort extraction of the server's error message (e.g. "Username is taken"). */
+    fun serverMessage(e: Throwable): String? {
+        val http = e as? retrofit2.HttpException ?: return null
+        return runCatching {
+            val raw = http.response()?.errorBody()?.string() ?: return null
+            val obj = json.parseToJsonElement(raw) as? JsonObject ?: return null
+            (obj["message"] as? JsonPrimitive)?.content
+                ?: (obj["error"] as? JsonPrimitive)?.content
+        }.getOrNull()
     }
 
     /** PUT raw bytes to a presigned URL off the main thread; throws on a non-2xx response.

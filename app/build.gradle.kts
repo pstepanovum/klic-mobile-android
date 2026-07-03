@@ -120,4 +120,11 @@ dependencies {
     // v0.5.3 (§10.9): full-screen video playback in the media viewer.
     implementation(libs.media3.exoplayer)
     implementation(libs.media3.ui)
+
+    // v0.5.4 (§11.2): live camera tile + in-app photo/video capture in the attach sheet.
+    implementation(libs.camerax.core)
+    implementation(libs.camerax.camera2)
+    implementation(libs.camerax.lifecycle)
+    implementation(libs.camerax.view)
+    implementation(libs.camerax.video)
 }

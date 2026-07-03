@@ -302,7 +302,9 @@ private fun NewMessageSheet(
     var permissionBannerDismissed by remember { mutableStateOf(false) }
     var selectedIds by remember { mutableStateOf(setOf<String>()) }
     var groupName by remember { mutableStateOf("") }
-    var groupAvatarUri by remember { mutableStateOf<Uri?>(null) }
+    // §11.5: the picked cover goes through the adjust step; we keep the cropped bitmap.
+    var groupAvatarAdjustUri by remember { mutableStateOf<Uri?>(null) }
+    var groupAvatarBitmap by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
     var contactUsername by remember { mutableStateOf("") }
 
     val context = LocalContext.current
@@ -313,7 +315,20 @@ private fun NewMessageSheet(
 
     val avatarPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent(),
-    ) { uri -> if (uri != null) groupAvatarUri = uri }
+    ) { uri -> if (uri != null) groupAvatarAdjustUri = uri }
+
+    // §11.5: pinch-zoom/drag in a rounded-square mask before the cover is attached.
+    groupAvatarAdjustUri?.let { uri ->
+        com.klic.mobile.app.ui.components.ImageAdjustSheet(
+            uri = uri,
+            mask = com.klic.mobile.app.ui.components.AdjustMask.ROUNDED_SQUARE,
+            onDone = { bitmap ->
+                groupAvatarBitmap = bitmap
+                groupAvatarAdjustUri = null
+            },
+            onDismiss = { groupAvatarAdjustUri = null },
+        )
+    }
 
     LaunchedEffect(Unit) { vm.loadFriends() }
 
@@ -535,9 +550,9 @@ private fun NewMessageSheet(
                                 .clickable { avatarPickerLauncher.launch("image/*") },
                             contentAlignment = Alignment.Center,
                         ) {
-                            if (groupAvatarUri != null) {
+                            if (groupAvatarBitmap != null) {
                                 AsyncImage(
-                                    model = groupAvatarUri,
+                                    model = groupAvatarBitmap,
                                     contentDescription = "Group avatar",
                                     modifier = Modifier
                                         .size(80.dp)
@@ -563,10 +578,10 @@ private fun NewMessageSheet(
                             text = stringResource(R.string.common_create),
                             enabled = groupName.isNotBlank(),
                             onClick = {
-                                // Encode the picked cover (if any) so it uploads right after
+                                // Encode the adjusted cover (if any) so it uploads right after
                                 // creation — previously the pick was silently dropped (§8.4).
                                 scope.launch {
-                                    val encoded = groupAvatarUri?.let { ImageUploads.encodeAvatar(context, it) }
+                                    val encoded = groupAvatarBitmap?.let { ImageUploads.encodeBitmap(it) }
                                     vm.createGroupConversation(
                                         groupName,
                                         selectedIds.toList(),

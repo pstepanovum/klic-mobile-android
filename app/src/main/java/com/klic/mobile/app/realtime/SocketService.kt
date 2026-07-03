@@ -54,6 +54,8 @@ class SocketService {
         val conversationType: String = "DIRECT",
         val conversationTitle: String = "",
         val participantCount: Int = 0,
+        /** §11.6: true → suppress the in-app ringtone (silence unknown callers). */
+        val silenced: Boolean = false,
     )
 
     data class CallEvent(
@@ -171,6 +173,7 @@ class SocketService {
                         conversationType = json.optString("conversationType", "DIRECT"),
                         conversationTitle = json.optString("conversationTitle"),
                         participantCount = json.optInt("participantCount", 0),
+                        silenced = json.optBoolean("silenced", false),
                     )
                 )
             }

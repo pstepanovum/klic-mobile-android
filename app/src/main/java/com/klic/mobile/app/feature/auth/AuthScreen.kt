@@ -29,6 +29,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
@@ -116,9 +117,9 @@ fun AuthScreen(vm: KlicViewModel) {
 
             PillButton(
                 text = if (isRegistering) stringResource(R.string.auth_sign_up) else stringResource(R.string.auth_log_in),
-                modifier = Modifier.then(
-                    if (isRegistering && !agreedToPrivacy) Modifier.clip(CircleShape) else Modifier
-                ),
+                // Sign-up requires agreeing to the privacy policy first (matches iOS).
+                enabled = !isRegistering || agreedToPrivacy,
+                modifier = Modifier.alpha(if (isRegistering && !agreedToPrivacy) 0.4f else 1f),
             ) {
                 if (isRegistering) vm.register(username, password, displayName)
                 else vm.login(username, password)
