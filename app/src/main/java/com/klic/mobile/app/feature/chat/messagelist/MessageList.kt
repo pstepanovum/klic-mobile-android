@@ -90,6 +90,8 @@ internal fun MessageBubble(
     onFileClick: (Attachment) -> Unit = {},
 ) {
     if (message.isDeleted) { DeletedBubble(isMine); return }
+    // SYSTEM notices ("«admin» removed «target»", §9.3) render as a centred pill.
+    if (message.kind == "SYSTEM") { SystemNotice(message.body); return }
     if (message.isCallEvent && message.call != null) {
         CallEventBubble(message.call, outgoing = isMine, time = shortTime(message.createdAt), onCallBack = onCallBack)
         return
@@ -526,6 +528,27 @@ internal fun presenceSubtitle(presence: com.klic.mobile.app.realtime.SocketServi
         LocalDate.now() -> "last seen $time"
         LocalDate.now().minusDays(1) -> "last seen yesterday"
         else -> "last seen ${DateTimeFormatter.ofPattern("MMM d").format(date)}"
+    }
+}
+
+/** Centred pill for SYSTEM notices — same visual language as the date separator. */
+@Composable
+private fun SystemNotice(text: String) {
+    Box(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Surface(
+            shape = RoundedCornerShape(50),
+            color = MaterialTheme.colorScheme.surfaceVariant,
+        ) {
+            Text(
+                text,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp),
+            )
+        }
     }
 }
 

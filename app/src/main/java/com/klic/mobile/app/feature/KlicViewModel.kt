@@ -108,6 +108,22 @@ class KlicViewModel(
                 // sends back for multi-device sync.
                 val msg = container.e2eeMessaging.materialize(raw, currentUser.value?.id)
                 if (msg.conversationId == openConversationId) upsertMessage(msg)
+                // SYSTEM fanout (e.g. "«admin» removed «target»", §9.3) means membership
+                // changed — refresh the conversations list so member rows reconcile.
+                if (msg.kind == "SYSTEM") loadConversations()
+            }
+        }
+        viewModelScope.launch {
+            // §9.3: this user was removed from a group — drop the conversation locally.
+            // Screens showing it (chat / group info) observe the list and pop themselves.
+            socket.removedConversations.collect { convId ->
+                conversations.value = conversations.value.filterNot { it.id == convId }
+                if (openConversationId == convId) {
+                    openConversationId = null
+                    messages.value = emptyList()
+                    chatActiveCall.value = null
+                    replyingTo.value = null
+                }
             }
         }
         viewModelScope.launch {
@@ -336,6 +352,26 @@ class KlicViewModel(
                 }
                 .onFailure { error.value = "Couldn't update the group photo. Try again." }
         }
+
+    /** Admin removes a group member (§9.3): optimistic drop, restored if the call fails. */
+    fun removeGroupMember(conversationId: String, userId: String) = viewModelScope.launch {
+        val removed = conversations.value
+            .firstOrNull { it.id == conversationId }?.members?.firstOrNull { it.id == userId }
+            ?: return@launch
+        conversations.value = conversations.value.map { c ->
+            if (c.id == conversationId) c.copy(members = c.members.filterNot { it.id == userId }) else c
+        }
+        runCatching { repo.removeConversationMember(conversationId, userId) }
+            .onFailure {
+                // Reconcile: put the member back and surface the failure.
+                conversations.value = conversations.value.map { c ->
+                    if (c.id == conversationId && c.members.none { it.id == userId }) {
+                        c.copy(members = c.members + removed)
+                    } else c
+                }
+                error.value = "Couldn't remove ${removed.displayName}. Try again."
+            }
+    }
 
     fun openChat(conversationId: String) = viewModelScope.launch {
         openConversationId = conversationId

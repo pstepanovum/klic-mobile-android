@@ -381,6 +381,12 @@ class KlicRepository(
 
     // ── Group management (§8.4) ──────────────────────────────────────────────
 
+    /** Admin removes a member (§9.3). Throws on failure so the caller can reconcile. */
+    suspend fun removeConversationMember(conversationId: String, userId: String) {
+        val res = api.removeConversationMember(conversationId, userId)
+        if (!res.isSuccessful) error("Member removal failed (${res.code()})")
+    }
+
     /** Upload a new group cover and attach it — POST avatar-upload, PUT bytes, PATCH key. */
     suspend fun uploadConversationAvatar(
         conversationId: String,
