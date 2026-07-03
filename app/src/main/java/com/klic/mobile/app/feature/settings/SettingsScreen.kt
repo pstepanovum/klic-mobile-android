@@ -76,6 +76,8 @@ private sealed class SettingsRoute {
     object Language : SettingsRoute()
     object QrCode : SettingsRoute()
     object RecentCalls : SettingsRoute()
+    // v0.5.5
+    object ChatTheme : SettingsRoute()
 }
 
 @Composable
@@ -90,6 +92,11 @@ fun SettingsScreen(vm: KlicViewModel, onEditProfile: () -> Unit = {}) {
     }
 
     var route by remember { mutableStateOf<SettingsRoute>(SettingsRoute.Main) }
+    // §12.1: Settings → "Report a problem" — the report sheet with no target.
+    var showProblemReport by remember { mutableStateOf(false) }
+
+    // §12.2: /me now carries email/emailVerified — refresh so the row is current.
+    androidx.compose.runtime.LaunchedEffect(Unit) { vm.refreshMe() }
 
     BackHandler(enabled = route != SettingsRoute.Main) {
         route = when (route) {
@@ -162,10 +169,20 @@ fun SettingsScreen(vm: KlicViewModel, onEditProfile: () -> Unit = {}) {
                                 onClick = onEditProfile,
                             )
                             HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
+                            // §12.2: account email — add via Google, or show + remove.
+                            EmailRow(vm)
+                            HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
                             SettingsRow(
                                 icon = painterResource(R.drawable.ic_line_sun),
                                 title = stringResource(R.string.settings_appearance),
                                 onClick = { route = SettingsRoute.Appearance },
+                            )
+                            HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
+                            // §12.3: chat theme (pattern, gradient, bubble color).
+                            SettingsRow(
+                                icon = painterResource(R.drawable.ic_line_gallery),
+                                title = stringResource(R.string.settings_chat_themes),
+                                onClick = { route = SettingsRoute.ChatTheme },
                             )
                             HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
                             SettingsRow(
@@ -229,6 +246,13 @@ fun SettingsScreen(vm: KlicViewModel, onEditProfile: () -> Unit = {}) {
                                 title = stringResource(R.string.settings_privacy_security),
                                 onClick = { route = SettingsRoute.Privacy },
                             )
+                            HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
+                            // §12.1: target-less report — "something in the app is broken".
+                            SettingsRow(
+                                icon = painterResource(R.drawable.ic_line_report),
+                                title = stringResource(R.string.settings_report_problem),
+                                onClick = { showProblemReport = true },
+                            )
                         }
 
                         Spacer(Modifier.height(16.dp))
@@ -291,50 +315,18 @@ fun SettingsScreen(vm: KlicViewModel, onEditProfile: () -> Unit = {}) {
                     SettingsRoute.Appearance -> {
                         SubScreenHeader(title = stringResource(R.string.settings_appearance), onBack = { route = SettingsRoute.Main })
 
-                        // Card 1: Chat Themes — dimmed placeholder
+                        // Card 1: Chat Themes (§12.3)
                         Column(
                             Modifier
                                 .fillMaxWidth()
                                 .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(20.dp))
                                 .padding(horizontal = 18.dp),
                         ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .alpha(0.4f)
-                                    .padding(vertical = 14.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(14.dp),
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(32.dp)
-                                        .background(
-                                            MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
-                                            RoundedCornerShape(8.dp),
-                                        ),
-                                    contentAlignment = Alignment.Center,
-                                ) {
-                                    Icon(
-                                        painter = painterResource(R.drawable.ic_line_gallery),
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.size(18.dp),
-                                    )
-                                }
-                                Text(
-                                    stringResource(R.string.settings_chat_themes),
-                                    style = MaterialTheme.typography.bodyLarge,
-                                    color = MaterialTheme.colorScheme.onSurface,
-                                    modifier = Modifier.weight(1f),
-                                )
-                                Icon(
-                                    imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.size(20.dp),
-                                )
-                            }
+                            SettingsRow(
+                                icon = painterResource(R.drawable.ic_line_gallery),
+                                title = stringResource(R.string.settings_chat_themes),
+                                onClick = { route = SettingsRoute.ChatTheme },
+                            )
                         }
 
                         Spacer(Modifier.height(16.dp))
@@ -555,9 +547,150 @@ fun SettingsScreen(vm: KlicViewModel, onEditProfile: () -> Unit = {}) {
                         // §10.6: the EXISTING recent-calls component — no duplicate.
                         com.klic.mobile.app.feature.call.RecentCallsList(vm)
                     }
+
+                    SettingsRoute.ChatTheme -> {
+                        SubScreenHeader(
+                            title = stringResource(R.string.settings_chat_themes),
+                            onBack = { route = SettingsRoute.Main },
+                        )
+                        ChatThemeContent()
+                    }
                 }
             }
         }
+    }
+
+    // §12.1: "Report a problem" — the shared report sheet with no target.
+    if (showProblemReport) {
+        com.klic.mobile.app.feature.report.ReportSheet(
+            vm = vm,
+            target = com.klic.mobile.app.feature.report.ReportTarget.Problem,
+            onDismiss = { showProblemReport = false },
+        )
+    }
+}
+
+/**
+ * §12.2 Email row: no email → "Add" launches the Google picker; linked → the address
+ * with a "Verified" badge, tap → confirm-remove dialog (DELETE /me/email).
+ */
+@Composable
+private fun EmailRow(vm: KlicViewModel) {
+    val user by vm.currentUser.collectAsState()
+    val busy by vm.emailBusy.collectAsState()
+    val context = LocalContext.current
+    var confirmRemove by remember { mutableStateOf(false) }
+    val email = user?.email
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(enabled = !busy) {
+                if (email == null) vm.linkGoogleEmail(context) else confirmRemove = true
+            }
+            .padding(vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+        Box(
+            modifier = Modifier
+                .size(32.dp)
+                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f), RoundedCornerShape(8.dp)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                painter = painterResource(R.drawable.ic_line_message),
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(18.dp),
+            )
+        }
+        Column(Modifier.weight(1f)) {
+            Text(
+                stringResource(R.string.settings_email),
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            if (email != null) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(
+                        email,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    if (user?.emailVerified == true) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(3.dp),
+                            modifier = Modifier
+                                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f), CircleShape)
+                                .padding(horizontal = 7.dp, vertical = 2.dp),
+                        ) {
+                            Icon(
+                                painter = painterResource(KlicIcons.check),
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(9.dp),
+                            )
+                            Text(
+                                stringResource(R.string.settings_email_verified),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.primary,
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        if (busy) {
+            androidx.compose.material3.CircularProgressIndicator(
+                modifier = Modifier.size(18.dp),
+                strokeWidth = 2.dp,
+                color = MaterialTheme.colorScheme.primary,
+            )
+        } else if (email == null) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(
+                    stringResource(R.string.settings_email_add),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(20.dp),
+                )
+            }
+        } else {
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(20.dp),
+            )
+        }
+    }
+
+    if (confirmRemove && email != null) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { confirmRemove = false },
+            title = { Text(stringResource(R.string.settings_email_remove_title)) },
+            text = { Text(stringResource(R.string.settings_email_remove_body, email)) },
+            confirmButton = {
+                androidx.compose.material3.TextButton(onClick = {
+                    confirmRemove = false
+                    vm.removeEmail()
+                }) {
+                    Text(stringResource(R.string.settings_email_remove), color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                androidx.compose.material3.TextButton(onClick = { confirmRemove = false }) {
+                    Text(stringResource(R.string.common_cancel))
+                }
+            },
+        )
     }
 }
 
