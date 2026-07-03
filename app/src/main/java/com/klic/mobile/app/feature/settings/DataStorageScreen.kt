@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -45,6 +44,8 @@ import com.klic.mobile.app.data.DataUsage
 import com.klic.mobile.app.data.SettingsStore
 import com.klic.mobile.app.data.formatBytes
 import com.klic.mobile.app.feature.KlicViewModel
+import com.klic.mobile.app.ui.components.KlicSelectionSheet
+import com.klic.mobile.app.ui.components.KlicSheetOption
 import kotlinx.coroutines.launch
 
 /**
@@ -245,28 +246,57 @@ fun DataStorageContent(vm: KlicViewModel) {
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            Spacer(Modifier.height(10.dp))
-            TextButton(onClick = { scope.launch { DataUsage.reset() } }) {
-                Text("Reset Statistics", color = MaterialTheme.colorScheme.error)
-            }
+            Spacer(Modifier.height(14.dp))
         }
     }
+    Spacer(Modifier.height(12.dp))
+    // Capsule to match the Settings "Log out" reference (§9.8).
+    Button(
+        onClick = { scope.launch { DataUsage.reset() } },
+        modifier = Modifier.fillMaxWidth(),
+        shape = CircleShape,
+        colors = ButtonDefaults.buttonColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+            contentColor = MaterialTheme.colorScheme.error,
+        ),
+    ) { Text("Reset Statistics", modifier = Modifier.padding(vertical = 6.dp)) }
 
-    // ── Upload quality ────────────────────────────────────────────────────────
+    // ── Upload quality — Klic selection sheet, not inline radio rows (§9.2) ──
     Spacer(Modifier.height(24.dp))
     SectionLabel("UPLOAD QUALITY")
+    var showQualitySheet by remember { mutableStateOf(false) }
     SettingsCard {
-        QualityOption(
-            title = "Standard",
-            subtitle = "Faster uploads, smaller photos (2048px)",
-            selected = !settings.uploadHd,
-        ) { scope.launch { SettingsStore.setUploadHd(false) } }
-        HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
-        QualityOption(
-            title = "HD",
-            subtitle = "Best quality, larger uploads (4096px)",
-            selected = settings.uploadHd,
-        ) { scope.launch { SettingsStore.setUploadHd(true) } }
+        Row(
+            Modifier.fillMaxWidth().clickable { showQualitySheet = true }.padding(vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                "Photo upload quality",
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.weight(1f),
+            )
+            Text(
+                if (settings.uploadHd) "HD" else "Standard",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+    if (showQualitySheet) {
+        KlicSelectionSheet(
+            title = "Photo upload quality",
+            options = listOf(
+                KlicSheetOption("standard", "Standard", "Faster uploads, smaller photos (2048px)"),
+                KlicSheetOption("hd", "HD", "Best quality, larger uploads (4096px)"),
+            ),
+            selectedValue = if (settings.uploadHd) "hd" else "standard",
+            onSelect = { value ->
+                scope.launch { SettingsStore.setUploadHd(value == "hd") }
+                showQualitySheet = false
+            },
+            onDismiss = { showQualitySheet = false },
+        )
     }
 
     // ── Media auto-download matrix ────────────────────────────────────────────
@@ -320,27 +350,6 @@ fun DataStorageContent(vm: KlicViewModel) {
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
     Spacer(Modifier.height(24.dp))
-}
-
-@Composable
-private fun QualityOption(title: String, subtitle: String, selected: Boolean, onClick: () -> Unit) {
-    Row(
-        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Column(Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurface)
-            Text(subtitle, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-        if (selected) {
-            androidx.compose.material3.Icon(
-                imageVector = androidx.compose.material.icons.Icons.Filled.Check,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(20.dp),
-            )
-        }
-    }
 }
 
 @Composable
