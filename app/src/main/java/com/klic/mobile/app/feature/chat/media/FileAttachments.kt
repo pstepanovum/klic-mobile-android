@@ -230,8 +230,7 @@ fun PdfFileBubbleView(
                     alignment = Alignment.TopCenter,
                     modifier = Modifier
                         .fillMaxSize()
-                        .background(Color.White, RoundedCornerShape(15.dp))
-                        .let { it },
+                        .background(Color.White, RoundedCornerShape(15.dp)),
                 )
                 // Doc badge — top-left.
                 Box(
