@@ -453,14 +453,61 @@ class KlicViewModel(
                 .onFailure { error.value = "Couldn't send photo. Try again." }
         }
 
-    fun sendAttachments(conversationId: String, body: String?, attachments: List<AttachmentInput>) =
-        viewModelScope.launch {
-            val replyId = replyingTo.value?.id
-            replyingTo.value = null
-            runCatching { repo.uploadAttachments(conversationId, attachments, body?.takeIf { it.isNotBlank() }, replyId) }
-                .onSuccess { upsertMessage(it) }
-                .onFailure { error.value = "Couldn't send attachment. Try again." }
+    // ── Optimistic uploads (§9.1) ─────────────────────────────────────────────
+
+    /** In-flight/failed optimistic uploads, rendered as progress pills in the chat. */
+    val uploadTasks = MutableStateFlow<List<UploadTask>>(emptyList())
+
+    /** Insert an optimistic pill and start uploading immediately — never blocks the UI. */
+    fun sendAttachments(conversationId: String, body: String?, attachments: List<AttachmentInput>) {
+        val replyId = replyingTo.value?.id
+        replyingTo.value = null
+        val task = UploadTask(
+            id = java.util.UUID.randomUUID().toString(),
+            conversationId = conversationId,
+            body = body?.takeIf { it.isNotBlank() },
+            attachments = attachments,
+            replyToId = replyId,
+        )
+        uploadTasks.value = uploadTasks.value + task
+        startUpload(task)
+    }
+
+    fun retryUpload(taskId: String) {
+        val task = uploadTasks.value.firstOrNull { it.id == taskId && it.failed } ?: return
+        updateUploadTask(taskId) { it.copy(failed = false, progress = 0f) }
+        startUpload(task)
+    }
+
+    fun discardUpload(taskId: String) {
+        uploadTasks.value = uploadTasks.value.filterNot { it.id == taskId }
+    }
+
+    private fun startUpload(task: UploadTask) = viewModelScope.launch {
+        runCatching {
+            repo.uploadAttachments(
+                task.conversationId, task.attachments, task.body, task.replyToId,
+            ) { sent, total ->
+                if (total > 0) {
+                    updateUploadTask(task.id) {
+                        it.copy(progress = (sent.toFloat() / total).coerceIn(0f, 1f))
+                    }
+                }
+            }
+        }.onSuccess { msg ->
+            // In-place replacement: the pill leaves and the server message lands in the
+            // same frame, so the list doesn't jump.
+            uploadTasks.value = uploadTasks.value.filterNot { it.id == task.id }
+            if (msg.conversationId == openConversationId) upsertMessage(msg)
+        }.onFailure {
+            // Keep the pill with retry/discard affordances.
+            updateUploadTask(task.id) { it.copy(failed = true) }
         }
+    }
+
+    private fun updateUploadTask(id: String, transform: (UploadTask) -> UploadTask) {
+        uploadTasks.value = uploadTasks.value.map { if (it.id == id) transform(it) else it }
+    }
 
     fun startCall(conversationId: String, kind: String, peerName: String) = viewModelScope.launch {
         if (activeCall.value != null) return@launch
@@ -868,3 +915,18 @@ class KlicViewModel(
         runCatching { block() }.onFailure { error.value = "Could not sign in. Check your details." }
     }
 }
+
+/**
+ * One optimistic upload (§9.1): shows as a pill bubble in its conversation with a real
+ * byte-level progress bar; on failure it stays with retry/discard. The staged attachments
+ * (with localBytes) are kept so a retry re-uploads without re-reading the source Uri.
+ */
+data class UploadTask(
+    val id: String,
+    val conversationId: String,
+    val body: String?,
+    val attachments: List<AttachmentInput>,
+    val replyToId: String?,
+    val progress: Float = 0f,
+    val failed: Boolean = false,
+)

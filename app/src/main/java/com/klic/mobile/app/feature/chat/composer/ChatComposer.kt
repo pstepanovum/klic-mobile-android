@@ -62,7 +62,6 @@ fun ComposerBar(
     onAttach: () -> Unit,
     onStickers: () -> Unit,
     hasPendingAttachments: Boolean,
-    uploading: Boolean,
     captureMode: CaptureMode,
     onToggleCaptureMode: () -> Unit,
     onHoldStart: () -> Unit,
@@ -83,7 +82,6 @@ fun ComposerBar(
     ) {
         IconButton(
             onClick = onAttach,
-            enabled = !uploading,
             modifier = Modifier.size(44.dp),
             colors = IconButtonDefaults.iconButtonColors(
                 containerColor = MaterialTheme.colorScheme.surfaceVariant,
@@ -98,7 +96,6 @@ fun ComposerBar(
         }
         IconButton(
             onClick = onStickers,
-            enabled = !uploading,
             modifier = Modifier.size(44.dp),
             colors = IconButtonDefaults.iconButtonColors(
                 containerColor = MaterialTheme.colorScheme.surfaceVariant,
@@ -117,7 +114,8 @@ fun ComposerBar(
             modifier = Modifier.weight(1f).focusRequester(focusRequester),
             placeholder = { Text("Message", color = MaterialTheme.colorScheme.onSurfaceVariant) },
             maxLines = 4,
-            shape = RoundedCornerShape(22.dp),
+            // Fully rounded capsule, matching the Login-page inputs (§9.8).
+            shape = CircleShape,
             colors = TextFieldDefaults.colors(
                 focusedContainerColor      = MaterialTheme.colorScheme.surfaceVariant,
                 unfocusedContainerColor    = MaterialTheme.colorScheme.surfaceVariant,
@@ -133,7 +131,6 @@ fun ComposerBar(
         if (canSend) {
             IconButton(
                 onClick = onSend,
-                enabled = !uploading,
                 modifier = Modifier.size(44.dp),
                 colors = IconButtonDefaults.iconButtonColors(
                     containerColor = MaterialTheme.colorScheme.primary,
@@ -145,7 +142,7 @@ fun ComposerBar(
         } else {
             CaptureActionButton(
                 icon = if (captureMode == CaptureMode.AUDIO) Icons.Filled.Mic else Icons.Filled.Videocam,
-                enabled = !uploading,
+                enabled = true,
                 onTap = onToggleCaptureMode,
                 onHoldStart = onHoldStart,
                 onHoldEnd = onHoldEnd,

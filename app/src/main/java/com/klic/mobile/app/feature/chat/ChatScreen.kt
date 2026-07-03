@@ -82,6 +82,7 @@ import com.klic.mobile.app.feature.chat.media.FileDetailSheet
 import com.klic.mobile.app.feature.chat.media.PdfViewerOverlay
 import com.klic.mobile.app.feature.chat.media.PendingMediaBar
 import com.klic.mobile.app.feature.chat.media.PendingMediaDraft
+import com.klic.mobile.app.feature.chat.media.UploadProgressPill
 import com.klic.mobile.app.feature.chat.media.isPdfAttachment
 import com.klic.mobile.app.feature.chat.media.loadFileAttachment
 import com.klic.mobile.app.feature.chat.media.loadImageDraft
@@ -135,7 +136,6 @@ fun ChatScreen(
     var tempVideoUri by remember { mutableStateOf<Uri?>(null) }
     var pendingMedia by remember(conversation.id) { mutableStateOf<List<PendingMediaDraft>>(emptyList()) }
     var captureMode by remember(conversation.id) { mutableStateOf(CaptureMode.AUDIO) }
-    var uploading by remember { mutableStateOf(false) }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val stickerSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val stickers by vm.stickers.collectAsState()
@@ -206,14 +206,13 @@ fun ChatScreen(
     val fileLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri?.let { docUri ->
             scope.launch {
-                uploading = true
                 val attachment = loadFileAttachment(context, docUri)
                 if (attachment != null) {
-                    vm.sendAttachments(conversation.id, null, listOf(attachment)).join()
+                    // Optimistic upload pill (§9.1) — the list stays fully interactive.
+                    vm.sendAttachments(conversation.id, null, listOf(attachment))
                 } else {
                     vm.error.value = "Couldn't read selected file."
                 }
-                uploading = false
             }
         }
     }
@@ -223,14 +222,18 @@ fun ChatScreen(
         vm.markRead(conversation.id)
     }
 
+    // Optimistic upload pills for this conversation (§9.1).
+    val allUploadTasks by vm.uploadTasks.collectAsState()
+    val uploadsHere = allUploadTasks.filter { it.conversationId == conversation.id }
+
     // Initial open: instant scroll to bottom (no animation).
     // Subsequent new messages: animated scroll.
     // Older messages prepended: no scroll-to-bottom (lastMessageId doesn't change).
     val lastMessageId = messages.lastOrNull()?.id
     var initialScrollDone by remember(conversation.id) { mutableStateOf(false) }
 
-    LaunchedEffect(lastMessageId, peerTyping) {
-        val target = messages.size - 1 + if (peerTyping) 1 else 0
+    LaunchedEffect(lastMessageId, peerTyping, uploadsHere.size) {
+        val target = messages.size - 1 + (if (peerTyping) 1 else 0) + uploadsHere.size
         if (target >= 0) {
             if (!initialScrollDone) {
                 listState.scrollToItem(target)
@@ -395,6 +398,19 @@ fun ChatScreen(
                         }
                     }
                 }
+                // Optimistic upload pills (§9.1) — each tracks its own progress.
+                items(uploadsHere, key = { it.id }) { task ->
+                    Row(
+                        Modifier.fillMaxWidth().padding(vertical = 2.dp),
+                        horizontalArrangement = Arrangement.End,
+                    ) {
+                        UploadProgressPill(
+                            task = task,
+                            onRetry = { vm.retryUpload(task.id) },
+                            onDiscard = { vm.discardUpload(task.id) },
+                        )
+                    }
+                }
             }
 
             // Loading indicator overlay at the top while fetching older messages.
@@ -479,11 +495,8 @@ fun ChatScreen(
                             val caption = draft.trim().takeIf { it.isNotBlank() }
                             pendingMedia = emptyList()
                             draft = ""
-                            scope.launch {
-                                uploading = true
-                                vm.sendAttachments(conversation.id, caption, toSend.map { it.attachment }).join()
-                                uploading = false
-                            }
+                            // Optimistic pill takes over (§9.1); the composer frees up instantly.
+                            vm.sendAttachments(conversation.id, caption, toSend.map { it.attachment })
                         } else if (draft.isNotBlank()) {
                             vm.send(conversation.id, draft.trim()); draft = ""
                         }
@@ -491,7 +504,6 @@ fun ChatScreen(
                     onAttach = { showAttachSheet = true },
                     onStickers = { focusManager.clearFocus(); vm.loadStickers(); showStickerSheet = true },
                     hasPendingAttachments = pendingMedia.isNotEmpty(),
-                    uploading = uploading,
                     captureMode = captureMode,
                     onToggleCaptureMode = {
                         captureMode = if (captureMode == CaptureMode.AUDIO) CaptureMode.VIDEO else CaptureMode.AUDIO
