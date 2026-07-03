@@ -60,7 +60,7 @@ object CallNotifications {
         return NotificationCompat.Builder(context, CHANNEL_SERVICE)
             .setSmallIcon(R.drawable.ic_launcher_foreground)
             .setContentTitle("Klic")
-            .setContentText("Connected for calls")
+            .setContentText(context.getString(com.klic.mobile.app.R.string.notif_connected_for_calls))
             .setOngoing(true)
             .setPriority(NotificationCompat.PRIORITY_MIN)
             .build()

@@ -37,6 +37,7 @@ import androidx.compose.ui.unit.dp
 import com.klic.mobile.app.ui.theme.KlicIcons
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import androidx.compose.ui.res.stringResource
 
 /** One row of a [KlicSelectionSheet]. */
 data class KlicSheetOption(
@@ -141,7 +142,7 @@ private fun SheetCancelButton(onClick: () -> Unit) {
             containerColor = MaterialTheme.colorScheme.surfaceVariant,
             contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
         ),
-    ) { Text("Cancel", modifier = Modifier.padding(vertical = 6.dp)) }
+    ) { Text(stringResource(com.klic.mobile.app.R.string.common_cancel), modifier = Modifier.padding(vertical = 6.dp)) }
 }
 
 /**
@@ -207,14 +208,15 @@ fun KlicTonePickerSheet(
                 color = MaterialTheme.colorScheme.onBackground,
                 modifier = Modifier.padding(start = 4.dp, bottom = 12.dp),
             )
+            val rows = listOf<Pair<String, String?>>(
+                stringResource(com.klic.mobile.app.R.string.common_default) to null,
+            ) + tones.map { (name, uri) -> name to uri }
             LazyColumn(
                 Modifier
                     .fillMaxWidth()
                     .heightIn(max = 380.dp)
                     .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(20.dp)),
             ) {
-                val rows = listOf<Pair<String, String?>>("Default" to null) +
-                    tones.map { (name, uri) -> name to uri }
                 items(rows.size) { index ->
                     val (name, uri) = rows[index]
                     Row(
@@ -253,7 +255,7 @@ fun KlicTonePickerSheet(
                 onClick = { stopPreview(); onPick(selection) },
                 modifier = Modifier.fillMaxWidth(),
                 shape = androidx.compose.foundation.shape.CircleShape,
-            ) { Text("Done", modifier = Modifier.padding(vertical = 6.dp)) }
+            ) { Text(stringResource(com.klic.mobile.app.R.string.common_done), modifier = Modifier.padding(vertical = 6.dp)) }
             Spacer(Modifier.height(8.dp))
             SheetCancelButton { stopPreview(); onDismiss() }
         }

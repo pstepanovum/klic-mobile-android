@@ -50,6 +50,8 @@ import com.klic.mobile.app.ui.components.rememberStableImageRequest
 import com.klic.mobile.app.data.Message
 import com.klic.mobile.app.data.Reaction
 import com.klic.mobile.app.data.ReplyPreview
+import androidx.compose.ui.res.stringResource
+import com.klic.mobile.app.R
 
 // Quick-reaction palette shown on the long-press menu (Telegram-style).
 val quickReactions = listOf("❤️", "👍", "👎", "😂", "😮", "😢", "🔥")
@@ -114,13 +116,13 @@ fun MessageActionsOverlay(
             // Actions card
             Surface(shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.surface, shadowElevation = 8.dp) {
                 Column(Modifier.width(240.dp)) {
-                    ActionRow("Reply", Icons.AutoMirrored.Filled.Reply) { onReply(); onDismiss() }
-                    if (hasBody) ActionRow("Copy", Icons.Filled.ContentCopy) { onCopy(); onDismiss() }
+                    ActionRow(stringResource(R.string.viewer_reply), Icons.AutoMirrored.Filled.Reply) { onReply(); onDismiss() }
+                    if (hasBody) ActionRow(stringResource(R.string.actions_copy), Icons.Filled.ContentCopy) { onCopy(); onDismiss() }
                     ActionRow(
-                        if (message.starred) "Unstar" else "Star",
+                        if (message.starred) stringResource(R.string.viewer_unstar) else stringResource(R.string.viewer_star),
                         if (message.starred) Icons.Filled.Star else Icons.Filled.StarBorder,
                     ) { onStar(); onDismiss() }
-                    ActionRow("Delete", Icons.Filled.Delete, destructive = true) { onDelete() }
+                    ActionRow(stringResource(R.string.common_delete), Icons.Filled.Delete, destructive = true) { onDelete() }
                 }
             }
         }
@@ -139,14 +141,15 @@ private fun ActionRow(title: String, icon: androidx.compose.ui.graphics.vector.I
     }
 }
 
+@Composable
 private fun previewText(m: Message): String = when {
     m.body.isNotBlank() -> m.body
-    m.isSticker -> "Sticker"
-    m.attachments.firstOrNull()?.kind == "IMAGE" -> "📷 Photo"
-    m.attachments.firstOrNull()?.kind == "VOICE" -> "🎤 Voice message"
-    m.attachments.firstOrNull()?.kind == "VIDEO" -> "🎥 Video"
-    m.attachments.isNotEmpty() -> "📎 File"
-    else -> "Message"
+    m.isSticker -> stringResource(R.string.preview_sticker)
+    m.attachments.firstOrNull()?.kind == "IMAGE" -> stringResource(R.string.preview_photo)
+    m.attachments.firstOrNull()?.kind == "VOICE" -> stringResource(R.string.preview_voice_message)
+    m.attachments.firstOrNull()?.kind == "VIDEO" -> stringResource(R.string.preview_video)
+    m.attachments.isNotEmpty() -> stringResource(R.string.preview_file)
+    else -> stringResource(R.string.preview_message)
 }
 
 // MARK: - Reaction pills (under a bubble)
@@ -202,7 +205,7 @@ fun ReplyComposerBar(authorName: String, preview: String, onCancel: () -> Unit) 
     ) {
         Box(Modifier.size(width = 3.dp, height = 32.dp).background(MaterialTheme.colorScheme.primary, RoundedCornerShape(2.dp)))
         Column(Modifier.weight(1f).padding(start = 10.dp)) {
-            Text("Reply to $authorName", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+            Text(stringResource(R.string.actions_reply_to, authorName), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
             Text(preview, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
         }
         IconButton(onClick = onCancel) {
@@ -223,7 +226,7 @@ fun DeletedBubble(isMine: Boolean) {
             Row(Modifier.padding(horizontal = 14.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Outlined.Block, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(15.dp))
                 Text(
-                    "  This message was deleted",
+                    "  " + stringResource(R.string.actions_message_deleted),
                     style = MaterialTheme.typography.bodyMedium,
                     fontStyle = FontStyle.Italic,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,

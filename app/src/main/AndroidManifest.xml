@@ -19,6 +19,12 @@
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
     <!-- In-app updater: download + install a new APK from GitHub releases -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <!-- §10.4 Data Settings: Sync Contacts uploads SHA-256 hashes only -->
+    <uses-permission android:name="android.permission.READ_CONTACTS" />
+    <!-- §10.11 attachment sheet: in-app gallery grid via MediaStore -->
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
 
     <uses-feature android:name="android.hardware.camera" android:required="false" />
 
@@ -31,6 +37,7 @@
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
+        android:localeConfig="@xml/locales_config"
         android:theme="@style/Theme.Klic">
 
         <activity
@@ -102,6 +109,16 @@
         <meta-data
             android:name="com.google.firebase.messaging.default_notification_channel_id"
             android:value="calls" />
+
+        <!-- §10.5: persists the per-app locale chosen in Settings → Language on pre-13 -->
+        <service
+            android:name="androidx.appcompat.app.AppLocalesMetadataHolderService"
+            android:enabled="false"
+            android:exported="false">
+            <meta-data
+                android:name="autoStoreLocales"
+                android:value="true" />
+        </service>
 
         <!-- Handles decline / hang-up actions from call notifications -->
         <receiver

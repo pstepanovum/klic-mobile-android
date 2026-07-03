@@ -46,6 +46,7 @@ import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -68,6 +69,13 @@ private sealed class SettingsRoute {
     object Privacy : SettingsRoute()
     object Notifications : SettingsRoute()
     object DataStorage : SettingsRoute()
+    // v0.5.3
+    object PrivacyBlocked : SettingsRoute()
+    object PrivacyAppLock : SettingsRoute()
+    object PrivacyPasskeys : SettingsRoute()
+    object Language : SettingsRoute()
+    object QrCode : SettingsRoute()
+    object RecentCalls : SettingsRoute()
 }
 
 @Composable
@@ -87,6 +95,9 @@ fun SettingsScreen(vm: KlicViewModel, onEditProfile: () -> Unit = {}) {
     BackHandler(enabled = route != SettingsRoute.Main) {
         route = when (route) {
             SettingsRoute.AutoNightMode -> SettingsRoute.Appearance
+            SettingsRoute.PrivacyBlocked,
+            SettingsRoute.PrivacyAppLock,
+            SettingsRoute.PrivacyPasskeys -> SettingsRoute.Privacy
             else -> SettingsRoute.Main
         }
     }
@@ -106,7 +117,7 @@ fun SettingsScreen(vm: KlicViewModel, onEditProfile: () -> Unit = {}) {
                 when (currentRoute) {
                     SettingsRoute.Main -> {
                         Text(
-                            "Settings",
+                            stringResource(R.string.tab_settings),
                             style = MaterialTheme.typography.headlineMedium,
                             color = MaterialTheme.colorScheme.onBackground,
                         )
@@ -148,26 +159,44 @@ fun SettingsScreen(vm: KlicViewModel, onEditProfile: () -> Unit = {}) {
                         ) {
                             SettingsRow(
                                 icon = painterResource(KlicIcons.user),
-                                title = "My Profile",
+                                title = stringResource(R.string.settings_my_profile),
                                 onClick = onEditProfile,
                             )
                             HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
                             SettingsRow(
                                 icon = painterResource(R.drawable.ic_line_sun),
-                                title = "Appearance",
+                                title = stringResource(R.string.settings_appearance),
                                 onClick = { route = SettingsRoute.Appearance },
                             )
                             HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
                             SettingsRow(
                                 icon = painterResource(R.drawable.ic_line_notification),
-                                title = "Notifications",
+                                title = stringResource(R.string.settings_notifications),
                                 onClick = { route = SettingsRoute.Notifications },
                             )
                             HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
                             SettingsRow(
                                 icon = painterResource(R.drawable.ic_line_chart),
-                                title = "Data and Storage",
+                                title = stringResource(R.string.settings_data_storage),
                                 onClick = { route = SettingsRoute.DataStorage },
+                            )
+                            HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
+                            SettingsRow(
+                                icon = painterResource(R.drawable.ic_line_sun),
+                                title = stringResource(R.string.settings_language),
+                                onClick = { route = SettingsRoute.Language },
+                            )
+                            HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
+                            SettingsRow(
+                                icon = painterResource(KlicIcons.gallery),
+                                title = stringResource(R.string.settings_qr_code),
+                                onClick = { route = SettingsRoute.QrCode },
+                            )
+                            HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
+                            SettingsRow(
+                                icon = painterResource(KlicIcons.phone),
+                                title = stringResource(R.string.settings_recent_calls),
+                                onClick = { route = SettingsRoute.RecentCalls },
                             )
                         }
 
@@ -182,7 +211,7 @@ fun SettingsScreen(vm: KlicViewModel, onEditProfile: () -> Unit = {}) {
                         ) {
                             SettingsRow(
                                 icon = painterResource(R.drawable.ic_bold_arrow_bottom),
-                                title = "Updates",
+                                title = stringResource(R.string.settings_updates),
                                 onClick = { route = SettingsRoute.Updates },
                             )
                         }
@@ -198,7 +227,7 @@ fun SettingsScreen(vm: KlicViewModel, onEditProfile: () -> Unit = {}) {
                         ) {
                             SettingsRow(
                                 icon = painterResource(R.drawable.ic_line_lock),
-                                title = "Privacy",
+                                title = stringResource(R.string.settings_privacy_security),
                                 onClick = { route = SettingsRoute.Privacy },
                             )
                         }
@@ -215,9 +244,9 @@ fun SettingsScreen(vm: KlicViewModel, onEditProfile: () -> Unit = {}) {
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Column(Modifier.weight(1f)) {
-                                Text("Reliable calls", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurface)
+                                Text(stringResource(R.string.dialog_reliable_calls_title), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurface)
                                 Text(
-                                    "Allow Klic to run in the background so calls ring on time and don't drop.",
+                                    stringResource(R.string.settings_reliable_calls_sub),
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
@@ -242,7 +271,7 @@ fun SettingsScreen(vm: KlicViewModel, onEditProfile: () -> Unit = {}) {
                                 contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
                             ),
                         ) {
-                            Text("Log out", modifier = Modifier.padding(vertical = 6.dp))
+                            Text(stringResource(R.string.settings_log_out), modifier = Modifier.padding(vertical = 6.dp))
                         }
 
                         Spacer(Modifier.height(20.dp))
@@ -252,7 +281,7 @@ fun SettingsScreen(vm: KlicViewModel, onEditProfile: () -> Unit = {}) {
                             modifier = Modifier.fillMaxWidth().height(140.dp),
                         )
                         Text(
-                            "Version $versionName",
+                            stringResource(R.string.settings_version_format, versionName),
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             textAlign = TextAlign.Center,
@@ -261,7 +290,7 @@ fun SettingsScreen(vm: KlicViewModel, onEditProfile: () -> Unit = {}) {
                     }
 
                     SettingsRoute.Appearance -> {
-                        SubScreenHeader(title = "Appearance", onBack = { route = SettingsRoute.Main })
+                        SubScreenHeader(title = stringResource(R.string.settings_appearance), onBack = { route = SettingsRoute.Main })
 
                         // Card 1: Chat Themes — dimmed placeholder
                         Column(
@@ -295,7 +324,7 @@ fun SettingsScreen(vm: KlicViewModel, onEditProfile: () -> Unit = {}) {
                                     )
                                 }
                                 Text(
-                                    "Chat Themes",
+                                    stringResource(R.string.settings_chat_themes),
                                     style = MaterialTheme.typography.bodyLarge,
                                     color = MaterialTheme.colorScheme.onSurface,
                                     modifier = Modifier.weight(1f),
@@ -313,9 +342,9 @@ fun SettingsScreen(vm: KlicViewModel, onEditProfile: () -> Unit = {}) {
 
                         // Card 2: Auto-Night Mode — shows current mode label inline
                         val modeDisplayName = when (themeMode) {
-                            "light" -> "Disabled"
-                            "dark" -> "Dark"
-                            else -> "System"
+                            "light" -> stringResource(R.string.settings_night_disabled)
+                            "dark" -> stringResource(R.string.settings_night_dark)
+                            else -> stringResource(R.string.settings_night_system)
                         }
                         Column(
                             Modifier
@@ -325,7 +354,7 @@ fun SettingsScreen(vm: KlicViewModel, onEditProfile: () -> Unit = {}) {
                         ) {
                             SettingsRow(
                                 icon = painterResource(R.drawable.ic_line_moon),
-                                title = "Auto-Night Mode",
+                                title = stringResource(R.string.settings_auto_night),
                                 onClick = { route = SettingsRoute.AutoNightMode },
                                 trailing = {
                                     Row(
@@ -350,7 +379,7 @@ fun SettingsScreen(vm: KlicViewModel, onEditProfile: () -> Unit = {}) {
                     }
 
                     SettingsRoute.AutoNightMode -> {
-                        SubScreenHeader(title = "Auto-Night Mode", onBack = { route = SettingsRoute.Appearance })
+                        SubScreenHeader(title = stringResource(R.string.settings_auto_night), onBack = { route = SettingsRoute.Appearance })
 
                         Column(
                             Modifier
@@ -359,29 +388,29 @@ fun SettingsScreen(vm: KlicViewModel, onEditProfile: () -> Unit = {}) {
                                 .padding(horizontal = 18.dp),
                         ) {
                             NightModeOption(
-                                title = "System",
-                                subtitle = "Follows Android system setting",
+                                title = stringResource(R.string.settings_night_system),
+                                subtitle = stringResource(R.string.settings_night_system_sub),
                                 isActive = themeMode == "system",
                                 onClick = { vm.setThemeMode("system") },
                             )
                             HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
                             NightModeOption(
-                                title = "Disabled",
-                                subtitle = "Always light",
+                                title = stringResource(R.string.settings_night_disabled),
+                                subtitle = stringResource(R.string.settings_night_disabled_sub),
                                 isActive = themeMode == "light",
                                 onClick = { vm.setThemeMode("light") },
                             )
                             HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
                             NightModeOption(
-                                title = "Scheduled",
-                                subtitle = "Set custom day / night hours",
+                                title = stringResource(R.string.settings_night_scheduled),
+                                subtitle = stringResource(R.string.settings_night_scheduled_sub),
                                 isActive = themeMode == "system",
                                 onClick = { vm.setThemeMode("system") },
                             )
                             HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
                             NightModeOption(
-                                title = "Automatic",
-                                subtitle = "Based on ambient light",
+                                title = stringResource(R.string.settings_night_automatic),
+                                subtitle = stringResource(R.string.settings_night_automatic_sub),
                                 isActive = themeMode == "system",
                                 onClick = { vm.setThemeMode("system") },
                             )
@@ -389,7 +418,7 @@ fun SettingsScreen(vm: KlicViewModel, onEditProfile: () -> Unit = {}) {
                     }
 
                     SettingsRoute.Updates -> {
-                        SubScreenHeader(title = "Updates", onBack = { route = SettingsRoute.Main })
+                        SubScreenHeader(title = stringResource(R.string.settings_updates), onBack = { route = SettingsRoute.Main })
 
                         // App info card
                         Column(
@@ -407,13 +436,13 @@ fun SettingsScreen(vm: KlicViewModel, onEditProfile: () -> Unit = {}) {
                             )
                             Spacer(Modifier.height(12.dp))
                             Text(
-                                "Klic $versionName",
+                                stringResource(R.string.settings_klic_version_format, versionName),
                                 style = MaterialTheme.typography.titleMedium,
                                 color = MaterialTheme.colorScheme.onSurface,
                             )
                             Spacer(Modifier.height(4.dp))
                             Text(
-                                "Manage your updates below",
+                                stringResource(R.string.settings_manage_updates),
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -428,11 +457,11 @@ fun SettingsScreen(vm: KlicViewModel, onEditProfile: () -> Unit = {}) {
                                 .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(20.dp))
                                 .padding(horizontal = 18.dp),
                         ) {
-                            InfoRow(label = "Version", value = versionName)
+                            InfoRow(label = stringResource(R.string.settings_version_label), value = versionName)
                             HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
-                            InfoRow(label = "Platform", value = "Android")
+                            InfoRow(label = stringResource(R.string.settings_platform), value = "Android")
                             HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
-                            InfoRow(label = "Distribution", value = "GitHub Releases")
+                            InfoRow(label = stringResource(R.string.settings_distribution), value = "GitHub Releases")
                         }
 
                         Spacer(Modifier.height(16.dp))
@@ -443,7 +472,7 @@ fun SettingsScreen(vm: KlicViewModel, onEditProfile: () -> Unit = {}) {
                         Spacer(Modifier.height(12.dp))
 
                         Text(
-                            "Updates are delivered via GitHub Releases. iOS users update via TestFlight.",
+                            stringResource(R.string.settings_updates_footer),
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             textAlign = TextAlign.Center,
@@ -452,17 +481,20 @@ fun SettingsScreen(vm: KlicViewModel, onEditProfile: () -> Unit = {}) {
                     }
 
                     SettingsRoute.Notifications -> {
-                        SubScreenHeader(title = "Notifications", onBack = { route = SettingsRoute.Main })
+                        SubScreenHeader(title = stringResource(R.string.settings_notifications), onBack = { route = SettingsRoute.Main })
                         NotificationsSettingsContent(vm)
                     }
 
                     SettingsRoute.DataStorage -> {
-                        SubScreenHeader(title = "Data and Storage", onBack = { route = SettingsRoute.Main })
+                        SubScreenHeader(title = stringResource(R.string.settings_data_storage), onBack = { route = SettingsRoute.Main })
                         DataStorageContent(vm)
                     }
 
                     SettingsRoute.Privacy -> {
-                        SubScreenHeader(title = "Privacy", onBack = { route = SettingsRoute.Main })
+                        SubScreenHeader(
+                            title = stringResource(R.string.settings_privacy_security),
+                            onBack = { route = SettingsRoute.Main },
+                        )
 
                         Column(
                             Modifier
@@ -472,9 +504,13 @@ fun SettingsScreen(vm: KlicViewModel, onEditProfile: () -> Unit = {}) {
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Column(Modifier.weight(1f)) {
-                                    Text("Last seen", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurface)
                                     Text(
-                                        "If turned off, you won't see anyone else's last seen.",
+                                        stringResource(R.string.privacy_last_seen),
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                    )
+                                    Text(
+                                        stringResource(R.string.privacy_last_seen_sub),
                                         style = MaterialTheme.typography.labelSmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     )
@@ -488,6 +524,66 @@ fun SettingsScreen(vm: KlicViewModel, onEditProfile: () -> Unit = {}) {
                                 )
                             }
                         }
+
+                        Spacer(Modifier.height(16.dp))
+
+                        // §10.4: Blocked users, app lock, passkeys, links, data, account.
+                        PrivacySecurityContent(vm) { sub ->
+                            route = when (sub) {
+                                PrivacySecuritySub.BLOCKED -> SettingsRoute.PrivacyBlocked
+                                PrivacySecuritySub.APP_LOCK -> SettingsRoute.PrivacyAppLock
+                                PrivacySecuritySub.PASSKEYS -> SettingsRoute.PrivacyPasskeys
+                            }
+                        }
+                    }
+
+                    SettingsRoute.PrivacyBlocked -> {
+                        SubScreenHeader(
+                            title = stringResource(R.string.privacy_blocked_users),
+                            onBack = { route = SettingsRoute.Privacy },
+                        )
+                        BlockedUsersContent(vm)
+                    }
+
+                    SettingsRoute.PrivacyAppLock -> {
+                        SubScreenHeader(
+                            title = stringResource(R.string.privacy_passcode_biometrics),
+                            onBack = { route = SettingsRoute.Privacy },
+                        )
+                        AppLockContent()
+                    }
+
+                    SettingsRoute.PrivacyPasskeys -> {
+                        SubScreenHeader(
+                            title = stringResource(R.string.privacy_passkeys),
+                            onBack = { route = SettingsRoute.Privacy },
+                        )
+                        PasskeysContent(vm)
+                    }
+
+                    SettingsRoute.Language -> {
+                        SubScreenHeader(
+                            title = stringResource(R.string.settings_language),
+                            onBack = { route = SettingsRoute.Main },
+                        )
+                        LanguageContent()
+                    }
+
+                    SettingsRoute.QrCode -> {
+                        SubScreenHeader(
+                            title = stringResource(R.string.settings_qr_code),
+                            onBack = { route = SettingsRoute.Main },
+                        )
+                        QrCodeContent(vm)
+                    }
+
+                    SettingsRoute.RecentCalls -> {
+                        SubScreenHeader(
+                            title = stringResource(R.string.settings_recent_calls),
+                            onBack = { route = SettingsRoute.Main },
+                        )
+                        // §10.6: the EXISTING recent-calls component — no duplicate.
+                        com.klic.mobile.app.feature.call.RecentCallsList(vm)
                     }
                 }
             }
@@ -511,7 +607,7 @@ private fun SubScreenHeader(title: String, onBack: () -> Unit) {
         ) {
             Icon(
                 painter = painterResource(KlicIcons.back),
-                contentDescription = "Back",
+                contentDescription = stringResource(R.string.common_back),
                 modifier = Modifier.size(18.dp),
                 tint = MaterialTheme.colorScheme.onSurface,
             )
@@ -676,9 +772,9 @@ private fun AppUpdateCard(versionName: String, scope: CoroutineScope, context: a
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
-                Text("App updates", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurface)
+                Text(stringResource(R.string.settings_app_updates), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurface)
                 Text(
-                    statusMsg ?: "Version $versionName",
+                    statusMsg ?: stringResource(R.string.settings_version_format, versionName),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -692,12 +788,12 @@ private fun AppUpdateCard(versionName: String, scope: CoroutineScope, context: a
                             val r = AppUpdater.fetchLatest()
                             checking = false
                             when {
-                                r == null -> statusMsg = "Couldn't check for updates"
+                                r == null -> statusMsg = context.getString(R.string.settings_update_check_failed)
                                 AppUpdater.isNewerThanInstalled(r.versionName) -> {
                                     available = r
-                                    statusMsg = "Update available: ${r.versionName}"
+                                    statusMsg = context.getString(R.string.settings_update_available, r.versionName)
                                 }
-                                else -> statusMsg = "You're on the latest version"
+                                else -> statusMsg = context.getString(R.string.settings_update_latest)
                             }
                         }
                     },
@@ -707,7 +803,7 @@ private fun AppUpdateCard(versionName: String, scope: CoroutineScope, context: a
                         containerColor = MaterialTheme.colorScheme.surfaceVariant,
                         contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
                     ),
-                ) { Text(if (checking) "Checking…" else "Check") }
+                ) { Text(if (checking) stringResource(R.string.settings_checking) else stringResource(R.string.settings_check)) }
             }
         }
 
@@ -733,13 +829,13 @@ private fun AppUpdateCard(versionName: String, scope: CoroutineScope, context: a
                                 }
                                 .onFailure {
                                     downloading = false
-                                    statusMsg = "Download failed"
+                                    statusMsg = context.getString(R.string.settings_download_failed)
                                 }
                         }
                     },
                     modifier = Modifier.fillMaxWidth(),
                     shape = CircleShape,
-                ) { Text("Download & install ${update.versionName}") }
+                ) { Text(stringResource(R.string.settings_download_install, update.versionName)) }
             }
         }
     }

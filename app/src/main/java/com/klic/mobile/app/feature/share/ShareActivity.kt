@@ -62,6 +62,8 @@ import com.klic.mobile.app.ui.components.PillButton
 import com.klic.mobile.app.ui.theme.KlicTheme
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import androidx.compose.ui.res.stringResource
+import com.klic.mobile.app.R
 
 /**
  * System share target: other apps share images/videos/text into Klic via ACTION_SEND /
@@ -152,7 +154,7 @@ private fun SharePanel(
         runCatching { repo.ensureFreshToken() }
         val loaded = runCatching { repo.friends() }.getOrNull()
         if (loaded == null) {
-            errorText = "Couldn't load your friends. Check your connection and try again."
+            errorText = context.getString(R.string.share_load_friends_failed)
             stage = ShareStage.FAILED
             return@LaunchedEffect
         }
@@ -162,12 +164,12 @@ private fun SharePanel(
             // read as-is with metadata (see ChatMedia.loadMediaDraft).
             attachments = uris.mapNotNull { uri -> loadMediaDraft(context, uri)?.attachment }
             if (attachments.isEmpty()) {
-                errorText = "Couldn't read the shared media."
+                errorText = context.getString(R.string.share_read_failed)
                 stage = ShareStage.FAILED
                 return@LaunchedEffect
             }
         } else if (sharedText.isNullOrBlank()) {
-            errorText = "Nothing to share."
+            errorText = context.getString(R.string.share_nothing)
             stage = ShareStage.FAILED
             return@LaunchedEffect
         }
@@ -201,7 +203,7 @@ private fun SharePanel(
                 delay(900)
                 onClose()
             } else {
-                errorText = "Couldn't send. Try again."
+                errorText = context.getString(R.string.share_send_failed)
                 stage = ShareStage.READY
             }
         }
@@ -217,7 +219,7 @@ private fun SharePanel(
         ) {
             Spacer(Modifier.height(16.dp))
             Text(
-                "Share with",
+                stringResource(R.string.share_with),
                 style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.SemiBold),
                 color = MaterialTheme.colorScheme.onBackground,
             )
@@ -229,14 +231,14 @@ private fun SharePanel(
                 ShareStage.LOADING -> CenteredNote { CircularProgressIndicator() }
                 ShareStage.NOT_SIGNED_IN -> CenteredNote {
                     Text(
-                        "You're not signed in.\nOpen Klic and sign in to share.",
+                        stringResource(R.string.share_not_signed_in),
                         style = MaterialTheme.typography.bodyLarge,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
                 ShareStage.FAILED -> CenteredNote {
                     Text(
-                        errorText ?: "Something went wrong.",
+                        errorText ?: stringResource(R.string.share_generic_error),
                         style = MaterialTheme.typography.bodyLarge,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -262,8 +264,8 @@ private fun SharePanel(
                         if (filtered.isEmpty()) {
                             item {
                                 Text(
-                                    if (friends.isEmpty()) "No friends yet — add friends in Klic first."
-                                    else "No match for \"$query\".",
+                                    if (friends.isEmpty()) stringResource(R.string.share_no_friends)
+                                    else stringResource(R.string.share_no_match, query),
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     modifier = Modifier.padding(vertical = 16.dp),
@@ -277,7 +279,7 @@ private fun SharePanel(
                         onValueChange = { message = it },
                         modifier = Modifier.fillMaxWidth(),
                         enabled = stage == ShareStage.READY,
-                        placeholder = { Text("Add a message", color = MaterialTheme.colorScheme.onSurfaceVariant) },
+                        placeholder = { Text(stringResource(R.string.share_add_message), color = MaterialTheme.colorScheme.onSurfaceVariant) },
                         maxLines = 3,
                         shape = RoundedCornerShape(22.dp),
                         colors = TextFieldDefaults.colors(
@@ -298,9 +300,13 @@ private fun SharePanel(
                     Spacer(Modifier.height(12.dp))
                     PillButton(
                         text = when (stage) {
-                            ShareStage.SENDING -> "Sending ${(sentCount + 1).coerceAtMost(selected.size)} of ${selected.size}…"
-                            ShareStage.SENT -> "Sent"
-                            else -> "Send"
+                            ShareStage.SENDING -> stringResource(
+                                R.string.share_sending_progress,
+                                (sentCount + 1).coerceAtMost(selected.size),
+                                selected.size,
+                            )
+                            ShareStage.SENT -> stringResource(R.string.share_sent)
+                            else -> stringResource(R.string.common_send)
                         },
                         enabled = stage == ShareStage.READY && selected.isNotEmpty(),
                     ) { send() }

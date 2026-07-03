@@ -20,12 +20,14 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -41,6 +43,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
+import com.klic.mobile.app.R
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -98,10 +102,10 @@ fun ProfileScreen(
                 title = {
                     Text(
                         when (sub) {
-                            ChatInfoSub.MEDIA -> "Media, links, docs"
-                            ChatInfoSub.STARRED -> "Starred"
-                            ChatInfoSub.STORAGE -> "Manage storage"
-                            null -> "Profile"
+                            ChatInfoSub.MEDIA -> stringResource(R.string.info_media_links_docs)
+                            ChatInfoSub.STARRED -> stringResource(R.string.info_starred)
+                            ChatInfoSub.STORAGE -> stringResource(R.string.info_manage_storage)
+                            null -> stringResource(R.string.profile_title)
                         },
                         style = MaterialTheme.typography.titleMedium,
                     )
@@ -125,9 +129,10 @@ fun ProfileScreen(
                 MediaLinksDocsPage(vm, conversationId)
             }
             ChatInfoSub.STARRED -> Box(Modifier.fillMaxSize().padding(padding)) {
+                val youLabel = stringResource(R.string.common_you)
                 StarredMessagesPage(
                     vm, conversationId,
-                    senderName = { senderId -> if (senderId == me?.id) "You" else member.displayName },
+                    senderName = { senderId -> if (senderId == me?.id) youLabel else member.displayName },
                     onOpenMessage = { msg ->
                         vm.requestJumpTo(msg.id)
                         onMessage?.invoke()
@@ -179,14 +184,14 @@ fun ProfileScreen(
                         }
                         Spacer(Modifier.height(24.dp))
                         Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                            CallActionButton(KlicIcons.phone, "Audio") {
+                            CallActionButton(KlicIcons.phone, stringResource(R.string.action_audio)) {
                                 vm.startCall(conversationId, "AUDIO", member.displayName); onCall("AUDIO")
                             }
-                            CallActionButton(KlicIcons.video, "Video") {
+                            CallActionButton(KlicIcons.video, stringResource(R.string.action_video)) {
                                 vm.startCall(conversationId, "VIDEO", member.displayName); onCall("VIDEO")
                             }
                             if (onMessage != null) {
-                                CallActionButton(KlicIcons.message, "Message") { onMessage() }
+                                CallActionButton(KlicIcons.message, stringResource(R.string.action_message)) { onMessage() }
                             }
                         }
 
@@ -205,13 +210,56 @@ fun ProfileScreen(
                         }
                         if (groupsInCommon.isNotEmpty()) {
                             Spacer(Modifier.height(16.dp))
-                            Box(Modifier.fillMaxWidth()) { InfoSectionLabel("GROUPS IN COMMON") }
+                            Box(Modifier.fillMaxWidth()) { InfoSectionLabel(stringResource(R.string.profile_groups_in_common)) }
                             InfoCard {
                                 groupsInCommon.forEachIndexed { index, group ->
                                     GroupInCommonRow(group) { onOpenGroup?.invoke(group.id) }
                                     if (index != groupsInCommon.lastIndex) InfoDivider()
                                 }
                             }
+                        }
+
+                        // §10.4: block action with confirm — the blocked list lives in
+                        // Settings → Privacy and Security → Blocked Users.
+                        var showBlockConfirm by remember { mutableStateOf(false) }
+                        Spacer(Modifier.height(16.dp))
+                        InfoCard {
+                            Row(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .clickable { showBlockConfirm = true }
+                                    .padding(vertical = 13.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text(
+                                    stringResource(R.string.profile_block_format, member.displayName),
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    color = MaterialTheme.colorScheme.error,
+                                )
+                            }
+                        }
+                        if (showBlockConfirm) {
+                            AlertDialog(
+                                onDismissRequest = { showBlockConfirm = false },
+                                title = { Text(stringResource(R.string.profile_block_format, member.displayName)) },
+                                text = { Text(stringResource(R.string.profile_block_confirm)) },
+                                confirmButton = {
+                                    TextButton(onClick = {
+                                        showBlockConfirm = false
+                                        vm.blockUser(member.id, member.displayName) { onBack() }
+                                    }) {
+                                        Text(
+                                            stringResource(R.string.profile_block),
+                                            color = MaterialTheme.colorScheme.error,
+                                        )
+                                    }
+                                },
+                                dismissButton = {
+                                    TextButton(onClick = { showBlockConfirm = false }) {
+                                        Text(stringResource(R.string.common_cancel))
+                                    }
+                                },
+                            )
                         }
                         Spacer(Modifier.height(24.dp))
                     }
@@ -234,7 +282,7 @@ private fun GroupInCommonRow(group: Conversation, onClick: () -> Unit) {
         Column(Modifier.weight(1f).padding(start = 12.dp)) {
             Text(title, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurface)
             Text(
-                "${group.members.size + 1} members",
+                stringResource(R.string.group_members_count, group.members.size + 1),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -310,15 +358,16 @@ private fun CallActionButton(iconRes: Int, label: String, onClick: () -> Unit) {
     }
 }
 
+@Composable
 private fun presenceText(online: Boolean, lastSeenMs: Long?): String? {
-    if (online) return "Online"
+    if (online) return stringResource(R.string.presence_online)
     val ms = lastSeenMs ?: return null
     val date = Instant.ofEpochMilli(ms).atZone(ZoneId.systemDefault())
     val day = date.toLocalDate()
     val time = DateTimeFormatter.ofPattern("HH:mm").format(date)
     return when (day) {
-        LocalDate.now() -> "last seen today at $time"
-        LocalDate.now().minusDays(1) -> "last seen yesterday at $time"
-        else -> "last seen ${DateTimeFormatter.ofPattern("MMM d").format(day)}"
+        LocalDate.now() -> stringResource(R.string.presence_last_seen_today_at, time)
+        LocalDate.now().minusDays(1) -> stringResource(R.string.presence_last_seen_yesterday_at, time)
+        else -> stringResource(R.string.presence_last_seen_on, DateTimeFormatter.ofPattern("MMM d").format(day))
     }
 }

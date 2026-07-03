@@ -73,6 +73,8 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
+import androidx.compose.ui.res.stringResource
+import com.klic.mobile.app.R
 
 // ── Attachment download cache (§7.3) ────────────────────────────────────────
 //
@@ -144,6 +146,145 @@ object AttachmentDownloads {
                 null
             } finally {
                 progress.remove(att.id)
+            }
+        }
+    }
+}
+
+// ── PDF bubble preview (§10.10) ──────────────────────────────────────────────
+
+/**
+ * First-page thumbnails for PDF bubbles, cached by attachment id: memory map +
+ * PNG on disk. Any failure returns null and the bubble falls back to the doc pill.
+ */
+object PdfThumbnails {
+    private val memory = ConcurrentHashMap<String, Bitmap>()
+    private val renderLock = Mutex()
+
+    suspend fun thumbnail(context: Context, att: Attachment, conversationId: String?): Bitmap? =
+        withContext(Dispatchers.IO) {
+            memory[att.id]?.let { return@withContext it }
+            val cacheFile = File(File(context.cacheDir, "pdf_thumbs").apply { mkdirs() }, "${att.id}.png")
+            if (cacheFile.length() > 0) {
+                android.graphics.BitmapFactory.decodeFile(cacheFile.absolutePath)?.let {
+                    memory[att.id] = it
+                    return@withContext it
+                }
+            }
+            val pdf = AttachmentDownloads.ensureLocal(context, att, conversationId) ?: return@withContext null
+            val bitmap = renderLock.withLock {
+                runCatching {
+                    PdfRenderer(ParcelFileDescriptor.open(pdf, ParcelFileDescriptor.MODE_READ_ONLY)).use { renderer ->
+                        if (renderer.pageCount == 0) return@runCatching null
+                        renderer.openPage(0).use { page ->
+                            val width = 480
+                            val height = (width.toLong() * page.height / page.width).toInt().coerceAtLeast(1)
+                            Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888).also { bmp ->
+                                bmp.eraseColor(android.graphics.Color.WHITE)
+                                page.render(bmp, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+                            }
+                        }
+                    }
+                }.getOrNull()
+            } ?: return@withContext null
+            memory[att.id] = bitmap
+            runCatching { cacheFile.outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 90, it) } }
+            bitmap
+        }
+}
+
+/**
+ * §10.10: a PDF renders its FIRST PAGE as the bubble preview — image-style pill
+ * with a doc badge and a filename/size footer. Falls back to [FileAttachmentView]
+ * while loading fails or before the thumbnail lands.
+ */
+@Composable
+fun PdfFileBubbleView(
+    att: Attachment,
+    isMine: Boolean,
+    time: String = "",
+    status: String? = null,
+    conversationId: String? = null,
+    starred: Boolean = false,
+) {
+    val context = LocalContext.current
+    val thumb by produceState<Bitmap?>(initialValue = null, att.id) {
+        value = PdfThumbnails.thumbnail(context, att, conversationId)
+    }
+    val bmp = thumb
+    if (bmp == null) {
+        FileAttachmentView(att, isMine, time, status, conversationId, starred)
+        return
+    }
+    val containerColor = if (isMine) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
+    val nameColor = if (isMine) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
+    val metaColor = if (isMine) MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.75f)
+                    else MaterialTheme.colorScheme.onSurfaceVariant
+    Surface(color = containerColor, shape = RoundedCornerShape(18.dp)) {
+        Column(Modifier.width(240.dp).padding(4.dp)) {
+            Box(Modifier.fillMaxWidth().aspectRatio(1f / 1.15f)) {
+                Image(
+                    bitmap = bmp.asImageBitmap(),
+                    contentDescription = att.fileName ?: "PDF",
+                    contentScale = ContentScale.Crop,
+                    alignment = Alignment.TopCenter,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color.White, RoundedCornerShape(15.dp)),
+                )
+                // Doc badge — top-left.
+                Box(
+                    Modifier
+                        .padding(8.dp)
+                        .background(Color.Black.copy(alpha = 0.55f), CircleShape)
+                        .padding(horizontal = 8.dp, vertical = 3.dp),
+                ) {
+                    Text("PDF", style = MaterialTheme.typography.labelSmall, color = Color.White)
+                }
+            }
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    painter = painterResource(KlicIcons.document),
+                    contentDescription = null,
+                    tint = nameColor,
+                    modifier = Modifier.size(16.dp),
+                )
+                Spacer(Modifier.width(6.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        att.fileName ?: "PDF",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = nameColor,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Text(
+                        formatByteSize(att.byteSize),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = metaColor,
+                    )
+                }
+                if (time.isNotEmpty()) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (starred) {
+                            Icon(
+                                painter = painterResource(KlicIcons.starBold),
+                                contentDescription = "Starred",
+                                tint = metaColor,
+                                modifier = Modifier.size(10.dp),
+                            )
+                            Spacer(Modifier.width(3.dp))
+                        }
+                        Text(time, style = MaterialTheme.typography.labelSmall, color = metaColor)
+                        if (isMine && status != null) {
+                            Spacer(Modifier.width(3.dp))
+                            MessageTicks(status = status, onPrimary = isMine)
+                        }
+                    }
+                }
             }
         }
     }
@@ -323,7 +464,7 @@ fun PdfViewerOverlay(file: File, onDismiss: () -> Unit) {
     Box(Modifier.fillMaxSize().background(Color.Black)) {
         if (renderer == null) {
             Text(
-                "Couldn't open this PDF.",
+                stringResource(R.string.file_pdf_open_failed),
                 style = MaterialTheme.typography.bodyLarge,
                 color = Color.White,
                 modifier = Modifier.align(Alignment.Center),
@@ -431,7 +572,7 @@ fun FileDetailSheet(att: Attachment, file: File, onDismiss: () -> Unit) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Spacer(Modifier.height(20.dp))
-            PillButton(text = "Open with…") {
+            PillButton(text = stringResource(R.string.file_open_with)) {
                 val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
                 val intent = Intent(Intent.ACTION_VIEW)
                     .setDataAndType(uri, att.contentType.ifBlank { "*/*" })

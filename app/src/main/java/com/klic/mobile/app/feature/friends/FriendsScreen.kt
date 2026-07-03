@@ -51,6 +51,8 @@ import com.klic.mobile.app.ui.components.KlicLottieView
 import com.klic.mobile.app.ui.components.KlicTextField
 import com.klic.mobile.app.ui.components.PillButton
 import com.klic.mobile.app.ui.theme.KlicIcons
+import androidx.compose.ui.res.stringResource
+import com.klic.mobile.app.R
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -70,7 +72,7 @@ fun FriendsScreen(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             TopAppBar(
-                title = { Text("Friends", style = MaterialTheme.typography.titleLarge) },
+                title = { Text(stringResource(R.string.tab_friends), style = MaterialTheme.typography.titleLarge) },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.background,
                 ),
@@ -78,7 +80,7 @@ fun FriendsScreen(
                     IconButton(onClick = { showAddFriendSheet = true }) {
                         Icon(
                             painter = painterResource(KlicIcons.add),
-                            contentDescription = "Add Friend",
+                            contentDescription = stringResource(R.string.friends_add_friend),
                             modifier = Modifier.size(22.dp),
                         )
                     }
@@ -99,7 +101,7 @@ fun FriendsScreen(
                     .padding(horizontal = 20.dp),
             ) {
                 if (requests.isNotEmpty()) {
-                    item { SectionTitle("Requests") }
+                    item { SectionTitle(stringResource(R.string.friends_requests)) }
                     items(requests) { req ->
                         RequestRow(
                             req,
@@ -110,11 +112,11 @@ fun FriendsScreen(
                     item { Spacer(Modifier.size(20.dp)) }
                 }
 
-                item { SectionTitle("Your friends") }
+                item { SectionTitle(stringResource(R.string.friends_your_friends)) }
                 if (friends.isEmpty()) {
                     item {
                         Text(
-                            "No friends yet — tap + to add someone by username.",
+                            stringResource(R.string.friends_empty),
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -138,7 +140,7 @@ fun FriendsScreen(
                             modifier = Modifier.fillMaxWidth().height(180.dp),
                         )
                         Text(
-                            "Your people, all in one place.",
+                            stringResource(R.string.friends_footer),
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             textAlign = TextAlign.Center,
@@ -269,7 +271,7 @@ private fun AddFriendSheet(vm: KlicViewModel, onDismiss: () -> Unit) {
                     )
                 }
                 Text(
-                    "Add Friend",
+                    stringResource(R.string.friends_add_friend),
                     style = MaterialTheme.typography.titleMedium,
                     modifier = Modifier
                         .weight(1f)
@@ -279,12 +281,12 @@ private fun AddFriendSheet(vm: KlicViewModel, onDismiss: () -> Unit) {
             KlicTextField(
                 value = username,
                 onValueChange = { username = it },
-                placeholder = "Username",
+                placeholder = stringResource(R.string.auth_username),
                 modifier = Modifier.padding(vertical = 8.dp),
             )
             Spacer(Modifier.height(12.dp))
             PillButton(
-                text = "Send Request",
+                text = stringResource(R.string.friends_send_request),
                 onClick = { vm.addFriend(username) },
             )
             friendStatus?.let { status ->

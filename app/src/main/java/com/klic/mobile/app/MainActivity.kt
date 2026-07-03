@@ -71,19 +71,20 @@ import com.klic.mobile.app.update.AppUpdater
 import com.klic.mobile.app.ui.theme.KlicIcons
 import com.klic.mobile.app.ui.theme.KlicTheme
 import kotlinx.coroutines.flow.MutableStateFlow
+import androidx.compose.ui.res.stringResource
 
 private data class Tab(
     val route: String,
-    val label: String,
+    val labelRes: Int,
     val iconRes: Int,
     val boldIconRes: Int,
 )
 
 private val tabs = listOf(
-    Tab("home",     "Chats",    KlicIcons.messageChat,    KlicIcons.messageChatBold),
-    Tab("friends",  "Friends",  KlicIcons.user,           KlicIcons.userBold),
-    Tab("call",     "Call",     KlicIcons.phone,          KlicIcons.phoneBold),
-    Tab("settings", "Settings", KlicIcons.settings,       KlicIcons.settings),
+    Tab("home",     R.string.tab_chats,    KlicIcons.messageChat,    KlicIcons.messageChatBold),
+    Tab("friends",  R.string.tab_friends,  KlicIcons.user,           KlicIcons.userBold),
+    Tab("call",     R.string.tab_call,     KlicIcons.phone,          KlicIcons.phoneBold),
+    Tab("settings", R.string.tab_settings, KlicIcons.settings,       KlicIcons.settings),
 )
 
 private val tabRoutes = tabs.map { it.route }.toSet()
@@ -102,6 +103,11 @@ class MainActivity : ComponentActivity() {
 
     private val permissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {}
+
+    override fun attachBaseContext(newBase: android.content.Context) {
+        // §10.5: apply the in-app language on pre-33 devices.
+        super.attachBaseContext(com.klic.mobile.app.data.LocaleHelper.wrap(newBase))
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -187,6 +193,14 @@ class MainActivity : ComponentActivity() {
                     showWelcome    -> WelcomeScreen { showWelcome = false }
                     else           -> AuthScreen(vm)
                 }
+                // §10.4 app lock: overlay above ALL content while locked. The in-call UI
+                // (incoming answers land in activeCall) bypasses the lock; the incoming
+                // ring itself lives in IncomingCallActivity, outside this overlay.
+                val appLocked by com.klic.mobile.app.data.AppLockStore.locked.collectAsState()
+                val lockEnabled by com.klic.mobile.app.data.AppLockStore.enabled.collectAsState()
+                if (isAuthed && lockEnabled && appLocked && activeCallForPip == null) {
+                    com.klic.mobile.app.ui.components.AppLockOverlay()
+                }
                 if (showReliabilityDialog) {
                     ReliabilityDialog(
                         onAllow = {
@@ -271,6 +285,17 @@ class MainActivity : ComponentActivity() {
     @Composable
     private fun Home(vm: KlicViewModel) {
         val navController = rememberNavController()
+        // §10.1: errors were silently swallowed outside the auth screen — surface every
+        // repository/UI failure pushed into vm.error as a visible toast.
+        val context = LocalContext.current
+        LaunchedEffect(Unit) {
+            vm.error.collect { message ->
+                if (!message.isNullOrBlank()) {
+                    android.widget.Toast.makeText(context, message, android.widget.Toast.LENGTH_LONG).show()
+                    vm.error.value = null
+                }
+            }
+        }
         val backStack by navController.currentBackStackEntryAsState()
         val route = backStack?.destination?.route
         val showBar = route in tabRoutes
@@ -312,11 +337,11 @@ class MainActivity : ComponentActivity() {
                                 icon = {
                                     Icon(
                                         painter = painterResource(if (selected) tab.boldIconRes else tab.iconRes),
-                                        contentDescription = tab.label,
+                                        contentDescription = stringResource(tab.labelRes),
                                         modifier = Modifier.size(28.dp),
                                     )
                                 },
-                                label = { Text(tab.label) },
+                                label = { Text(stringResource(tab.labelRes)) },
                             )
                         }
                     }
@@ -438,15 +463,10 @@ class MainActivity : ComponentActivity() {
     private fun ReliabilityDialog(onAllow: () -> Unit, onDismiss: () -> Unit) {
         AlertDialog(
             onDismissRequest = onDismiss,
-            title = { Text("Reliable calls") },
-            text = {
-                Text(
-                    "To ring on time and keep calls from dropping in the background, allow Klic " +
-                        "to run without battery restrictions. You can change this later in Settings.",
-                )
-            },
-            confirmButton = { TextButton(onClick = onAllow) { Text("Allow") } },
-            dismissButton = { TextButton(onClick = onDismiss) { Text("Not now") } },
+            title = { Text(stringResource(R.string.dialog_reliable_calls_title)) },
+            text = { Text(stringResource(R.string.dialog_reliable_calls_body)) },
+            confirmButton = { TextButton(onClick = onAllow) { Text(stringResource(R.string.common_allow)) } },
+            dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.common_not_now)) } },
         )
     }
 

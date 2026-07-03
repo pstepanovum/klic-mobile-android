@@ -66,6 +66,8 @@ import com.klic.mobile.app.ui.components.AvatarView
 import com.klic.mobile.app.ui.components.KlicSearchBar
 import com.klic.mobile.app.ui.theme.KlicIcons
 import kotlinx.coroutines.launch
+import androidx.compose.ui.res.stringResource
+import com.klic.mobile.app.R
 
 private sealed class GroupInfoRoute {
     object Main : GroupInfoRoute()
@@ -101,9 +103,11 @@ fun GroupInfoScreen(
     // System back mirrors the toolbar back: one level at a time (§9.4).
     BackHandler(enabled = route != GroupInfoRoute.Main) { route = GroupInfoRoute.Main }
 
+    val youLabel = stringResource(R.string.common_you)
+    val memberLabel = stringResource(R.string.call_member)
     fun senderName(senderId: String): String = when (senderId) {
-        me?.id -> "You"
-        else -> conversation.members.firstOrNull { it.id == senderId }?.displayName ?: "Member"
+        me?.id -> youLabel
+        else -> conversation.members.firstOrNull { it.id == senderId }?.displayName ?: memberLabel
     }
 
     Scaffold(
@@ -113,8 +117,8 @@ fun GroupInfoScreen(
                 title = {
                     Text(
                         when (route) {
-                            GroupInfoRoute.Main -> "Group Info"
-                            GroupInfoRoute.Search -> "Search messages"
+                            GroupInfoRoute.Main -> stringResource(R.string.group_info_title)
+                            GroupInfoRoute.Search -> stringResource(R.string.group_search_messages)
                             is GroupInfoRoute.Sub -> when ((route as GroupInfoRoute.Sub).sub) {
                                 ChatInfoSub.MEDIA -> "Media, links, docs"
                                 ChatInfoSub.STARRED -> "Starred"
@@ -208,7 +212,7 @@ private fun GroupInfoMain(
             scope.launch {
                 val encoded = ImageUploads.encodeAvatar(context, uri)
                 if (encoded == null) {
-                    vm.error.value = "Couldn't read the selected photo."
+                    vm.error.value = context.getString(R.string.group_photo_read_failed)
                 } else {
                     vm.updateGroupCover(conversationId, encoded.bytes, encoded.contentType)
                 }
@@ -257,21 +261,21 @@ private fun GroupInfoMain(
             )
             Spacer(Modifier.height(4.dp))
             Text(
-                "${conversation.members.size + 1} members",
+                stringResource(R.string.group_members_count, conversation.members.size + 1),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Spacer(Modifier.height(20.dp))
             // Audio/Video — start the group call, or join the one already live.
             Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                GroupCallButton(KlicIcons.phone, "Audio") {
+                GroupCallButton(KlicIcons.phone, stringResource(R.string.action_audio)) {
                     if (vm.chatActiveCall.value?.conversationId == conversationId) {
                         vm.joinOngoingCall(conversationId)
                     } else {
                         vm.startCall(conversationId, "AUDIO", title)
                     }
                 }
-                GroupCallButton(KlicIcons.video, "Video") {
+                GroupCallButton(KlicIcons.video, stringResource(R.string.action_video)) {
                     if (vm.chatActiveCall.value?.conversationId == conversationId) {
                         vm.joinOngoingCall(conversationId)
                     } else {
@@ -291,7 +295,7 @@ private fun GroupInfoMain(
 
         // ── Members ───────────────────────────────────────────────────────────
         Spacer(Modifier.height(16.dp))
-        InfoSectionLabel("MEMBERS")
+        InfoSectionLabel(stringResource(R.string.group_members_label))
         InfoCard {
             if (meName != null) {
                 MemberRow(
@@ -322,14 +326,14 @@ private fun GroupInfoMain(
         Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
             creator?.let {
                 Text(
-                    "Created by $it",
+                    stringResource(R.string.group_created_by, it),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
             conversation.createdAt?.let {
                 Text(
-                    "Created ${shortDate(it)}",
+                    stringResource(R.string.group_created_on, shortDate(it)),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -355,16 +359,16 @@ private fun GroupInfoMain(
     removeTarget?.let { member ->
         AlertDialog(
             onDismissRequest = { removeTarget = null },
-            title = { Text("Remove ${member.displayName}?") },
-            text = { Text("They'll no longer see this group or its messages.") },
+            title = { Text(stringResource(R.string.group_remove_confirm_title, member.displayName)) },
+            text = { Text(stringResource(R.string.group_remove_confirm_body)) },
             confirmButton = {
                 TextButton(onClick = {
                     vm.removeGroupMember(conversationId, member.id)
                     removeTarget = null
-                }) { Text("Remove", color = MaterialTheme.colorScheme.error) }
+                }) { Text(stringResource(R.string.group_remove), color = MaterialTheme.colorScheme.error) }
             },
             dismissButton = {
-                TextButton(onClick = { removeTarget = null }) { Text("Cancel") }
+                TextButton(onClick = { removeTarget = null }) { Text(stringResource(R.string.common_cancel)) }
             },
         )
     }
@@ -418,7 +422,7 @@ private fun MemberRow(
         }
         if (isAdmin) {
             Text(
-                "admin",
+                stringResource(R.string.group_admin),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.primary,
                 modifier = Modifier
@@ -475,7 +479,7 @@ private fun MemberActionSheet(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Text(
-                            "Remove from group",
+                            stringResource(R.string.group_remove_from_group),
                             style = MaterialTheme.typography.bodyLarge,
                             color = MaterialTheme.colorScheme.error,
                         )
@@ -491,7 +495,7 @@ private fun MemberActionSheet(
                     containerColor = MaterialTheme.colorScheme.surfaceVariant,
                     contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
                 ),
-            ) { Text("Cancel", modifier = Modifier.padding(vertical = 6.dp)) }
+            ) { Text(stringResource(R.string.common_cancel), modifier = Modifier.padding(vertical = 6.dp)) }
         }
     }
 }
@@ -539,7 +543,7 @@ private fun GroupMessageSearch(
         KlicSearchBar(
             value = query,
             onValueChange = { query = it },
-            placeholder = "Search messages",
+            placeholder = stringResource(R.string.group_search_messages),
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
         )
         LazyColumn(Modifier.fillMaxSize()) {
@@ -581,13 +585,13 @@ private fun GroupMessageSearch(
                         loading -> CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp)
                         query.isNotBlank() && results.isEmpty() && exhausted ->
                             Text(
-                                "No matches.",
+                                stringResource(R.string.group_no_matches),
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         !exhausted -> TextButton(
                             onClick = { scope.launch { loadMore(pages = 4) } },
-                        ) { Text("Search older messages") }
+                        ) { Text(stringResource(R.string.info_search_older)) }
                     }
                 }
             }

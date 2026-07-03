@@ -93,10 +93,14 @@ fun MinimizedCallOverlay(vm: KlicViewModel, onRestore: () -> Unit) {
             delay(1_000)
         }
     }
-    val subtitle = if (callStatus == "On Hold") callStatus else connectedAt?.let {
-        val s = ((nowMs - it) / 1000).coerceAtLeast(0)
-        "%d:%02d".format(s / 60, s % 60)
-    } ?: callStatus
+    val subtitle = if (callStatus == "On Hold") {
+        com.klic.mobile.app.feature.call.localizedCallStatus(callStatus)
+    } else {
+        connectedAt?.let {
+            val s = ((nowMs - it) / 1000).coerceAtLeast(0)
+            "%d:%02d".format(s / 60, s % 60)
+        } ?: com.klic.mobile.app.feature.call.localizedCallStatus(callStatus)
+    }
 
     BoxWithConstraints(Modifier.fillMaxSize().systemBarsPadding()) {
         val density = LocalDensity.current

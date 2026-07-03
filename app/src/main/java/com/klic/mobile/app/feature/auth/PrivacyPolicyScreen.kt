@@ -18,18 +18,15 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.res.stringResource
+import com.klic.mobile.app.R
 
 private val sections = listOf(
-    "What we collect" to
-        "Account data — username, display name, and a hashed password. We never store passwords in plain text.\n\nMessages & calls — content is encrypted in transit. We do not read your conversations.\n\nDevice & usage data — anonymous crash reports and usage statistics to improve the app.",
-    "How we use it" to
-        "Your data is used exclusively to operate and improve Klic. We do not sell or share personal information with advertisers or third parties.",
-    "Data retention" to
-        "You can delete your account at any time. All associated data is permanently removed within 30 days of deletion.",
-    "Security" to
-        "We use industry-standard encryption to protect your data in transit and at rest.",
-    "Contact" to
-        "Questions? Reach us at privacy@klic.app",
+    R.string.pp_collect_title to R.string.pp_collect_body,
+    R.string.pp_use_title to R.string.pp_use_body,
+    R.string.pp_retention_title to R.string.pp_retention_body,
+    R.string.pp_security_title to R.string.pp_security_body,
+    R.string.pp_contact_title to R.string.pp_contact_body,
 )
 
 @Composable
@@ -51,12 +48,12 @@ fun PrivacyPolicyScreen(onBack: () -> Unit) {
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
-                "Privacy Policy",
+                stringResource(R.string.pp_title),
                 style = MaterialTheme.typography.headlineMedium,
                 color = MaterialTheme.colorScheme.onBackground,
             )
             TextButton(onClick = onBack) {
-                Text("Done", color = MaterialTheme.colorScheme.primary)
+                Text(stringResource(R.string.common_done), color = MaterialTheme.colorScheme.primary)
             }
         }
 
@@ -69,12 +66,12 @@ fun PrivacyPolicyScreen(onBack: () -> Unit) {
             sections.forEach { (title, body) ->
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
-                        title,
+                        stringResource(title),
                         style = MaterialTheme.typography.titleMedium,
                         color = MaterialTheme.colorScheme.onBackground,
                     )
                     Text(
-                        body,
+                        stringResource(body),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -82,7 +79,7 @@ fun PrivacyPolicyScreen(onBack: () -> Unit) {
             }
 
             Text(
-                "Effective date: June 28, 2026",
+                stringResource(R.string.pp_effective_date),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

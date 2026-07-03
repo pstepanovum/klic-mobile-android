@@ -216,6 +216,48 @@ interface KlicApi {
         @Path("id") id: String,
         @Path("userId") userId: String,
     ): Response<ResponseBody>
+
+    // ── v0.5.3 (§10.4): blocks, passkeys, contacts, account lifecycle ──
+
+    @GET("blocks")
+    suspend fun blocks(): List<BlockedUser>
+
+    @POST("blocks")
+    suspend fun blockUser(@Body body: Map<String, String>): Response<ResponseBody>
+
+    @DELETE("blocks/{userId}")
+    suspend fun unblockUser(@Path("userId") userId: String): Response<ResponseBody>
+
+    @POST("auth/passkeys/register/options")
+    suspend fun passkeyRegisterOptions(): kotlinx.serialization.json.JsonObject
+
+    @POST("auth/passkeys/register/verify")
+    suspend fun passkeyRegisterVerify(
+        @Body body: kotlinx.serialization.json.JsonObject,
+    ): Response<ResponseBody>
+
+    @GET("me/passkeys")
+    suspend fun passkeys(): List<Passkey>
+
+    @DELETE("me/passkeys/{id}")
+    suspend fun deletePasskey(@Path("id") id: String): Response<ResponseBody>
+
+    @POST("auth/passkeys/login/options")
+    suspend fun passkeyLoginOptions(
+        @Body body: kotlinx.serialization.json.JsonObject,
+    ): kotlinx.serialization.json.JsonObject
+
+    @POST("auth/passkeys/login/verify")
+    suspend fun passkeyLoginVerify(@Body body: kotlinx.serialization.json.JsonObject): AuthResponse
+
+    @POST("me/contacts")
+    suspend fun uploadContactHashes(@Body body: ContactHashesRequest): Response<ResponseBody>
+
+    @DELETE("me/contacts")
+    suspend fun deleteContactHashes(): Response<ResponseBody>
+
+    @DELETE("me")
+    suspend fun deleteAccount(): Response<ResponseBody>
 }
 
 /** Bare, synchronous refresh used by the Authenticator (no auth header, no authenticator → no recursion). */

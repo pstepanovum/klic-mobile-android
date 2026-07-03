@@ -37,6 +37,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.klic.mobile.app.feature.UploadTask
 import com.klic.mobile.app.ui.theme.KlicIcons
+import androidx.compose.ui.res.stringResource
+import com.klic.mobile.app.R
 
 /**
  * Optimistic outgoing-message pill for an in-flight upload (§9.1): local media preview
@@ -98,8 +100,8 @@ fun UploadProgressPill(
                     overflow = TextOverflow.Ellipsis,
                 )
                 Text(
-                    if (task.failed) "Upload failed"
-                    else "Uploading… ${(task.progress * 100).toInt()}%",
+                    if (task.failed) stringResource(R.string.upload_failed)
+                    else stringResource(R.string.upload_progress, (task.progress * 100).toInt()),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.75f),
                 )
@@ -118,8 +120,8 @@ fun UploadProgressPill(
         Spacer(Modifier.height(8.dp))
         if (task.failed) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                PillAction("Retry", onRetry, Modifier.weight(1f))
-                PillAction("Discard", onDiscard, Modifier.weight(1f))
+                PillAction(stringResource(R.string.common_retry), onRetry, Modifier.weight(1f))
+                PillAction(stringResource(R.string.upload_discard), onDiscard, Modifier.weight(1f))
             }
         } else {
             LinearProgressIndicator(
@@ -167,13 +169,14 @@ private fun rememberUploadPreview(task: UploadTask): Bitmap? = remember(task.id)
     }.getOrNull()
 }
 
+@Composable
 private fun uploadLabel(task: UploadTask): String {
     val atts = task.attachments
     if (atts.size > 1) return "${atts.size} items"
-    val first = atts.firstOrNull() ?: return "Attachment"
+    val first = atts.firstOrNull() ?: return stringResource(R.string.upload_attachment)
     return when (first.kind) {
-        "IMAGE" -> "Photo"
-        "VIDEO" -> "Video"
-        else -> first.fileName ?: "File"
+        "IMAGE" -> stringResource(R.string.preview_photo)
+        "VIDEO" -> stringResource(R.string.preview_video)
+        else -> first.fileName ?: stringResource(R.string.preview_file)
     }
 }

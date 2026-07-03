@@ -74,12 +74,11 @@ import com.klic.mobile.app.data.Attachment
 import com.klic.mobile.app.data.Conversation
 import com.klic.mobile.app.data.Message
 import com.klic.mobile.app.feature.KlicViewModel
-import com.klic.mobile.app.feature.chat.actions.ImageViewerOverlay
 import com.klic.mobile.app.feature.chat.actions.MessageActionsOverlay
 import com.klic.mobile.app.feature.chat.actions.ReplyComposerBar
 import com.klic.mobile.app.feature.chat.actions.TypingBubble
-import com.klic.mobile.app.feature.chat.composer.AttachSheet
 import com.klic.mobile.app.feature.chat.composer.CaptureMode
+import com.klic.mobile.app.feature.chat.composer.KlicAttachmentSheet
 import com.klic.mobile.app.feature.chat.composer.ComposerBar
 import com.klic.mobile.app.feature.chat.composer.MentionCandidate
 import com.klic.mobile.app.feature.chat.composer.MentionSuggestionStrip
@@ -88,6 +87,8 @@ import com.klic.mobile.app.feature.chat.composer.insertMention
 import com.klic.mobile.app.feature.chat.composer.mentionQueryAt
 import com.klic.mobile.app.feature.chat.media.AttachmentDownloads
 import com.klic.mobile.app.feature.chat.media.FileDetailSheet
+import com.klic.mobile.app.feature.chat.media.MediaEditorDialog
+import com.klic.mobile.app.feature.chat.media.MediaViewerOverlay
 import com.klic.mobile.app.feature.chat.media.PdfViewerOverlay
 import com.klic.mobile.app.feature.chat.media.PendingMediaBar
 import com.klic.mobile.app.feature.chat.media.PendingMediaDraft
@@ -108,6 +109,8 @@ import com.klic.mobile.app.ui.components.AvatarView
 import com.klic.mobile.app.ui.components.MessageTicks
 import kotlinx.coroutines.launch
 import java.io.File
+import androidx.compose.ui.res.stringResource
+import com.klic.mobile.app.R
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -121,7 +124,14 @@ fun ChatScreen(
     val messages by vm.messages.collectAsState()
     val me by vm.currentUser.collectAsState()
     val presenceMap by vm.presence.collectAsState()
-    var draft by remember(conversation.id) { mutableStateOf(TextFieldValue("")) }
+    // §10.4: composer drafts persist per conversation (restored here, saved on leave).
+    var draft by remember(conversation.id) {
+        val saved = com.klic.mobile.app.data.SettingsStore.snapshot.value.drafts[conversation.id].orEmpty()
+        mutableStateOf(TextFieldValue(saved, selection = androidx.compose.ui.text.TextRange(saved.length)))
+    }
+    DisposableEffect(conversation.id) {
+        onDispose { vm.saveDraft(conversation.id, draft.text) }
+    }
     val peer = conversation.members.firstOrNull()
     val isDirect = conversation.type == "DIRECT"
     val title = when {
@@ -159,12 +169,14 @@ fun ChatScreen(
     val clipboard = LocalClipboardManager.current
     var menuTarget by remember { mutableStateOf<Message?>(null) }
     var deleteTarget by remember { mutableStateOf<Message?>(null) }
-    var viewerUrl by remember { mutableStateOf<String?>(null) }
+    var viewerTarget by remember { mutableStateOf<Pair<Message, Attachment>?>(null) }
+    // §10.9 pre-send editor target (staged draft id).
+    var editorTarget by remember { mutableStateOf<PendingMediaDraft?>(null) }
     // §7.3: FILE attachments are downloaded to cache and viewed in-app, never opened by URL.
     var pdfFile by remember { mutableStateOf<File?>(null) }
     var fileDetail by remember { mutableStateOf<Pair<Attachment, File>?>(null) }
     val peerTyping = isDirect && typingMap[conversation.id]?.let { System.currentTimeMillis() - it < 6000L } == true
-    val displaySubtitle = if (peerTyping) "typing…" else headerSubtitle
+    val displaySubtitle = if (peerTyping) stringResource(R.string.chat_typing) else headerSubtitle
 
     // Pagination
     val isLoadingOlder by vm.isLoadingOlderMessages.collectAsState()
@@ -172,7 +184,7 @@ fun ChatScreen(
 
     val recorder = remember { VoiceRecorder(context) }
     val micPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        if (granted && !recorder.start()) vm.error.value = "Couldn't start recording."
+        if (granted && !recorder.start()) vm.error.value = context.getString(R.string.err_start_recording)
     }
 
     // Multi-select photos + videos together, matching iOS's PhotosPicker(.any(of: [.images, .videos])).
@@ -183,7 +195,7 @@ fun ChatScreen(
             scope.launch {
                 val drafts = uris.mapNotNull { loadMediaDraft(context, it) }
                 if (drafts.isEmpty()) {
-                    vm.error.value = "Couldn't read selected media."
+                    vm.error.value = context.getString(R.string.err_read_media)
                 } else {
                     pendingMedia = pendingMedia + drafts
                 }
@@ -198,7 +210,7 @@ fun ChatScreen(
                 loadImageDraft(context, uri)?.let { draft ->
                     pendingMedia = pendingMedia + draft
                 } ?: run {
-                    vm.error.value = "Couldn't read captured photo."
+                    vm.error.value = context.getString(R.string.err_read_photo)
                 }
             }
         }
@@ -212,7 +224,7 @@ fun ChatScreen(
                 loadVideoDraft(context, uri)?.let { draft ->
                     pendingMedia = pendingMedia + draft
                 } ?: run {
-                    vm.error.value = "Couldn't read captured video."
+                    vm.error.value = context.getString(R.string.err_read_video)
                 }
             }
         }
@@ -225,7 +237,7 @@ fun ChatScreen(
                     // Optimistic upload pill (§9.1) — the list stays fully interactive.
                     vm.sendAttachments(conversation.id, null, listOf(attachment))
                 } else {
-                    vm.error.value = "Couldn't read selected file."
+                    vm.error.value = context.getString(R.string.err_read_file)
                 }
             }
         }
@@ -398,18 +410,18 @@ fun ChatScreen(
                         isMine  = isMine,
                         isFirst = isFirst,
                         isLast  = isLast,
-                        replyAuthorName = msg.replyTo?.let { if (it.senderId == me?.id) "You" else title } ?: "",
+                        replyAuthorName = msg.replyTo?.let { if (it.senderId == me?.id) stringResource(R.string.common_you) else title } ?: "",
                         highlightMentions = !isDirect,
                         mentionNames = mentionableNames,
                         onCallBack = { kind -> vm.startCall(conversation.id, kind, title); onCall(kind) },
                         onLongPress = { menuTarget = msg },
                         onReactionTap = { emoji -> vm.react(conversation.id, msg.id, emoji) },
-                        onImageClick = { url -> viewerUrl = url },
+                        onMediaClick = { att -> viewerTarget = msg to att },
                         onFileClick = { att ->
                             scope.launch {
                                 val file = AttachmentDownloads.ensureLocal(context, att, conversation.id)
                                 when {
-                                    file == null -> vm.error.value = "Couldn't download the file."
+                                    file == null -> vm.error.value = context.getString(R.string.err_download_file)
                                     isPdfAttachment(att) -> pdfFile = file
                                     else -> fileDetail = att to file
                                 }
@@ -503,11 +515,12 @@ fun ChatScreen(
                     PendingMediaBar(
                         items = pendingMedia,
                         onRemove = { id -> pendingMedia = pendingMedia.filterNot { it.id == id } },
+                        onEdit = { id -> editorTarget = pendingMedia.firstOrNull { it.id == id } },
                     )
                 }
                 replyingTo?.let { target ->
                     ReplyComposerBar(
-                        authorName = if (target.senderId == me?.id) "yourself" else title,
+                        authorName = if (target.senderId == me?.id) stringResource(R.string.chat_yourself) else title,
                         preview = messagePreview(target),
                         onCancel = { vm.setReplyTo(null) },
                     )
@@ -542,10 +555,12 @@ fun ChatScreen(
                             val caption = draft.text.trim().takeIf { it.isNotBlank() }
                             pendingMedia = emptyList()
                             draft = TextFieldValue("")
+                            vm.saveDraft(conversation.id, null)
                             // Optimistic pill takes over (§9.1); the composer frees up instantly.
                             vm.sendAttachments(conversation.id, caption, toSend.map { it.attachment })
                         } else if (draft.text.isNotBlank()) {
                             vm.send(conversation.id, draft.text.trim()); draft = TextFieldValue("")
+                            vm.saveDraft(conversation.id, null)
                         }
                     },
                     onAttach = { showAttachSheet = true },
@@ -588,29 +603,31 @@ fun ChatScreen(
     }
 
     if (showAttachSheet) {
-        ModalBottomSheet(
-            onDismissRequest = { showAttachSheet = false },
-            sheetState = sheetState,
-            containerColor = MaterialTheme.colorScheme.surface,
-        ) {
-            AttachSheet(
-                onPhotos = {
-                    scope.launch { sheetState.hide() }.invokeOnCompletion { showAttachSheet = false }
-                    mediaLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo))
-                },
-                onCamera = {
-                    scope.launch { sheetState.hide() }.invokeOnCompletion { showAttachSheet = false }
-                    val file = File.createTempFile("klic_", ".jpg", context.cacheDir)
-                    val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
-                    tempCameraUri = uri
-                    cameraLauncher.launch(uri)
-                },
-                onFile = {
-                    scope.launch { sheetState.hide() }.invokeOnCompletion { showAttachSheet = false }
-                    fileLauncher.launch(arrayOf("*/*"))
-                },
-            )
-        }
+        // §10.11: ONE Klic attachment sheet — Gallery | Files tabs.
+        KlicAttachmentSheet(
+            onPickedMedia = { uris ->
+                scope.launch {
+                    val drafts = uris.mapNotNull { loadMediaDraft(context, it) }
+                    if (drafts.isEmpty()) vm.error.value = context.getString(R.string.err_read_media)
+                    else pendingMedia = pendingMedia + drafts
+                }
+            },
+            onSystemGallery = {
+                mediaLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo))
+            },
+            onSelectFiles = { fileLauncher.launch(arrayOf("*/*")) },
+            onScannedPdf = { uri ->
+                scope.launch {
+                    val attachment = loadFileAttachment(context, uri)
+                    if (attachment != null) {
+                        vm.sendAttachments(conversation.id, null, listOf(attachment))
+                    } else {
+                        vm.error.value = context.getString(R.string.err_read_scan)
+                    }
+                }
+            },
+            onDismiss = { showAttachSheet = false },
+        )
     }
 
     if (showStickerSheet) {
@@ -643,32 +660,53 @@ fun ChatScreen(
     deleteTarget?.let { target ->
         AlertDialog(
             onDismissRequest = { deleteTarget = null; menuTarget = null },
-            title = { Text("Delete message") },
-            text = { Text("This can't be undone.") },
+            title = { Text(stringResource(R.string.chat_delete_message)) },
+            text = { Text(stringResource(R.string.chat_delete_cant_undo)) },
             confirmButton = {
                 Column {
                     if (target.senderId == me?.id) {
                         TextButton(onClick = {
                             vm.deleteForEveryone(conversation.id, target.id); deleteTarget = null; menuTarget = null
-                        }) { Text("Delete for everyone", color = MaterialTheme.colorScheme.error) }
+                        }) { Text(stringResource(R.string.chat_delete_for_everyone), color = MaterialTheme.colorScheme.error) }
                     }
                     TextButton(onClick = {
                         vm.deleteForMe(target); deleteTarget = null; menuTarget = null
-                    }) { Text("Delete for me", color = MaterialTheme.colorScheme.error) }
+                    }) { Text(stringResource(R.string.chat_delete_for_me), color = MaterialTheme.colorScheme.error) }
                 }
             },
             dismissButton = {
-                TextButton(onClick = { deleteTarget = null; menuTarget = null }) { Text("Cancel") }
+                TextButton(onClick = { deleteTarget = null; menuTarget = null }) { Text(stringResource(R.string.common_cancel)) }
             },
         )
     }
 
-    viewerUrl?.let { url ->
-        ImageViewerOverlay(url = url, onDismiss = { viewerUrl = null })
+    viewerTarget?.let { (msg, att) ->
+        MediaViewerOverlay(
+            vm = vm,
+            message = msg,
+            att = att,
+            conversationId = conversation.id,
+            onReply = { /* reply bar appears in this same chat */ },
+            onDismiss = { viewerTarget = null },
+        )
     }
 
     pdfFile?.let { file ->
         PdfViewerOverlay(file = file, onDismiss = { pdfFile = null })
+    }
+
+    // §10.9: pre-send media editor (caption + draw/text/crop/quality).
+    editorTarget?.let { target ->
+        MediaEditorDialog(
+            draft = target,
+            initialCaption = draft.text,
+            onDone = { updated, caption ->
+                pendingMedia = pendingMedia.map { if (it.id == updated.id) updated else it }
+                draft = TextFieldValue(caption, selection = androidx.compose.ui.text.TextRange(caption.length))
+                editorTarget = null
+            },
+            onDismiss = { editorTarget = null },
+        )
     }
 
     fileDetail?.let { (att, file) ->
@@ -696,13 +734,14 @@ private fun JoinCallBanner(joinedCount: Int, isVideo: Boolean, onJoin: () -> Uni
                 modifier = Modifier.size(20.dp),
             )
             Text(
-                if (joinedCount > 0) "Ongoing call · $joinedCount in call" else "Ongoing call",
+                if (joinedCount > 0) stringResource(R.string.chat_ongoing_call_count, joinedCount)
+                else stringResource(R.string.chat_ongoing_call),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onPrimaryContainer,
                 modifier = Modifier.padding(start = 10.dp).weight(1f),
             )
             Text(
-                "Join",
+                stringResource(R.string.chat_join),
                 style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.primary,
             )

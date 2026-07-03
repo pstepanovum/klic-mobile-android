@@ -45,6 +45,10 @@ class KlicViewModel(
 ) : ViewModel() {
 
     val currentUser = MutableStateFlow<User?>(null)
+
+    /** Localized user-facing message helper (§10.5). */
+    private fun str(res: Int, vararg args: Any?): String =
+        container.appContext.getString(res, *args)
     val isAuthenticated = MutableStateFlow(false)
     val error = MutableStateFlow<String?>(null)
     val themeMode = MutableStateFlow(container.themeMode)
@@ -308,10 +312,10 @@ class KlicViewModel(
         if (name.isEmpty()) return@launch
         val user = runCatching { repo.findUser(name) }.getOrNull()
         if (user == null) {
-            friendStatus.value = "No user named \"$name\"."
+            friendStatus.value = str(com.klic.mobile.app.R.string.err_no_user_named, name)
         } else {
             runCatching { repo.sendFriendRequest(user.id) }
-            friendStatus.value = "Request sent to ${user.displayName}."
+            friendStatus.value = str(com.klic.mobile.app.R.string.friends_request_sent, user.displayName)
         }
     }
 
@@ -338,27 +342,43 @@ class KlicViewModel(
         onReady: (Conversation) -> Unit,
     ) = viewModelScope.launch {
         runCatching { repo.createGroupConversation(title.trim(), userIds.distinct()) }.onSuccess { c ->
-            // Cover picked during creation uploads after the fact — failures are quiet
-            // (the group exists either way; the cover can be retried from GroupInfo).
+            // Cover picked during creation uploads after the fact — the group exists either
+            // way, but §10.1 requires the failure to be VISIBLE (retry from GroupInfo).
             val withCover = if (avatarBytes != null && avatarContentType != null) {
                 runCatching { repo.uploadConversationAvatar(c.id, avatarBytes, avatarContentType) }
+                    .onFailure { e ->
+                        error.value = when (e) {
+                            is com.klic.mobile.app.data.CoverUploadException ->
+                                str(com.klic.mobile.app.R.string.err_group_created_photo_step, e.step)
+                            else -> str(com.klic.mobile.app.R.string.err_group_created_photo)
+                        }
+                    }
                     .getOrDefault(c)
             } else c
             conversations.value = listOf(withCover) + conversations.value.filterNot { it.id == c.id }
             onReady(withCover)
         }.onFailure {
-            error.value = "Couldn't create group chat. Try again."
+            error.value = str(com.klic.mobile.app.R.string.err_create_group)
         }
     }
 
-    /** Upload + attach a new group cover from GroupInfo (§8.4). */
+    /** Upload + attach a new group cover from GroupInfo (§8.4).
+     *  §10.1: failures surface step-by-step (presign / storage PUT / PATCH) as a toast,
+     *  and a successful PATCH updates the conversation in place (list + info page). */
     fun updateGroupCover(conversationId: String, bytes: ByteArray, contentType: String) =
         viewModelScope.launch {
             runCatching { repo.uploadConversationAvatar(conversationId, bytes, contentType) }
                 .onSuccess { updated ->
                     conversations.value = conversations.value.map { if (it.id == updated.id) updated else it }
                 }
-                .onFailure { error.value = "Couldn't update the group photo. Try again." }
+                .onFailure { e ->
+                    error.value = when (e) {
+                        is com.klic.mobile.app.data.CoverUploadException ->
+                            (str(com.klic.mobile.app.R.string.err_group_photo_step, e.step) +
+                                " " + (e.cause?.message ?: "")).trim()
+                        else -> str(com.klic.mobile.app.R.string.err_group_photo, e.message ?: "")
+                    }
+                }
         }
 
     /** Admin removes a group member (§9.3): optimistic drop, restored if the call fails. */
@@ -377,7 +397,7 @@ class KlicViewModel(
                         c.copy(members = c.members + removed)
                     } else c
                 }
-                error.value = "Couldn't remove ${removed.displayName}. Try again."
+                error.value = str(com.klic.mobile.app.R.string.err_remove_member, removed.displayName)
             }
     }
 
@@ -425,7 +445,7 @@ class KlicViewModel(
         val replyId = replyingTo.value?.id
         replyingTo.value = null
         runCatching { repo.send(conversationId, body, replyId) }
-            .onSuccess { upsertMessage(it) }
+            .onSuccess { upsertMessage(it); bumpSent(conversationId) }
     }
 
     fun sendSticker(conversationId: String, stickerId: String) = viewModelScope.launch {
@@ -495,7 +515,7 @@ class KlicViewModel(
             replyingTo.value = null
             runCatching { repo.uploadVoice(conversationId, bytes, durationMs, waveform) }
                 .onSuccess { upsertMessage(it) }
-                .onFailure { error.value = "Couldn't send voice message. Try again." }
+                .onFailure { error.value = str(com.klic.mobile.app.R.string.err_send_voice) }
         }
 
     fun sendImage(conversationId: String, bytes: ByteArray, contentType: String, width: Int? = null, height: Int? = null) =
@@ -503,7 +523,7 @@ class KlicViewModel(
             replyingTo.value = null
             runCatching { repo.uploadImage(conversationId, bytes, contentType, width, height) }
                 .onSuccess { upsertMessage(it) }
-                .onFailure { error.value = "Couldn't send photo. Try again." }
+                .onFailure { error.value = str(com.klic.mobile.app.R.string.err_send_photo) }
         }
 
     // ── Optimistic uploads (§9.1) ─────────────────────────────────────────────
@@ -552,6 +572,7 @@ class KlicViewModel(
             // same frame, so the list doesn't jump.
             uploadTasks.value = uploadTasks.value.filterNot { it.id == task.id }
             if (msg.conversationId == openConversationId) upsertMessage(msg)
+            bumpSent(task.conversationId)
         }.onFailure {
             // Keep the pill with retry/discard affordances.
             updateUploadTask(task.id) { it.copy(failed = true) }
@@ -993,7 +1014,135 @@ class KlicViewModel(
 
     // Wraps a suspend auth call with error handling.
     private fun launchAuth(block: suspend () -> Unit) = viewModelScope.launch {
-        runCatching { block() }.onFailure { error.value = "Could not sign in. Check your details." }
+        runCatching { block() }.onFailure { error.value = str(com.klic.mobile.app.R.string.err_sign_in) }
+    }
+
+    // ── v0.5.3 (§10.4): privacy & security ────────────────────────────────────
+
+    val blockedUsers = MutableStateFlow<List<com.klic.mobile.app.data.BlockedUser>>(emptyList())
+    val passkeyList = MutableStateFlow<List<com.klic.mobile.app.data.Passkey>>(emptyList())
+
+    fun loadBlocks() = viewModelScope.launch {
+        runCatching { repo.blocks() }.onSuccess { blockedUsers.value = it }
+    }
+
+    fun blockUser(userId: String, displayName: String, onDone: () -> Unit = {}) = viewModelScope.launch {
+        runCatching { repo.blockUser(userId) }
+            .onSuccess {
+                loadBlocks(); loadFriends(); loadConversations()
+                friendStatus.value = str(com.klic.mobile.app.R.string.privacy_blocked_toast, displayName)
+                onDone()
+            }
+            .onFailure { error.value = (str(com.klic.mobile.app.R.string.err_block, displayName) + " " + (it.message ?: "")).trim() }
+    }
+
+    fun unblockUser(userId: String) = viewModelScope.launch {
+        val before = blockedUsers.value
+        blockedUsers.value = before.filterNot { it.user.id == userId }
+        runCatching { repo.unblockUser(userId) }
+            .onFailure {
+                blockedUsers.value = before
+                error.value = str(com.klic.mobile.app.R.string.err_unblock)
+            }
+    }
+
+    fun loadPasskeys() = viewModelScope.launch {
+        runCatching { repo.passkeys() }.onSuccess { passkeyList.value = it }
+    }
+
+    fun deletePasskey(id: String) = viewModelScope.launch {
+        val before = passkeyList.value
+        passkeyList.value = before.filterNot { it.id == id }
+        runCatching { repo.deletePasskey(id) }
+            .onFailure {
+                passkeyList.value = before
+                error.value = str(com.klic.mobile.app.R.string.err_passkey_remove)
+            }
+    }
+
+    /** Adds a passkey via CredentialManager; surfaces platform refusals as a toast. */
+    fun addPasskey(activityContext: android.content.Context) = viewModelScope.launch {
+        runCatching { container.passkeyManager.register(activityContext) }
+            .onSuccess { loadPasskeys(); friendStatus.value = null }
+            .onFailure { error.value = it.message ?: str(com.klic.mobile.app.R.string.err_passkey_add) }
+    }
+
+    /** Passkey sign-in from the login screen (§10.4). */
+    fun loginWithPasskey(activityContext: android.content.Context) = viewModelScope.launch {
+        runCatching { container.passkeyManager.signIn(activityContext) }
+            .onSuccess { currentUser.value = it; onAuthed() }
+            .onFailure { error.value = it.message ?: str(com.klic.mobile.app.R.string.err_passkey_login) }
+    }
+
+    /** "Automatically delete my account" window (months, null = off). */
+    fun setDeleteIfAwayMonths(months: Int?) = viewModelScope.launch {
+        runCatching { repo.setDeleteIfAwayMonths(months) }
+            .onSuccess { currentUser.value = it }
+            .onFailure { error.value = str(com.klic.mobile.app.R.string.err_auto_delete) }
+    }
+
+    /** "Delete Account Now": DELETE /me → wipe local state + sign out. */
+    fun deleteAccount(onDone: () -> Unit) = viewModelScope.launch {
+        runCatching { repo.deleteAccount() }
+            .onSuccess {
+                SettingsStore.deleteAllDrafts()
+                com.klic.mobile.app.data.AppLockStore.clearPasscode()
+                repo.logout()
+                socket.disconnect()
+                conversations.value = emptyList()
+                messages.value = emptyList()
+                friends.value = emptyList()
+                currentUser.value = null
+                isAuthenticated.value = false
+                onDone()
+            }
+            .onFailure { error.value = (str(com.klic.mobile.app.R.string.err_delete_account) + " " + (it.message ?: "")).trim() }
+    }
+
+    /** Sync Contacts ON: hash device emails/phones and upload (hashes only). */
+    fun syncContactsNow(context: android.content.Context) = viewModelScope.launch {
+        val hashes = com.klic.mobile.app.data.ContactsSync.collectHashes(context)
+        runCatching { repo.uploadContactHashes(hashes) }
+            .onSuccess {
+                SettingsStore.setContactsSyncEnabled(true)
+                friendStatus.value = null
+            }
+            .onFailure {
+                SettingsStore.setContactsSyncEnabled(false)
+                error.value = (str(com.klic.mobile.app.R.string.err_contact_sync) + " " + (it.message ?: "")).trim()
+            }
+    }
+
+    fun deleteSyncedContacts() = viewModelScope.launch {
+        runCatching { repo.deleteContactHashes() }
+            .onSuccess { SettingsStore.setContactsSyncEnabled(false) }
+            .onFailure { error.value = str(com.klic.mobile.app.R.string.err_delete_contacts) }
+    }
+
+    // ── v0.5.3 (§10.4): drafts + frequent contacts ────────────────────────────
+
+    /** Persist the composer draft for a conversation (cleared when blank). */
+    fun saveDraft(conversationId: String, text: String?) = viewModelScope.launch {
+        SettingsStore.setDraft(conversationId, text)
+    }
+
+    fun deleteAllDrafts() = viewModelScope.launch { SettingsStore.deleteAllDrafts() }
+
+    /** Most-messaged friend ids (locally counted sends) — the "Frequent" picker row. */
+    fun frequentFriendIds(limit: Int = 6): List<String> {
+        if (!SettingsStore.snapshot.value.suggestFrequentContacts) return emptyList()
+        val counts = SettingsStore.snapshot.value.sentCounts
+        return conversations.value
+            .filter { it.type == "DIRECT" }
+            .mapNotNull { c -> c.members.firstOrNull()?.id?.let { it to (counts[c.id] ?: 0L) } }
+            .filter { it.second > 0L }
+            .sortedByDescending { it.second }
+            .take(limit)
+            .map { it.first }
+    }
+
+    private fun bumpSent(conversationId: String) {
+        viewModelScope.launch { SettingsStore.bumpSentCount(conversationId) }
     }
 }
 

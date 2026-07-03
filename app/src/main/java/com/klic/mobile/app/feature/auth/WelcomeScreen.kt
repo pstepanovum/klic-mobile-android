@@ -36,6 +36,7 @@ import com.airbnb.lottie.compose.rememberLottieDynamicProperties
 import com.airbnb.lottie.compose.rememberLottieDynamicProperty
 import com.klic.mobile.app.R
 import com.klic.mobile.app.ui.components.PillButton
+import androidx.compose.ui.res.stringResource
 
 @Composable
 fun WelcomeScreen(onGetStarted: () -> Unit) {
@@ -79,7 +80,7 @@ fun WelcomeScreen(onGetStarted: () -> Unit) {
         )
 
         Text(
-            "Talk. Chat. Connect.",
+            stringResource(R.string.welcome_tagline),
             style = MaterialTheme.typography.headlineMedium.copy(
                 fontFamily = com.klic.mobile.app.ui.theme.Bangers,
                 fontWeight = androidx.compose.ui.text.font.FontWeight.Normal,
@@ -91,7 +92,7 @@ fun WelcomeScreen(onGetStarted: () -> Unit) {
         )
 
         Text(
-            "Crystal-clear calls and instant messages,\nall in one place.",
+            stringResource(R.string.welcome_subtitle),
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center,
@@ -101,13 +102,13 @@ fun WelcomeScreen(onGetStarted: () -> Unit) {
         Spacer(Modifier.weight(1f))
 
         PillButton(
-            "Get Started",
+            stringResource(R.string.welcome_get_started),
             modifier = Modifier.padding(horizontal = 28.dp),
             onClick = onGetStarted,
         )
 
         Text(
-            "Free forever · No ads · Private by design",
+            stringResource(R.string.welcome_footer),
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(top = 16.dp, bottom = 48.dp),

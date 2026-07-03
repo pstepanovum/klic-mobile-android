@@ -47,6 +47,8 @@ import com.klic.mobile.app.feature.KlicViewModel
 import com.klic.mobile.app.ui.components.KlicSelectionSheet
 import com.klic.mobile.app.ui.components.KlicSheetOption
 import kotlinx.coroutines.launch
+import androidx.compose.ui.res.stringResource
+import com.klic.mobile.app.R
 
 /**
  * Settings → "Data and Storage" (§8.3): cache scan by category with a segmented bar,
@@ -78,19 +80,19 @@ fun DataStorageContent(vm: KlicViewModel) {
         val cats = categories
         if (cats == null) {
             Text(
-                "Scanning…",
+                stringResource(R.string.storage_scanning),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(vertical = 16.dp),
             )
         } else {
             val slices = listOf(
-                Triple("Photos", cats.photos, Color(0xFF4C9AFF)),
-                Triple("Videos", cats.videos, Color(0xFFF06292)),
-                Triple("Audio", cats.audio, Color(0xFF9575CD)),
-                Triple("Documents", cats.documents, Color(0xFFFFB74D)),
-                Triple("Stickers", cats.stickers, Color(0xFF4DB6AC)),
-                Triple("Misc", cats.misc, Color(0xFF90A4AE)),
+                Triple(stringResource(R.string.storage_photos), cats.photos, Color(0xFF4C9AFF)),
+                Triple(stringResource(R.string.storage_videos), cats.videos, Color(0xFFF06292)),
+                Triple(stringResource(R.string.storage_audio), cats.audio, Color(0xFF9575CD)),
+                Triple(stringResource(R.string.storage_documents), cats.documents, Color(0xFFFFB74D)),
+                Triple(stringResource(R.string.storage_stickers), cats.stickers, Color(0xFF4DB6AC)),
+                Triple(stringResource(R.string.storage_misc), cats.misc, Color(0xFF90A4AE)),
             )
             Column(Modifier.padding(vertical = 16.dp)) {
                 Text(
@@ -99,7 +101,7 @@ fun DataStorageContent(vm: KlicViewModel) {
                     color = MaterialTheme.colorScheme.onSurface,
                 )
                 Text(
-                    "Used by Klic's cache",
+                    stringResource(R.string.storage_used_by_cache),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -157,13 +159,13 @@ fun DataStorageContent(vm: KlicViewModel) {
             containerColor = MaterialTheme.colorScheme.surfaceVariant,
             contentColor = MaterialTheme.colorScheme.error,
         ),
-    ) { Text("Clear Entire Cache", modifier = Modifier.padding(vertical = 6.dp)) }
+    ) { Text(stringResource(R.string.storage_clear_cache), modifier = Modifier.padding(vertical = 6.dp)) }
 
     if (confirmClear) {
         AlertDialog(
             onDismissRequest = { confirmClear = false },
-            title = { Text("Clear entire cache?") },
-            text = { Text("Downloaded media and files will be removed from this device. Your messages are not affected.") },
+            title = { Text(stringResource(R.string.storage_clear_cache_confirm_title)) },
+            text = { Text(stringResource(R.string.storage_clear_cache_confirm_body)) },
             confirmButton = {
                 TextButton(onClick = {
                     confirmClear = false
@@ -171,9 +173,9 @@ fun DataStorageContent(vm: KlicViewModel) {
                         CacheStats.clearAll(context)
                         categories = CacheStats.scan(context, stickers.map { it.url })
                     }
-                }) { Text("Clear", color = MaterialTheme.colorScheme.error) }
+                }) { Text(stringResource(R.string.common_clear), color = MaterialTheme.colorScheme.error) }
             },
-            dismissButton = { TextButton(onClick = { confirmClear = false }) { Text("Cancel") } },
+            dismissButton = { TextButton(onClick = { confirmClear = false }) { Text(stringResource(R.string.common_cancel)) } },
         )
     }
 
@@ -183,7 +185,11 @@ fun DataStorageContent(vm: KlicViewModel) {
     SettingsCard {
         Column(Modifier.padding(vertical = 12.dp)) {
             TabRow(selectedTabIndex = usageTab, containerColor = Color.Transparent) {
-                listOf("All", "Mobile", "Wi-Fi").forEachIndexed { index, label ->
+                listOf(
+                    stringResource(R.string.storage_all),
+                    stringResource(R.string.storage_mobile),
+                    stringResource(R.string.storage_wifi),
+                ).forEachIndexed { index, label ->
                     Tab(selected = usageTab == index, onClick = { usageTab = index }, text = { Text(label) })
                 }
             }
@@ -194,13 +200,13 @@ fun DataStorageContent(vm: KlicViewModel) {
                 else -> null
             }
             val rows = listOf(
-                "Photos" to DataUsage.CAT_PHOTOS,
-                "Videos" to DataUsage.CAT_VIDEOS,
-                "Audio" to DataUsage.CAT_AUDIO,
-                "Documents" to DataUsage.CAT_DOCS,
-                "Calls (signaling)" to DataUsage.CAT_CALLS,
+                stringResource(R.string.storage_photos) to DataUsage.CAT_PHOTOS,
+                stringResource(R.string.storage_videos) to DataUsage.CAT_VIDEOS,
+                stringResource(R.string.storage_audio) to DataUsage.CAT_AUDIO,
+                stringResource(R.string.storage_documents) to DataUsage.CAT_DOCS,
+                stringResource(R.string.storage_calls_signaling) to DataUsage.CAT_CALLS,
                 "API" to DataUsage.CAT_API,
-                "Other" to DataUsage.CAT_OTHER,
+                stringResource(R.string.storage_other) to DataUsage.CAT_OTHER,
             )
             var totalUp = 0L
             var totalDown = 0L
@@ -230,7 +236,7 @@ fun DataStorageContent(vm: KlicViewModel) {
             )
             Row(Modifier.fillMaxWidth()) {
                 Text(
-                    "Total Network Usage",
+                    stringResource(R.string.storage_total_network),
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.onSurface,
                     modifier = Modifier.weight(1f),
@@ -242,7 +248,7 @@ fun DataStorageContent(vm: KlicViewModel) {
                 )
             }
             Text(
-                "${formatBytes(totalUp)} sent · ${formatBytes(totalDown)} received",
+                stringResource(R.string.storage_sent_received, formatBytes(totalUp), formatBytes(totalDown)),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -259,7 +265,7 @@ fun DataStorageContent(vm: KlicViewModel) {
             containerColor = MaterialTheme.colorScheme.surfaceVariant,
             contentColor = MaterialTheme.colorScheme.error,
         ),
-    ) { Text("Reset Statistics", modifier = Modifier.padding(vertical = 6.dp)) }
+    ) { Text(stringResource(R.string.storage_reset_stats), modifier = Modifier.padding(vertical = 6.dp)) }
 
     // ── Upload quality — Klic selection sheet, not inline radio rows (§9.2) ──
     Spacer(Modifier.height(24.dp))
@@ -271,13 +277,13 @@ fun DataStorageContent(vm: KlicViewModel) {
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
-                "Photo upload quality",
+                stringResource(R.string.storage_upload_quality),
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier.weight(1f),
             )
             Text(
-                if (settings.uploadHd) "HD" else "Standard",
+                if (settings.uploadHd) stringResource(R.string.editor_quality_hd) else stringResource(R.string.editor_quality_standard),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -285,10 +291,10 @@ fun DataStorageContent(vm: KlicViewModel) {
     }
     if (showQualitySheet) {
         KlicSelectionSheet(
-            title = "Photo upload quality",
+            title = stringResource(R.string.storage_upload_quality),
             options = listOf(
-                KlicSheetOption("standard", "Standard", "Faster uploads, smaller photos (2048px)"),
-                KlicSheetOption("hd", "HD", "Best quality, larger uploads (4096px)"),
+                KlicSheetOption("standard", stringResource(R.string.editor_quality_standard), stringResource(R.string.storage_quality_standard_sub)),
+                KlicSheetOption("hd", stringResource(R.string.editor_quality_hd), stringResource(R.string.storage_quality_hd_sub)),
             ),
             selectedValue = if (settings.uploadHd) "hd" else "standard",
             onSelect = { value ->
@@ -305,16 +311,16 @@ fun DataStorageContent(vm: KlicViewModel) {
     SettingsCard {
         Row(Modifier.fillMaxWidth().padding(top = 12.dp)) {
             Spacer(Modifier.weight(1f))
-            Text("Wi-Fi", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(stringResource(R.string.storage_wifi), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Spacer(Modifier.size(28.dp))
-            Text("Cellular", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(stringResource(R.string.storage_cellular), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Spacer(Modifier.size(8.dp))
         }
         val kinds = listOf(
-            "Photos" to SettingsStore.KIND_PHOTOS,
-            "Audio" to SettingsStore.KIND_AUDIO,
-            "Video" to SettingsStore.KIND_VIDEO,
-            "Documents" to SettingsStore.KIND_DOCS,
+            stringResource(R.string.storage_photos) to SettingsStore.KIND_PHOTOS,
+            stringResource(R.string.storage_audio) to SettingsStore.KIND_AUDIO,
+            stringResource(R.string.storage_videos) to SettingsStore.KIND_VIDEO,
+            stringResource(R.string.storage_documents) to SettingsStore.KIND_DOCS,
         )
         kinds.forEachIndexed { index, (label, kind) ->
             Row(
@@ -345,7 +351,7 @@ fun DataStorageContent(vm: KlicViewModel) {
     }
     Spacer(Modifier.height(10.dp))
     Text(
-        "When auto-download is off for the current network, photos show a download button instead of loading automatically.",
+        stringResource(R.string.storage_autodownload_footer),
         style = MaterialTheme.typography.labelSmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )

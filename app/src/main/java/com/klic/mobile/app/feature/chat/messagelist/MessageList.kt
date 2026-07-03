@@ -42,11 +42,16 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextLinkStyles
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.withLink
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import coil.imageLoader
 import com.klic.mobile.app.R
@@ -59,6 +64,8 @@ import com.klic.mobile.app.feature.chat.actions.DeletedBubble
 import com.klic.mobile.app.feature.chat.actions.ReactionPillsRow
 import com.klic.mobile.app.feature.chat.actions.ReplyQuote
 import com.klic.mobile.app.feature.chat.media.FileAttachmentView
+import com.klic.mobile.app.feature.chat.media.PdfFileBubbleView
+import com.klic.mobile.app.feature.chat.media.isPdfAttachment
 import com.klic.mobile.app.feature.chat.media.formatByteSize
 import com.klic.mobile.app.feature.chat.media.isAudioAttachment
 import com.klic.mobile.app.feature.chat.stickers.CallEventBubble
@@ -72,6 +79,7 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import androidx.compose.ui.res.stringResource
 
 // MARK: - Message bubble
 
@@ -90,7 +98,8 @@ internal fun MessageBubble(
     onCallBack: (String) -> Unit = {},
     onLongPress: () -> Unit = {},
     onReactionTap: (String) -> Unit = {},
-    onImageClick: (String) -> Unit = {},
+    /** §10.9: opens the media viewer on the tapped IMAGE or VIDEO attachment. */
+    onMediaClick: (Attachment) -> Unit = {},
     onFileClick: (Attachment) -> Unit = {},
 ) {
     if (message.isDeleted) { DeletedBubble(isMine); return }
@@ -157,7 +166,7 @@ internal fun MessageBubble(
                         // No caption: bare image/bento with the overlay time + ticks pill.
                         message.replyTo?.let { ReplyQuote(it, replyAuthorName) }
                         Box(Modifier.clip(RoundedCornerShape(16.dp))) {
-                            BentoImageGrid(imageAtts, tileRadius = 12.dp, onImageClick = onImageClick, onLongPress = onLongPress)
+                            BentoImageGrid(imageAtts, tileRadius = 12.dp, onImageClick = onMediaClick, onLongPress = onLongPress)
                             MediaTimePill(
                                 time = time,
                                 status = status,
@@ -184,15 +193,17 @@ internal fun MessageBubble(
                                     ReplyQuote(it, replyAuthorName, onPrimary = isMine)
                                 }
                             }
-                            BentoImageGrid(imageAtts, tileRadius = 14.dp, onImageClick = onImageClick, onLongPress = onLongPress)
+                            BentoImageGrid(imageAtts, tileRadius = 14.dp, onImageClick = onMediaClick, onLongPress = onLongPress)
                             Row(
                                 verticalAlignment = Alignment.Bottom,
                                 modifier = Modifier.width(240.dp).padding(horizontal = 6.dp, vertical = 6.dp),
                             ) {
-                                Text(
-                                    bodyWithMentions(message.body, highlightMentions, mentionAccent(isMine), mentionNames),
-                                    color = textColor,
-                                    style = MaterialTheme.typography.bodyLarge,
+                                MessageBodyText(
+                                    body = message.body,
+                                    highlightMentions = highlightMentions,
+                                    accent = mentionAccent(isMine),
+                                    mentionNames = mentionNames,
+                                    textColor = textColor,
                                     modifier = Modifier.weight(1f, fill = false),
                                 )
                                 Spacer(Modifier.width(6.dp))
@@ -221,7 +232,7 @@ internal fun MessageBubble(
                             .aspectRatio(imageAspect(videoAtt))
                             .clip(RoundedCornerShape(16.dp))
                             .background(Color(0xFF1A1A1A))
-                            .combinedClickable(onClick = {}, onLongClick = onLongPress),
+                            .combinedClickable(onClick = { onMediaClick(videoAtt) }, onLongClick = onLongPress),
                     ) {
                         Icon(
                             imageVector = Icons.Filled.PlayArrow,
@@ -257,16 +268,39 @@ internal fun MessageBubble(
                             onLongClick = onLongPress,
                         ),
                     ) {
-                        FileAttachmentView(
-                            att = fileAtt,
-                            isMine = isMine,
-                            time = time,
-                            status = status,
-                            conversationId = message.conversationId,
-                            starred = message.starred,
-                        )
+                        // §10.10: PDFs preview their first page; other files keep the pill.
+                        if (isPdfAttachment(fileAtt)) {
+                            PdfFileBubbleView(
+                                att = fileAtt,
+                                isMine = isMine,
+                                time = time,
+                                status = status,
+                                conversationId = message.conversationId,
+                                starred = message.starred,
+                            )
+                        } else {
+                            FileAttachmentView(
+                                att = fileAtt,
+                                isMine = isMine,
+                                time = time,
+                                status = status,
+                                conversationId = message.conversationId,
+                                starred = message.starred,
+                            )
+                        }
                     }
                 }
+
+            // §10.3: 1–3 emoji-only messages render WhatsApp-style — no bubble, big glyphs.
+            message.replyTo == null && emojiOnlyClusterCount(message.body) in 1..3 ->
+                BigEmojiBubble(
+                    body = message.body.trim(),
+                    emojiCount = emojiOnlyClusterCount(message.body),
+                    time = time,
+                    status = status,
+                    starred = message.starred,
+                    onLongPress = onLongPress,
+                )
 
             else ->
                 Box(
@@ -287,10 +321,12 @@ internal fun MessageBubble(
                         // Message body + inline time + ticks, aligned to bottom of last text line.
                         Row(verticalAlignment = Alignment.Bottom) {
                             if (message.body.isNotBlank()) {
-                                Text(
-                                    bodyWithMentions(message.body, highlightMentions, mentionAccent(isMine), mentionNames),
-                                    color = textColor,
-                                    style = MaterialTheme.typography.bodyLarge,
+                                MessageBodyText(
+                                    body = message.body,
+                                    highlightMentions = highlightMentions,
+                                    accent = mentionAccent(isMine),
+                                    mentionNames = mentionNames,
+                                    textColor = textColor,
                                     modifier = Modifier.weight(1f, fill = false),
                                 )
                             }
@@ -328,7 +364,7 @@ internal fun MessageBubble(
 private fun BentoImageGrid(
     atts: List<Attachment>,
     tileRadius: Dp,
-    onImageClick: (String) -> Unit,
+    onImageClick: (Attachment) -> Unit,
     onLongPress: () -> Unit,
 ) {
     val spacing = 2.dp
@@ -354,7 +390,7 @@ private fun BentoImageGrid(
             modifier
                 .clip(RoundedCornerShape(tileRadius))
                 .combinedClickable(
-                    onClick = { if (allowed) onImageClick(att.url) else manuallyRequested = true },
+                    onClick = { if (allowed) onImageClick(att) else manuallyRequested = true },
                     onLongClick = onLongPress,
                 ),
         ) {
@@ -464,6 +500,143 @@ private fun MediaTimePill(
     }
 }
 
+// MARK: - Message body text with tappable links (§10.4)
+
+/**
+ * Bubble body text: mention highlighting (§9.5) plus tappable URLs. Every link tap
+ * routes through [com.klic.mobile.app.data.LinkOpener] and honors "Open links in".
+ */
+@Composable
+internal fun MessageBodyText(
+    body: String,
+    highlightMentions: Boolean,
+    accent: Color,
+    mentionNames: List<String>,
+    textColor: Color,
+    modifier: Modifier = Modifier,
+) {
+    val context = LocalContext.current
+    val annotated = remember(body, highlightMentions, accent, mentionNames, textColor) {
+        buildAnnotatedString {
+            val links = com.klic.mobile.app.data.LinkOpener.urlRegex.findAll(body).toList()
+            var pos = 0
+            links.forEach { match ->
+                if (match.range.first > pos) append(body.substring(pos, match.range.first))
+                val url = match.value
+                withLink(
+                    LinkAnnotation.Clickable(
+                        tag = url,
+                        styles = TextLinkStyles(
+                            style = SpanStyle(color = textColor, textDecoration = TextDecoration.Underline),
+                        ),
+                    ) { com.klic.mobile.app.data.LinkOpener.open(context, url) },
+                ) { append(url) }
+                pos = match.range.last + 1
+            }
+            if (pos < body.length) append(body.substring(pos))
+            if (highlightMentions) {
+                val ranges = mentionAllRanges(body) + mentionNames.flatMap { mentionNameRanges(body, it) }
+                ranges.forEach { range ->
+                    addStyle(
+                        SpanStyle(color = accent, fontWeight = FontWeight.SemiBold),
+                        range.first,
+                        range.last + 1,
+                    )
+                }
+            }
+        }
+    }
+    Text(annotated, color = textColor, style = MaterialTheme.typography.bodyLarge, modifier = modifier)
+}
+
+// MARK: - Big emoji (§10.3)
+
+/**
+ * Bubble-less render for 1–3 emoji-only messages: one emoji renders biggest, two or
+ * three slightly smaller. Time + ticks keep their usual inline overlay position.
+ */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun BigEmojiBubble(
+    body: String,
+    emojiCount: Int,
+    time: String,
+    status: String?,
+    starred: Boolean,
+    onLongPress: () -> Unit,
+) {
+    val fontSize = when (emojiCount) {
+        1 -> 46.sp
+        2 -> 38.sp
+        else -> 32.sp
+    }
+    Row(
+        verticalAlignment = Alignment.Bottom,
+        modifier = Modifier
+            .combinedClickable(onClick = {}, onLongClick = onLongPress)
+            .padding(horizontal = 2.dp, vertical = 2.dp),
+    ) {
+        Text(body, fontSize = fontSize, lineHeight = fontSize)
+        Spacer(Modifier.width(6.dp))
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(3.dp),
+        ) {
+            val timeColor = MaterialTheme.colorScheme.onSurfaceVariant
+            if (starred) StarIndicator(timeColor)
+            Text(time, style = MaterialTheme.typography.labelSmall, color = timeColor)
+            if (status != null) MessageTicks(status = status)
+        }
+    }
+}
+
+/**
+ * Number of grapheme clusters in [body] when it consists ONLY of emoji (1–3), else 0.
+ * Uses ICU's extended grapheme segmentation so ZWJ sequences, skin tones, flags and
+ * keycaps each count as ONE emoji.
+ */
+internal fun emojiOnlyClusterCount(body: String): Int {
+    val text = body.trim()
+    if (text.isEmpty()) return 0
+    val iterator = android.icu.text.BreakIterator.getCharacterInstance()
+    iterator.setText(text)
+    var count = 0
+    var start = iterator.first()
+    var end = iterator.next()
+    while (end != android.icu.text.BreakIterator.DONE) {
+        if (!isEmojiCluster(text.substring(start, end))) return 0
+        count++
+        if (count > 3) return 0
+        start = end
+        end = iterator.next()
+    }
+    return count
+}
+
+/** True when one grapheme cluster reads as an emoji (not plain text like "1" or "#"). */
+private fun isEmojiCluster(cluster: String): Boolean {
+    var i = 0
+    var hasEmoji = false
+    val hasVariation = cluster.contains('\uFE0F')
+    while (i < cluster.length) {
+        val cp = cluster.codePointAt(i)
+        when {
+            // Joiners / variation selectors / skin tones / keycap combiner — glue, not glyphs.
+            cp == 0x200D || cp == 0xFE0F || cp == 0xFE0E || cp in 0x1F3FB..0x1F3FF || cp == 0x20E3 -> Unit
+            cp in 0x1F1E6..0x1F1FF -> hasEmoji = true   // regional indicators (flags)
+            android.icu.lang.UCharacter.hasBinaryProperty(
+                cp, android.icu.lang.UProperty.EMOJI_PRESENTATION,
+            ) -> hasEmoji = true
+            hasVariation && android.icu.lang.UCharacter.hasBinaryProperty(
+                cp, android.icu.lang.UProperty.EMOJI,
+            ) -> hasEmoji = true
+            else -> return false
+        }
+        i += Character.charCount(cp)
+    }
+    return hasEmoji
+}
+
 /** Small star next to the timestamp on starred bubbles (§8.4). */
 @Composable
 internal fun StarIndicator(tint: Color) {
@@ -526,27 +699,29 @@ private fun imageAspect(att: Attachment): Float {
 }
 
 // Compact preview text for the composer's reply bar.
+@Composable
 internal fun messagePreview(m: Message): String = when {
     m.body.isNotBlank() -> m.body
-    m.isSticker -> "Sticker"
-    m.attachments.firstOrNull()?.kind == "IMAGE" -> "Photo"
-    m.attachments.firstOrNull()?.kind == "VOICE" -> "Voice message"
-    m.attachments.firstOrNull()?.kind == "VIDEO" -> "Video"
-    m.attachments.isNotEmpty() -> "File"
-    else -> "Message"
+    m.isSticker -> stringResource(R.string.preview_sticker)
+    m.attachments.firstOrNull()?.kind == "IMAGE" -> stringResource(R.string.preview_photo)
+    m.attachments.firstOrNull()?.kind == "VOICE" -> stringResource(R.string.preview_voice_message)
+    m.attachments.firstOrNull()?.kind == "VIDEO" -> stringResource(R.string.preview_video)
+    m.attachments.isNotEmpty() -> stringResource(R.string.preview_file)
+    else -> stringResource(R.string.preview_message)
 }
 
 // Presence subtitle for the chat header: "Online" or "last seen …".
+@Composable
 internal fun presenceSubtitle(presence: com.klic.mobile.app.realtime.SocketService.Presence?): String? {
     if (presence == null) return null
-    if (presence.online) return "Online"
+    if (presence.online) return stringResource(R.string.presence_online)
     val ms = presence.lastSeenMs ?: return null
     val date = Instant.ofEpochMilli(ms).atZone(ZoneId.systemDefault())
     val time = DateTimeFormatter.ofPattern("HH:mm").format(date)
     return when (date.toLocalDate()) {
-        LocalDate.now() -> "last seen $time"
-        LocalDate.now().minusDays(1) -> "last seen yesterday"
-        else -> "last seen ${DateTimeFormatter.ofPattern("MMM d").format(date)}"
+        LocalDate.now() -> stringResource(R.string.presence_last_seen_at, time)
+        LocalDate.now().minusDays(1) -> stringResource(R.string.presence_last_seen_yesterday)
+        else -> stringResource(R.string.presence_last_seen_on, DateTimeFormatter.ofPattern("MMM d").format(date))
     }
 }
 
@@ -575,6 +750,7 @@ private fun SystemNotice(text: String) {
 
 @Composable
 internal fun DateSeparator(isoDate: String) {
+    val label = dateLabelText(isoDate)
     Box(
         modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
         contentAlignment = Alignment.Center,
@@ -584,7 +760,7 @@ internal fun DateSeparator(isoDate: String) {
             color = MaterialTheme.colorScheme.surfaceVariant,
         ) {
             Text(
-                dateLabel(isoDate),
+                label,
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp),
@@ -602,12 +778,14 @@ internal fun shortTime(iso: String): String = runCatching {
     DateTimeFormatter.ofPattern("h:mm a").format(instant.atZone(ZoneId.systemDefault()))
 }.getOrDefault("")
 
-private fun dateLabel(iso: String): String = runCatching {
-    val date = Instant.parse(iso).atZone(ZoneId.systemDefault()).toLocalDate()
+@Composable
+private fun dateLabelText(iso: String): String {
+    val date = runCatching { Instant.parse(iso).atZone(ZoneId.systemDefault()).toLocalDate() }.getOrNull()
+        ?: return ""
     val today = LocalDate.now()
-    when (date) {
-        today            -> "Today"
-        today.minusDays(1) -> "Yesterday"
-        else             -> DateTimeFormatter.ofPattern("MMMM d").format(date)
+    return when (date) {
+        today              -> stringResource(R.string.date_today)
+        today.minusDays(1) -> stringResource(R.string.date_yesterday)
+        else               -> DateTimeFormatter.ofPattern("MMMM d").format(date)
     }
-}.getOrDefault("")
+}

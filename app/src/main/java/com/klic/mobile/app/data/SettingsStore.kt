@@ -39,6 +39,11 @@ object SettingsStore {
     const val SAVE_ALWAYS = "always"
     const val SAVE_NEVER = "never"
 
+    /** "Open links in" modes (§10.4). */
+    const val LINKS_IN_APP = "in_app"
+    const val LINKS_CHROME = "chrome"
+    const val LINKS_SYSTEM = "system"
+
     data class Snapshot(
         val uploadHd: Boolean = false,
         /** "kind_wifi"/"kind_cell" → allowed. Missing key = the default for that cell. */
@@ -59,6 +64,19 @@ object SettingsStore {
         val groupConversationIds: Set<String> = emptySet(),
         /** Attachment ids already auto-saved to the gallery (dedup). */
         val savedGalleryIds: Set<String> = emptySet(),
+        // ── v0.5.3 (§10.4) ──
+        /** "Open links in": LINKS_IN_APP / LINKS_CHROME / LINKS_SYSTEM. */
+        val linkOpenMode: String = LINKS_IN_APP,
+        /** "Don't open links in-app": forces external even when linkOpenMode is in-app. */
+        val neverOpenLinksInApp: Boolean = false,
+        /** Sync Contacts toggle state (hashes uploaded while on). */
+        val contactsSyncEnabled: Boolean = false,
+        /** "Suggest Frequent Contacts" — gates the Frequent row on pickers. */
+        val suggestFrequentContacts: Boolean = true,
+        /** Saved composer drafts per conversation (§10.4 "Delete All Drafts"). */
+        val drafts: Map<String, String> = emptyMap(),
+        /** Locally counted sent messages per conversation — drives Frequent contacts. */
+        val sentCounts: Map<String, Long> = emptyMap(),
     ) {
         fun autoDownloadAllowed(kind: String, onWifi: Boolean): Boolean {
             val key = "${kind}_${if (onWifi) "wifi" else "cell"}"
@@ -140,6 +158,28 @@ object SettingsStore {
         }
     }
 
+    // ── v0.5.3 (§10.4): links, contacts, frequent, drafts ────────────────────
+
+    suspend fun setLinkOpenMode(mode: String) = edit { it[LINK_MODE] = mode }
+    suspend fun setNeverOpenLinksInApp(value: Boolean) = edit { it[LINKS_NO_IN_APP] = value }
+    suspend fun setContactsSyncEnabled(value: Boolean) = edit { it[CONTACTS_SYNC] = value }
+    suspend fun setSuggestFrequentContacts(value: Boolean) = edit { it[SUGGEST_FREQUENT] = value }
+
+    /** Persist (or clear) the composer draft for one conversation. */
+    suspend fun setDraft(conversationId: String, text: String?) =
+        setOrRemove(stringPreferencesKey("draft_$conversationId"), text?.takeIf { it.isNotBlank() })
+
+    /** §10.4 "Delete All Drafts": clears every saved composer draft on this device. */
+    suspend fun deleteAllDrafts() = edit { prefs ->
+        prefs.asMap().keys.filter { it.name.startsWith("draft_") }.forEach { prefs.remove(it) }
+    }
+
+    /** Bump the local sent-message counter for a conversation (Frequent contacts). */
+    suspend fun bumpSentCount(conversationId: String) = edit {
+        val key = longPreferencesKey("sent_count_$conversationId")
+        it[key] = (it[key] ?: 0L) + 1L
+    }
+
     /** "Reset notification settings" (§8.5): toggles back to on + all local tones dropped. */
     suspend fun resetNotificationSettings() = edit { prefs ->
         prefs.remove(NOTIF_MESSAGES)
@@ -160,6 +200,10 @@ object SettingsStore {
     private val NOTIF_FRIEND_REQUESTS = booleanPreferencesKey("notif_friend_requests")
     private val GROUP_IDS = stringSetPreferencesKey("group_conversation_ids")
     private val SAVED_GALLERY = stringSetPreferencesKey("saved_gallery_ids")
+    private val LINK_MODE = stringPreferencesKey("link_open_mode")
+    private val LINKS_NO_IN_APP = booleanPreferencesKey("links_never_in_app")
+    private val CONTACTS_SYNC = booleanPreferencesKey("contacts_sync_enabled")
+    private val SUGGEST_FREQUENT = booleanPreferencesKey("suggest_frequent_contacts")
 
     private suspend fun edit(block: (androidx.datastore.preferences.core.MutablePreferences) -> Unit) {
         appContext.settingsDataStore.edit(block)
@@ -179,9 +223,13 @@ object SettingsStore {
         val msgTones = mutableMapOf<String, String>()
         val callTones = mutableMapOf<String, String>()
         val savePhotos = mutableMapOf<String, String>()
+        val drafts = mutableMapOf<String, String>()
+        val sentCounts = mutableMapOf<String, Long>()
         prefs.asMap().forEach { (key, value) ->
             val name = key.name
             when {
+                name.startsWith("draft_") -> (value as? String)?.let { drafts[name.removePrefix("draft_")] = it }
+                name.startsWith("sent_count_") -> (value as? Long)?.let { sentCounts[name.removePrefix("sent_count_")] = it }
                 name.startsWith("autodl_") -> (value as? Boolean)?.let { autoDownload[name.removePrefix("autodl_")] = it }
                 name.startsWith("muted_msgs_") -> (value as? Long)?.let { msgMuted[name.removePrefix("muted_msgs_")] = it }
                 name.startsWith("muted_calls_") -> (value as? Long)?.let { callMuted[name.removePrefix("muted_calls_")] = it }
@@ -206,6 +254,12 @@ object SettingsStore {
             saveToPhotos = savePhotos,
             groupConversationIds = prefs[GROUP_IDS] ?: emptySet(),
             savedGalleryIds = prefs[SAVED_GALLERY] ?: emptySet(),
+            linkOpenMode = prefs[LINK_MODE] ?: LINKS_IN_APP,
+            neverOpenLinksInApp = prefs[LINKS_NO_IN_APP] ?: false,
+            contactsSyncEnabled = prefs[CONTACTS_SYNC] ?: false,
+            suggestFrequentContacts = prefs[SUGGEST_FREQUENT] ?: true,
+            drafts = drafts,
+            sentCounts = sentCounts,
         )
     }
 }
