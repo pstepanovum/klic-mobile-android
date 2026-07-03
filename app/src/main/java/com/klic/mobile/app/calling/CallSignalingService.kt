@@ -55,7 +55,8 @@ class CallSignalingService : Service() {
                 CallNotifications.showIncomingCall(this@CallSignalingService, callInvite)
                 // Ring from here (not the full-screen Activity) so the call rings even when the
                 // Activity never launches (unlocked/in-use device or no full-screen-intent grant).
-                CallRinger.start(applicationContext, callInvite)
+                // §11.6: silenced invites (unknown caller) never play the ringtone.
+                if (!callInvite.silenced) CallRinger.start(applicationContext, callInvite)
             }
         }
         scope.launch {
@@ -112,4 +113,5 @@ private fun SocketService.CallInvite.toCallInvite() = CallInvite(
     conversationType = conversationType,
     conversationTitle = conversationTitle,
     participantCount = participantCount,
+    silenced = silenced,
 )

@@ -109,9 +109,14 @@ object CallNotifications {
             .setContentTitle(invite.displayLabel)
             .setContentText(if (invite.kind == "VIDEO") "Incoming video call" else "Incoming call")
             .setCategory(NotificationCompat.CATEGORY_CALL)
-            .setPriority(NotificationCompat.PRIORITY_MAX)
+            // §11.6 silenced (unknown caller): a quiet, non-intrusive notification — no
+            // full-screen surface, no heads-up urgency. Answer/Decline still work.
+            .setPriority(
+                if (invite.silenced) NotificationCompat.PRIORITY_DEFAULT
+                else NotificationCompat.PRIORITY_MAX
+            )
             .setOngoing(true)
-            .setFullScreenIntent(fsPending, true)
+            .apply { if (!invite.silenced) setFullScreenIntent(fsPending, true) }
             .setStyle(NotificationCompat.CallStyle.forIncomingCall(caller, declinePending, answerPending))
             // Backstop: auto-expire the ring surface if the end event never arrives (D2);
             // CallRinger's own 65s timer handles the ringtone side.

@@ -84,7 +84,6 @@ fun SettingsScreen(vm: KlicViewModel, onEditProfile: () -> Unit = {}) {
     val themeMode by vm.themeMode.collectAsState()
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    var showLastSeen by remember(user?.showLastSeen) { mutableStateOf(user?.showLastSeen ?: true) }
     val versionName = remember {
         try { context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: "1.0" }
         catch (e: Exception) { "1.0" }
@@ -496,37 +495,8 @@ fun SettingsScreen(vm: KlicViewModel, onEditProfile: () -> Unit = {}) {
                             onBack = { route = SettingsRoute.Main },
                         )
 
-                        Column(
-                            Modifier
-                                .fillMaxWidth()
-                                .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(20.dp))
-                                .padding(18.dp),
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Column(Modifier.weight(1f)) {
-                                    Text(
-                                        stringResource(R.string.privacy_last_seen),
-                                        style = MaterialTheme.typography.bodyLarge,
-                                        color = MaterialTheme.colorScheme.onSurface,
-                                    )
-                                    Text(
-                                        stringResource(R.string.privacy_last_seen_sub),
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
-                                }
-                                Switch(
-                                    checked = showLastSeen,
-                                    onCheckedChange = { value ->
-                                        showLastSeen = value
-                                        vm.setShowLastSeen(value)
-                                    },
-                                )
-                            }
-                        }
-
-                        Spacer(Modifier.height(16.dp))
-
+                        // §11.6: the old "show last seen" toggle is replaced by the
+                        // "Last seen & online" visibility row inside the Privacy card.
                         // §10.4: Blocked users, app lock, passkeys, links, data, account.
                         PrivacySecurityContent(vm) { sub ->
                             route = when (sub) {

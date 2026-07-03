@@ -44,9 +44,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
@@ -82,6 +79,82 @@ fun PrivacySecurityContent(vm: KlicViewModel, onOpenSub: (PrivacySecuritySub) ->
     var showDeleteAccount by remember { mutableStateOf(false) }
     val me by vm.currentUser.collectAsState()
     var awayMonths by remember(me?.deleteIfAwayMonths) { mutableStateOf(me?.deleteIfAwayMonths) }
+    // §11.6: which visibility field the picker sheet currently edits (null = closed).
+    var visibilityField by remember { mutableStateOf<String?>(null) }
+
+    // ── Card 0 (§11.6): Privacy — visibility pickers + call/read-receipt toggles ──
+    // Server defaults: everything EVERYBODY except lastSeenVisibility (FRIENDS).
+    fun visibilityOf(field: String): String = when (field) {
+        "lastSeenVisibility" -> me?.lastSeenVisibility ?: "FRIENDS"
+        "aboutVisibility" -> me?.aboutVisibility ?: "EVERYBODY"
+        "avatarVisibility" -> me?.avatarVisibility ?: "EVERYBODY"
+        "linksVisibility" -> me?.linksVisibility ?: "EVERYBODY"
+        "groupsVisibility" -> me?.groupsVisibility ?: "EVERYBODY"
+        else -> me?.statusVisibility ?: "EVERYBODY"
+    }
+
+    SectionLabel(stringResource(R.string.privacy_privacy_section))
+    SettingsCard {
+        PrivacyRow(
+            icon = R.drawable.ic_line_moon,
+            title = stringResource(R.string.privacy_last_seen_online),
+            value = visibilityLabel(visibilityOf("lastSeenVisibility")),
+            onClick = { visibilityField = "lastSeenVisibility" },
+        )
+        RowDivider()
+        PrivacyRow(
+            icon = KlicIcons.user,
+            title = stringResource(R.string.privacy_about_row),
+            value = visibilityLabel(visibilityOf("aboutVisibility")),
+            onClick = { visibilityField = "aboutVisibility" },
+        )
+        RowDivider()
+        PrivacyRow(
+            icon = R.drawable.ic_line_gallery,
+            title = stringResource(R.string.privacy_profile_picture),
+            value = visibilityLabel(visibilityOf("avatarVisibility")),
+            onClick = { visibilityField = "avatarVisibility" },
+        )
+        RowDivider()
+        PrivacyRow(
+            icon = KlicIcons.link,
+            title = stringResource(R.string.privacy_links_row),
+            value = visibilityLabel(visibilityOf("linksVisibility")),
+            onClick = { visibilityField = "linksVisibility" },
+        )
+        RowDivider()
+        PrivacyRow(
+            icon = KlicIcons.message,
+            title = stringResource(R.string.privacy_groups_row),
+            value = visibilityLabel(visibilityOf("groupsVisibility")),
+            onClick = { visibilityField = "groupsVisibility" },
+        )
+        RowDivider()
+        PrivacyRow(
+            icon = KlicIcons.chart,
+            title = stringResource(R.string.privacy_status_row),
+            value = visibilityLabel(visibilityOf("statusVisibility")),
+            onClick = { visibilityField = "statusVisibility" },
+        )
+        RowDivider()
+        // Calls: silence unknown callers (§11.6) — no ring from non-friends.
+        ToggleRow(
+            title = stringResource(R.string.privacy_silence_unknown),
+            subtitle = stringResource(R.string.privacy_silence_unknown_sub),
+            checked = me?.silenceUnknownCallers == true,
+            onChange = { value -> vm.setPrivacyToggle("silenceUnknownCallers", value) },
+        )
+        RowDivider()
+        // Read receipts: reciprocal, DMs only (§11.6).
+        ToggleRow(
+            title = stringResource(R.string.privacy_read_receipts),
+            subtitle = stringResource(R.string.privacy_read_receipts_sub),
+            checked = me?.readReceipts != false,
+            onChange = { value -> vm.setPrivacyToggle("readReceipts", value) },
+        )
+    }
+
+    Spacer(Modifier.height(16.dp))
 
     // Card 1: Blocked / App lock / Passkeys
     SettingsCard {
@@ -294,6 +367,39 @@ fun PrivacySecurityContent(vm: KlicViewModel, onOpenSub: (PrivacySecuritySub) ->
     if (showDeleteAccount) {
         DeleteAccountDialog(vm, onDismiss = { showDeleteAccount = false })
     }
+
+    // §11.6: Everybody / My friends / Nobody picker for the tapped visibility row.
+    visibilityField?.let { field ->
+        KlicSelectionSheet(
+            title = when (field) {
+                "lastSeenVisibility" -> stringResource(R.string.privacy_last_seen_online)
+                "aboutVisibility" -> stringResource(R.string.privacy_about_row)
+                "avatarVisibility" -> stringResource(R.string.privacy_profile_picture)
+                "linksVisibility" -> stringResource(R.string.privacy_links_row)
+                "groupsVisibility" -> stringResource(R.string.privacy_groups_row)
+                else -> stringResource(R.string.privacy_status_row)
+            },
+            options = listOf(
+                KlicSheetOption("EVERYBODY", stringResource(R.string.privacy_everybody)),
+                KlicSheetOption("FRIENDS", stringResource(R.string.privacy_my_friends)),
+                KlicSheetOption("NOBODY", stringResource(R.string.privacy_nobody)),
+            ),
+            selectedValue = visibilityOf(field),
+            onSelect = { value ->
+                vm.setPrivacyVisibility(field, value)
+                visibilityField = null
+            },
+            onDismiss = { visibilityField = null },
+        )
+    }
+}
+
+/** §11.6: display label for a visibility enum value. */
+@Composable
+private fun visibilityLabel(value: String): String = when (value) {
+    "FRIENDS" -> stringResource(R.string.privacy_my_friends)
+    "NOBODY" -> stringResource(R.string.privacy_nobody)
+    else -> stringResource(R.string.privacy_everybody)
 }
 
 /** Double confirm: first warning, then type-the-username, then DELETE /me. */
@@ -447,7 +553,8 @@ fun AppLockContent() {
     )
 
     if (showSetDialog) {
-        SetPasscodeDialog(
+        // §11.3: Klic-styled keypad sheet over blurred content (was an AlertDialog).
+        com.klic.mobile.app.ui.components.SetPasscodeSheet(
             onDismiss = { showSetDialog = false },
             onSet = { code ->
                 AppLockStore.setPasscode(code)
@@ -483,67 +590,6 @@ private fun autoLockLabel(mode: String): String = when (mode) {
     AppLockStore.LOCK_AFTER_1_MIN -> stringResource(R.string.applock_after_1min)
     AppLockStore.LOCK_AFTER_5_MIN -> stringResource(R.string.applock_after_5min)
     else -> stringResource(R.string.applock_on_background)
-}
-
-@Composable
-private fun SetPasscodeDialog(onDismiss: () -> Unit, onSet: (String) -> Unit) {
-    var first by remember { mutableStateOf("") }
-    var second by remember { mutableStateOf("") }
-    var mismatch by remember { mutableStateOf(false) }
-    val valid = first.length in 4..6 && first.all { it.isDigit() }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.applock_set_passcode)) },
-        text = {
-            Column {
-                Text(stringResource(R.string.applock_passcode_hint))
-                Spacer(Modifier.height(10.dp))
-                PasscodeField(first, { first = it.take(6).filter(Char::isDigit); mismatch = false },
-                    stringResource(R.string.applock_passcode))
-                Spacer(Modifier.height(8.dp))
-                PasscodeField(second, { second = it.take(6).filter(Char::isDigit); mismatch = false },
-                    stringResource(R.string.applock_repeat_passcode))
-                if (mismatch) {
-                    Spacer(Modifier.height(8.dp))
-                    Text(
-                        stringResource(R.string.applock_passcodes_dont_match),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.error,
-                    )
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(
-                onClick = { if (first == second) onSet(first) else mismatch = true },
-                enabled = valid && second.isNotEmpty(),
-            ) { Text(stringResource(R.string.common_save)) }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text(stringResource(R.string.common_cancel)) }
-        },
-    )
-}
-
-@Composable
-private fun PasscodeField(value: String, onChange: (String) -> Unit, placeholder: String) {
-    TextField(
-        value = value,
-        onValueChange = onChange,
-        singleLine = true,
-        placeholder = { Text(placeholder, color = MaterialTheme.colorScheme.onSurfaceVariant) },
-        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
-        visualTransformation = PasswordVisualTransformation(),
-        shape = CircleShape,
-        colors = TextFieldDefaults.colors(
-            focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
-            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
-            focusedIndicatorColor = Color.Transparent,
-            unfocusedIndicatorColor = Color.Transparent,
-        ),
-        modifier = Modifier.fillMaxWidth(),
-    )
 }
 
 // ─────────────────────────────────────────────────────────
