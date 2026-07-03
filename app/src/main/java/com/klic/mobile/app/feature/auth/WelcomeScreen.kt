@@ -3,17 +3,17 @@ package com.klic.mobile.app.feature.auth
 import android.graphics.PorterDuff
 import android.graphics.PorterDuffColorFilter
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.isSystemInDarkTheme
-import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -21,8 +21,14 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -36,83 +42,132 @@ import com.airbnb.lottie.compose.rememberLottieDynamicProperties
 import com.airbnb.lottie.compose.rememberLottieDynamicProperty
 import com.klic.mobile.app.R
 import com.klic.mobile.app.ui.components.PillButton
-import androidx.compose.ui.res.stringResource
+import com.klic.mobile.app.ui.theme.Bangers
+import com.klic.mobile.app.ui.theme.TikTokSans
+import com.klic.mobile.app.ui.theme.TikTokSansExpanded
+
+// Ornament geometry: a full-bleed background texture, nudged right of center. Values are
+// expressed relative to ORNAMENT_REFERENCE_DIMENSION (the longer side of the phone canvas
+// they were tuned against) so the same visual "zoom level" carries over to larger canvases
+// like tablets instead of staying pinned to a flat dp value. Mirrors the iOS WelcomeView.
+private const val ORNAMENT_REFERENCE_DIMENSION = 844f
+private const val ORNAMENT_SHIFT_X = 200f
+private const val ORNAMENT_SHIFT_Y = -80f
+
+/** Fixed size the Lottie composable lays out at before being blown up via a graphics-layer
+ *  scale. Must stay small: Lottie renders some compositions through a software bitmap sized
+ *  by the LAYOUT size × density, and past ~100MB the frame throws ("trying to draw too
+ *  large bitmap" — reproduced at 2000dp on a 560dpi device). All the visual size comes from
+ *  the graphics-layer scale instead, which transforms the display list, not the bitmap. */
+private const val ORNAMENT_DESIGN_SIDE = 500f
+
+/** Ornament's final visual side (dp) at the reference canvas size; capped so huge canvases
+ *  (tablets) don't blow it up further past taste. */
+private const val ORNAMENT_FINAL_SIDE = 2400f
+private const val ORNAMENT_MAX_FINAL_SIDE = 3400f
 
 @Composable
 fun WelcomeScreen(onGetStarted: () -> Unit) {
+    val isDark = MaterialTheme.colorScheme.background.luminance() < 0.5f
     val composition by rememberLottieComposition(LottieCompositionSpec.Asset("animations/12.json"))
     val progress by animateLottieCompositionAsState(composition, iterations = LottieConstants.IterateForever)
-    val isDark = isSystemInDarkTheme()
 
-    val whiteFilter = remember { PorterDuffColorFilter(android.graphics.Color.WHITE, PorterDuff.Mode.SRC_ATOP) }
-    val colorFilterProp = rememberLottieDynamicProperty(
-        property = LottieProperty.COLOR_FILTER,
-        value = whiteFilter,
-        keyPath = arrayOf("**"),
+    // Flat monochrome tint so the animation reads as a background texture, not content.
+    val ornamentTint = if (isDark) 0xFF232323.toInt() else 0xFFEAEAEA.toInt()
+    val tintFilter = remember(ornamentTint) { PorterDuffColorFilter(ornamentTint, PorterDuff.Mode.SRC_ATOP) }
+    val dynamicProperties = rememberLottieDynamicProperties(
+        rememberLottieDynamicProperty(
+            property = LottieProperty.COLOR_FILTER,
+            value = tintFilter,
+            keyPath = arrayOf("**"),
+        ),
     )
-    val dynamicProperties = rememberLottieDynamicProperties(colorFilterProp)
 
-    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
-    Column(
+    BoxWithConstraints(
         modifier = Modifier
-            .fillMaxHeight()
-            .widthIn(max = 500.dp)
-            .fillMaxWidth(),
-        horizontalAlignment = Alignment.CenterHorizontally,
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+            .clipToBounds(),
     ) {
+        val longSide = maxOf(maxWidth.value, maxHeight.value)
+        val scale = longSide / ORNAMENT_REFERENCE_DIMENSION
+        val zoomFactor = minOf(ORNAMENT_FINAL_SIDE * scale, ORNAMENT_MAX_FINAL_SIDE) / ORNAMENT_DESIGN_SIDE
+
+        // Background ornament: the "12" Lottie loop as a giant flat-tinted texture, offset
+        // right of center, strictly behind the content (drawn first) and non-interactive.
         LottieAnimation(
             composition = composition,
             progress = { progress },
-            dynamicProperties = if (isDark) dynamicProperties else null,
+            dynamicProperties = dynamicProperties,
             modifier = Modifier
+                .align(Alignment.Center)
+                .offset(x = (ORNAMENT_SHIFT_X * scale).dp, y = (ORNAMENT_SHIFT_Y * scale).dp)
+                .requiredSize(ORNAMENT_DESIGN_SIDE.dp)
+                .graphicsLayer {
+                    scaleX = zoomFactor
+                    scaleY = zoomFactor
+                },
+        )
+
+        Column(
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .widthIn(max = 500.dp)
                 .fillMaxWidth()
-                .height(320.dp)
-                .padding(top = 60.dp),
-        )
+                .fillMaxSize(),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Spacer(Modifier.weight(1f))
 
-        Image(
-            painter = painterResource(R.drawable.ic_klic_logo),
-            contentDescription = "Klic",
-            modifier = Modifier
-                .width(88.dp)
-                .padding(top = 28.dp),
-            colorFilter = ColorFilter.tint(MaterialTheme.colorScheme.onBackground),
-        )
+            Image(
+                painter = painterResource(R.drawable.ic_klic_logo),
+                contentDescription = "Klic",
+                modifier = Modifier.width(88.dp),
+                colorFilter = ColorFilter.tint(if (isDark) Color.White else Color.Black),
+            )
 
-        Text(
-            stringResource(R.string.welcome_tagline),
-            style = MaterialTheme.typography.headlineMedium.copy(
-                fontFamily = com.klic.mobile.app.ui.theme.Bangers,
-                fontWeight = androidx.compose.ui.text.font.FontWeight.Normal,
+            Text(
+                stringResource(R.string.welcome_tagline),
+                fontFamily = Bangers,
+                fontWeight = FontWeight.Normal,
+                fontSize = 34.sp,
                 letterSpacing = 0.5.sp,
-            ),
-            color = MaterialTheme.colorScheme.onBackground,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.padding(top = 20.dp, start = 32.dp, end = 32.dp),
-        )
+                color = MaterialTheme.colorScheme.onBackground,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(top = 20.dp, start = 32.dp, end = 32.dp),
+            )
 
-        Text(
-            stringResource(R.string.welcome_subtitle),
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.padding(top = 10.dp, start = 32.dp, end = 32.dp),
-        )
+            Text(
+                stringResource(R.string.welcome_subtitle),
+                fontFamily = TikTokSansExpanded,
+                fontWeight = FontWeight.Medium,
+                fontSize = 13.sp,
+                lineHeight = 19.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(top = 10.dp, start = 32.dp, end = 32.dp),
+            )
 
-        Spacer(Modifier.weight(1f))
+            Spacer(Modifier.weight(1f))
 
-        PillButton(
-            stringResource(R.string.welcome_get_started),
-            modifier = Modifier.padding(horizontal = 28.dp),
-            onClick = onGetStarted,
-        )
+            PillButton(
+                stringResource(R.string.welcome_get_started),
+                fill = AuthStyle.ctaRed,
+                fontFamily = TikTokSansExpanded,
+                fontWeight = FontWeight.Medium,
+                fontSize = 17.sp,
+                modifier = Modifier.padding(horizontal = 32.dp),
+                onClick = onGetStarted,
+            )
 
-        Text(
-            stringResource(R.string.welcome_footer),
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(top = 16.dp, bottom = 48.dp),
-        )
+            Text(
+                stringResource(R.string.welcome_footer),
+                fontFamily = TikTokSans,
+                fontWeight = FontWeight.Light,
+                fontSize = 12.sp,
+                color = AuthStyle.smallText,
+                modifier = Modifier.padding(top = 20.dp, bottom = 48.dp),
+            )
+        }
     }
-    } // Box
 }
