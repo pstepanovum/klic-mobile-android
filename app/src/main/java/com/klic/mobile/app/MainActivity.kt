@@ -31,6 +31,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.ui.platform.LocalContext
@@ -188,17 +189,29 @@ class MainActivity : ComponentActivity() {
                     ForceUpdateScreen(update)
                     return@KlicTheme
                 }
-                when {
-                    isAuthed       -> Home(vm)
-                    showWelcome    -> WelcomeScreen { showWelcome = false }
-                    else           -> AuthScreen(vm)
-                }
-                // §10.4 app lock: overlay above ALL content while locked. The in-call UI
-                // (incoming answers land in activeCall) bypasses the lock; the incoming
-                // ring itself lives in IncomingCallActivity, outside this overlay.
+                // §10.4/§11.3 app lock: overlay above ALL content while locked, with the
+                // content behind FULLY blurred (privacy). The in-call UI (incoming answers
+                // land in activeCall) bypasses the lock; the incoming ring itself lives in
+                // IncomingCallActivity, outside this overlay.
                 val appLocked by com.klic.mobile.app.data.AppLockStore.locked.collectAsState()
                 val lockEnabled by com.klic.mobile.app.data.AppLockStore.enabled.collectAsState()
-                if (isAuthed && lockEnabled && appLocked && activeCallForPip == null) {
+                val lockActive = isAuthed && lockEnabled && appLocked && activeCallForPip == null
+                Box(
+                    Modifier.fillMaxSize().then(
+                        // Modifier.blur needs RenderEffect (API 31+); older devices get an
+                        // opaque scrim from AppLockOverlay instead.
+                        if (lockActive && android.os.Build.VERSION.SDK_INT >= 31) {
+                            Modifier.blur(40.dp)
+                        } else Modifier
+                    ),
+                ) {
+                    when {
+                        isAuthed       -> Home(vm)
+                        showWelcome    -> WelcomeScreen { showWelcome = false }
+                        else           -> AuthScreen(vm)
+                    }
+                }
+                if (lockActive) {
                     com.klic.mobile.app.ui.components.AppLockOverlay()
                 }
                 if (showReliabilityDialog) {
