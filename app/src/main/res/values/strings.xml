@@ -186,6 +186,11 @@
     <string name="auth_pw_strong">Strong</string>
     <string name="checkbox_agree_prefix">I agree to the</string>
     <string name="checkbox_privacy_policy">Privacy Policy</string>
+    <string name="login_title">Login</string>
+    <string name="login_subtitle">Welcome back — sign in to keep chatting.</string>
+    <string name="signup_title">Sign Up</string>
+    <string name="signup_subtitle">Yo! Let\'s create an account for you</string>
+    <string name="auth_waiting_for_passkey">Waiting for passkey…</string>
 
     <!-- Welcome -->
     <string name="welcome_tagline">Talk. Chat. Connect.</string>
