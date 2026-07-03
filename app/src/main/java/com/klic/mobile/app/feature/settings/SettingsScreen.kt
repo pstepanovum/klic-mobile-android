@@ -46,6 +46,7 @@ import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -68,6 +69,13 @@ private sealed class SettingsRoute {
     object Privacy : SettingsRoute()
     object Notifications : SettingsRoute()
     object DataStorage : SettingsRoute()
+    // v0.5.3
+    object PrivacyBlocked : SettingsRoute()
+    object PrivacyAppLock : SettingsRoute()
+    object PrivacyPasskeys : SettingsRoute()
+    object Language : SettingsRoute()
+    object QrCode : SettingsRoute()
+    object RecentCalls : SettingsRoute()
 }
 
 @Composable
@@ -87,6 +95,9 @@ fun SettingsScreen(vm: KlicViewModel, onEditProfile: () -> Unit = {}) {
     BackHandler(enabled = route != SettingsRoute.Main) {
         route = when (route) {
             SettingsRoute.AutoNightMode -> SettingsRoute.Appearance
+            SettingsRoute.PrivacyBlocked,
+            SettingsRoute.PrivacyAppLock,
+            SettingsRoute.PrivacyPasskeys -> SettingsRoute.Privacy
             else -> SettingsRoute.Main
         }
     }
@@ -169,6 +180,24 @@ fun SettingsScreen(vm: KlicViewModel, onEditProfile: () -> Unit = {}) {
                                 title = "Data and Storage",
                                 onClick = { route = SettingsRoute.DataStorage },
                             )
+                            HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
+                            SettingsRow(
+                                icon = painterResource(R.drawable.ic_line_sun),
+                                title = stringResource(R.string.settings_language),
+                                onClick = { route = SettingsRoute.Language },
+                            )
+                            HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
+                            SettingsRow(
+                                icon = painterResource(KlicIcons.gallery),
+                                title = stringResource(R.string.settings_qr_code),
+                                onClick = { route = SettingsRoute.QrCode },
+                            )
+                            HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
+                            SettingsRow(
+                                icon = painterResource(KlicIcons.phone),
+                                title = stringResource(R.string.settings_recent_calls),
+                                onClick = { route = SettingsRoute.RecentCalls },
+                            )
                         }
 
                         Spacer(Modifier.height(16.dp))
@@ -198,7 +227,7 @@ fun SettingsScreen(vm: KlicViewModel, onEditProfile: () -> Unit = {}) {
                         ) {
                             SettingsRow(
                                 icon = painterResource(R.drawable.ic_line_lock),
-                                title = "Privacy",
+                                title = stringResource(R.string.settings_privacy_security),
                                 onClick = { route = SettingsRoute.Privacy },
                             )
                         }
@@ -462,7 +491,10 @@ fun SettingsScreen(vm: KlicViewModel, onEditProfile: () -> Unit = {}) {
                     }
 
                     SettingsRoute.Privacy -> {
-                        SubScreenHeader(title = "Privacy", onBack = { route = SettingsRoute.Main })
+                        SubScreenHeader(
+                            title = stringResource(R.string.settings_privacy_security),
+                            onBack = { route = SettingsRoute.Main },
+                        )
 
                         Column(
                             Modifier
@@ -472,9 +504,13 @@ fun SettingsScreen(vm: KlicViewModel, onEditProfile: () -> Unit = {}) {
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Column(Modifier.weight(1f)) {
-                                    Text("Last seen", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurface)
                                     Text(
-                                        "If turned off, you won't see anyone else's last seen.",
+                                        stringResource(R.string.privacy_last_seen),
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                    )
+                                    Text(
+                                        stringResource(R.string.privacy_last_seen_sub),
                                         style = MaterialTheme.typography.labelSmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     )
@@ -488,6 +524,66 @@ fun SettingsScreen(vm: KlicViewModel, onEditProfile: () -> Unit = {}) {
                                 )
                             }
                         }
+
+                        Spacer(Modifier.height(16.dp))
+
+                        // §10.4: Blocked users, app lock, passkeys, links, data, account.
+                        PrivacySecurityContent(vm) { sub ->
+                            route = when (sub) {
+                                PrivacySecuritySub.BLOCKED -> SettingsRoute.PrivacyBlocked
+                                PrivacySecuritySub.APP_LOCK -> SettingsRoute.PrivacyAppLock
+                                PrivacySecuritySub.PASSKEYS -> SettingsRoute.PrivacyPasskeys
+                            }
+                        }
+                    }
+
+                    SettingsRoute.PrivacyBlocked -> {
+                        SubScreenHeader(
+                            title = stringResource(R.string.privacy_blocked_users),
+                            onBack = { route = SettingsRoute.Privacy },
+                        )
+                        BlockedUsersContent(vm)
+                    }
+
+                    SettingsRoute.PrivacyAppLock -> {
+                        SubScreenHeader(
+                            title = stringResource(R.string.privacy_passcode_biometrics),
+                            onBack = { route = SettingsRoute.Privacy },
+                        )
+                        AppLockContent()
+                    }
+
+                    SettingsRoute.PrivacyPasskeys -> {
+                        SubScreenHeader(
+                            title = stringResource(R.string.privacy_passkeys),
+                            onBack = { route = SettingsRoute.Privacy },
+                        )
+                        PasskeysContent(vm)
+                    }
+
+                    SettingsRoute.Language -> {
+                        SubScreenHeader(
+                            title = stringResource(R.string.settings_language),
+                            onBack = { route = SettingsRoute.Main },
+                        )
+                        LanguageContent()
+                    }
+
+                    SettingsRoute.QrCode -> {
+                        SubScreenHeader(
+                            title = stringResource(R.string.settings_qr_code),
+                            onBack = { route = SettingsRoute.Main },
+                        )
+                        QrCodeContent(vm)
+                    }
+
+                    SettingsRoute.RecentCalls -> {
+                        SubScreenHeader(
+                            title = stringResource(R.string.settings_recent_calls),
+                            onBack = { route = SettingsRoute.Main },
+                        )
+                        // §10.6: the EXISTING recent-calls component — no duplicate.
+                        com.klic.mobile.app.feature.call.RecentCallsList(vm)
                     }
                 }
             }

@@ -387,18 +387,103 @@ class KlicRepository(
         if (!res.isSuccessful) error("Member removal failed (${res.code()})")
     }
 
-    /** Upload a new group cover and attach it — POST avatar-upload, PUT bytes, PATCH key. */
+    /**
+     * Upload a new group cover and attach it — POST avatar-upload, PUT bytes, PATCH key.
+     * §10.1: every step is diagnosed and failures are rethrown with the failing step
+     * baked into the message so the UI can surface a step-specific error toast.
+     */
     suspend fun uploadConversationAvatar(
         conversationId: String,
         bytes: ByteArray,
         contentType: String,
     ): Conversation {
-        val ticket = api.conversationAvatarUpload(conversationId, AvatarUploadRequest(contentType, bytes.size))
-        putToPresignedUrl(ticket.uploadUrl, bytes, contentType, "Group cover")
-        return api.updateConversation(
-            conversationId,
-            JsonObject(mapOf("avatarKey" to JsonPrimitive(ticket.key))),
-        )
+        diagnostic("cover.presign.start", "conv=$conversationId type=$contentType bytes=${bytes.size}")
+        val ticket = runCatching {
+            api.conversationAvatarUpload(conversationId, AvatarUploadRequest(contentType, bytes.size))
+        }.onFailure {
+            diagnostic("cover.presign.failed", it.message ?: it::class.java.simpleName)
+        }.getOrElse { throw CoverUploadException("presign", it) }
+        diagnostic("cover.presign.ok", "key=${ticket.key}")
+
+        runCatching {
+            putToPresignedUrl(ticket.uploadUrl, bytes, contentType, "Group cover")
+        }.onFailure {
+            diagnostic("cover.put.failed", it.message ?: it::class.java.simpleName)
+        }.getOrElse { throw CoverUploadException("storage upload", it) }
+        diagnostic("cover.put.ok", "bytes=${bytes.size}")
+
+        val updated = runCatching {
+            api.updateConversation(
+                conversationId,
+                JsonObject(mapOf("avatarKey" to JsonPrimitive(ticket.key))),
+            )
+        }.onFailure {
+            diagnostic("cover.patch.failed", it.message ?: it::class.java.simpleName)
+        }.getOrElse { throw CoverUploadException("attach (PATCH)", it) }
+        diagnostic("cover.patch.ok", "avatarUrl=${updated.avatarUrl != null}")
+        return updated
+    }
+
+    // ── v0.5.3 (§10.4): blocks, passkeys, contacts, account lifecycle ────────
+
+    suspend fun blocks(): List<BlockedUser> = api.blocks()
+
+    suspend fun blockUser(userId: String) {
+        val res = api.blockUser(mapOf("userId" to userId))
+        if (!res.isSuccessful) error("Block failed (${res.code()})")
+    }
+
+    suspend fun unblockUser(userId: String) {
+        val res = api.unblockUser(userId)
+        if (!res.isSuccessful) error("Unblock failed (${res.code()})")
+    }
+
+    suspend fun passkeyRegisterOptions(): JsonObject = api.passkeyRegisterOptions()
+
+    suspend fun passkeyRegisterVerify(credentialJson: JsonObject) {
+        val res = api.passkeyRegisterVerify(credentialJson)
+        if (!res.isSuccessful) error("Passkey registration failed (${res.code()})")
+    }
+
+    suspend fun passkeys(): List<Passkey> = api.passkeys()
+
+    suspend fun deletePasskey(id: String) {
+        val res = api.deletePasskey(id)
+        if (!res.isSuccessful) error("Passkey removal failed (${res.code()})")
+    }
+
+    suspend fun passkeyLoginOptions(): JsonObject = api.passkeyLoginOptions(JsonObject(emptyMap()))
+
+    /** Completes a passkey sign-in: the server returns the normal token pair. */
+    suspend fun passkeyLogin(credentialJson: JsonObject): User {
+        val res = api.passkeyLoginVerify(credentialJson)
+        persist(res)
+        return res.user
+    }
+
+    suspend fun uploadContactHashes(hashes: List<String>) {
+        val res = api.uploadContactHashes(ContactHashesRequest(hashes))
+        if (!res.isSuccessful) error("Contact sync failed (${res.code()})")
+    }
+
+    suspend fun deleteContactHashes() {
+        val res = api.deleteContactHashes()
+        if (!res.isSuccessful) error("Deleting synced contacts failed (${res.code()})")
+    }
+
+    /** PATCH /me {deleteIfAwayMonths} — null clears the auto-delete window. */
+    suspend fun setDeleteIfAwayMonths(months: Int?): User {
+        val body = JsonObject(mapOf("deleteIfAwayMonths" to (months?.let { JsonPrimitive(it) } ?: JsonNull)))
+        val user = api.updateProfile(body)
+        currentUser = user
+        tokenStore.saveUser(json.encodeToString(User.serializer(), user))
+        return user
+    }
+
+    /** DELETE /me — cascaded server-side; caller wipes local state + logs out. */
+    suspend fun deleteAccount() {
+        val res = api.deleteAccount()
+        if (!res.isSuccessful) error("Account deletion failed (${res.code()})")
     }
 
     private suspend fun persist(res: AuthResponse) {
@@ -407,3 +492,7 @@ class KlicRepository(
         currentUser = res.user
     }
 }
+
+/** §10.1: carries which step of the cover chain failed, for a step-specific error toast. */
+class CoverUploadException(val step: String, cause: Throwable) :
+    Exception("Group cover $step failed: ${cause.message ?: cause::class.java.simpleName}", cause)

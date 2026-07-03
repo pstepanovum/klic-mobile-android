@@ -100,4 +100,23 @@ dependencies {
     // Image loading (avatars, SVG stickers)
     implementation(libs.coil.compose)
     implementation(libs.coil.svg)
+
+    // v0.5.3 (§10.4): app lock (EncryptedSharedPreferences), passkeys (CredentialManager),
+    // in-app browser (Custom Tabs); per-app locales (§10.5).
+    implementation(libs.androidx.security.crypto)
+    implementation(libs.androidx.credentials)
+    implementation(libs.androidx.credentials.play.services)
+    implementation(libs.androidx.browser)
+    implementation(libs.androidx.appcompat)
+
+    // v0.5.3 (§10.7): QR generation (zxing) + Google code scanner for the Scan flow.
+    implementation(libs.zxing.core)
+    implementation(libs.play.services.code.scanner)
+
+    // v0.5.3 (§10.11): ML Kit document scanner → multi-page PDF.
+    implementation(libs.play.services.document.scanner)
+
+    // v0.5.3 (§10.9): full-screen video playback in the media viewer.
+    implementation(libs.media3.exoplayer)
+    implementation(libs.media3.ui)
 }

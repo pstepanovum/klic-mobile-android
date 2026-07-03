@@ -1,4 +1,111 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Klic</string>
+
+    <!-- Common -->
+    <string name="common_on">On</string>
+    <string name="common_off">Off</string>
+    <string name="common_cancel">Cancel</string>
+    <string name="common_save">Save</string>
+    <string name="common_delete">Delete</string>
+    <string name="common_clear">Clear</string>
+    <string name="common_continue">Continue</string>
+    <string name="common_done">Done</string>
+    <string name="common_send">Send</string>
+    <string name="common_back">Back</string>
+    <string name="common_close">Close</string>
+    <string name="common_retry">Retry</string>
+    <string name="common_share">Share</string>
+
+    <!-- Settings -->
+    <string name="settings_language">Language</string>
+    <string name="settings_qr_code">QR Code</string>
+    <string name="settings_recent_calls">Recent Calls</string>
+    <string name="settings_privacy_security">Privacy and Security</string>
+
+    <!-- Privacy and Security -->
+    <string name="privacy_last_seen">Last seen</string>
+    <string name="privacy_last_seen_sub">If turned off, you won\'t see anyone else\'s last seen.</string>
+    <string name="privacy_blocked_users">Blocked Users</string>
+    <string name="privacy_passcode_biometrics">Passcode &amp; Biometrics</string>
+    <string name="privacy_passkeys">Passkeys</string>
+    <string name="privacy_links_section">Links</string>
+    <string name="privacy_open_links_in">Open links in</string>
+    <string name="privacy_links_in_app">Klic</string>
+    <string name="privacy_links_in_app_sub">In-app browser</string>
+    <string name="privacy_links_chrome">Chrome</string>
+    <string name="privacy_links_system">System default</string>
+    <string name="privacy_dont_open_in_app">Don\'t open links in-app</string>
+    <string name="privacy_dont_open_in_app_sub">Always use an external browser.</string>
+    <string name="privacy_clear_cookies">Clear cookies</string>
+    <string name="privacy_clear_cookies_confirm">Clear the in-app browser\'s cookies and site data?</string>
+    <string name="privacy_cookies_cleared">Cookies cleared.</string>
+    <string name="privacy_data_section">Data Settings</string>
+    <string name="privacy_sync_contacts">Sync Contacts</string>
+    <string name="privacy_sync_contacts_sub">Uploads only anonymous hashes of your contacts to find friends.</string>
+    <string name="privacy_contacts_permission_denied">Contacts permission is needed to sync.</string>
+    <string name="privacy_delete_synced_contacts">Delete Synced Contacts</string>
+    <string name="privacy_suggest_frequent">Suggest Frequent Contacts</string>
+    <string name="privacy_suggest_frequent_sub">Show your most-messaged friends on top of pickers.</string>
+    <string name="privacy_delete_all_drafts">Delete All Drafts</string>
+    <string name="privacy_delete_drafts_confirm">Delete every saved message draft on this device?</string>
+    <string name="privacy_drafts_deleted">Drafts deleted.</string>
+    <string name="privacy_account_section">Automatically delete my account</string>
+    <string name="privacy_delete_if_away">If away for</string>
+    <string name="privacy_months_format">%1$d months</string>
+    <string name="privacy_delete_account_now">Delete Account Now</string>
+    <string name="privacy_delete_account_warning">This permanently deletes your account, messages, media and calls. This cannot be undone.</string>
+    <string name="privacy_delete_account_type_username">Type your username (%1$s) to confirm.</string>
+    <string name="privacy_delete_forever">Delete forever</string>
+    <string name="privacy_no_blocked_users">You haven\'t blocked anyone.</string>
+    <string name="privacy_unblock">Unblock</string>
+
+    <!-- App lock -->
+    <string name="applock_set_passcode">Set passcode</string>
+    <string name="applock_change_passcode">Change passcode</string>
+    <string name="applock_remove_passcode">Remove passcode</string>
+    <string name="applock_biometric_unlock">Biometric unlock</string>
+    <string name="applock_biometric_sub">Use fingerprint or face to unlock Klic.</string>
+    <string name="applock_auto_lock">Auto-lock</string>
+    <string name="applock_immediately">Immediately</string>
+    <string name="applock_after_1min">After 1 minute</string>
+    <string name="applock_after_5min">After 5 minutes</string>
+    <string name="applock_on_background">When app goes to background</string>
+    <string name="applock_footer">The passcode is stored only on this device. Incoming calls still ring while Klic is locked.</string>
+    <string name="applock_passcode_saved">Passcode saved.</string>
+    <string name="applock_passcode_hint">Choose a 4–6 digit passcode.</string>
+    <string name="applock_passcode">Passcode</string>
+    <string name="applock_repeat_passcode">Repeat passcode</string>
+    <string name="applock_passcodes_dont_match">Passcodes don\'t match.</string>
+    <string name="applock_enter_passcode">Enter your passcode</string>
+    <string name="applock_wrong_passcode">Wrong passcode. Try again.</string>
+    <string name="applock_unlock">Unlock</string>
+    <string name="applock_biometric_title">Unlock Klic</string>
+    <string name="applock_use_passcode">Use passcode</string>
+
+    <!-- Passkeys -->
+    <string name="passkeys_empty">No passkeys yet. Add one to sign in without a password.</string>
+    <string name="passkeys_default_label">Passkey</string>
+    <string name="passkeys_added_format">Added %1$s</string>
+    <string name="passkeys_add">Add passkey</string>
+    <string name="passkeys_footer">Passkeys sign you in with your device\'s screen lock. They never leave your device\'s secure storage.</string>
+    <string name="auth_sign_in_with_passkey">Sign in with a passkey</string>
+
+    <!-- Language -->
+    <string name="language_system_default">System default</string>
+    <string name="language_footer">Klic restarts its screens to apply the new language.</string>
+
+    <!-- QR code -->
+    <string name="qr_title">My QR code</string>
+    <string name="qr_hint">Friends can scan this code to add you on Klic.</string>
+    <string name="qr_scan">Scan</string>
+    <string name="qr_share">Share</string>
+    <string name="qr_not_klic">That code isn\'t a Klic contact code.</string>
+    <string name="qr_scan_unavailable">Scanning isn\'t available on this device. %1$s</string>
+    <string name="qr_share_failed">Couldn\'t share the QR code.</string>
+
+    <!-- Friend profile -->
+    <string name="profile_block_format">Block %1$s</string>
+    <string name="profile_block">Block</string>
+    <string name="profile_block_confirm">They won\'t be able to message or call you. You can unblock them later in Settings → Privacy and Security.</string>
 </resources>

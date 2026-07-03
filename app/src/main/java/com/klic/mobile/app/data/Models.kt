@@ -12,6 +12,8 @@ data class User(
     val displayName: String,
     val avatarUrl: String? = null,
     val showLastSeen: Boolean? = null,   // present on /me + auth responses
+    /** §10.4: auto-delete window in months (null = off); PATCH /me round-trips it. */
+    val deleteIfAwayMonths: Int? = null,
 )
 
 /** A friend's profile (GET /users/:id). lastSeenAt/online are null when hidden by privacy. */
@@ -337,3 +339,25 @@ data class StarredPage(
     val items: List<Message> = emptyList(),
     val nextCursor: String? = null,
 )
+
+// ── v0.5.3 (§10.4): blocks, passkeys, contacts ──
+
+/** One row of GET /blocks — a user this account has blocked. */
+@Serializable
+data class BlockedUser(
+    val user: User,
+    val blockedAt: String? = null,
+)
+
+/** One row of GET /me/passkeys. */
+@Serializable
+data class Passkey(
+    val id: String,
+    val label: String? = null,
+    val createdAt: String? = null,
+    val lastUsedAt: String? = null,
+)
+
+/** POST /me/contacts — SHA-256 hex hashes of normalized emails + phone numbers. */
+@Serializable
+data class ContactHashesRequest(val hashes: List<String>)

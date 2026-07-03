@@ -103,6 +103,11 @@ class MainActivity : ComponentActivity() {
     private val permissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {}
 
+    override fun attachBaseContext(newBase: android.content.Context) {
+        // §10.5: apply the in-app language on pre-33 devices.
+        super.attachBaseContext(com.klic.mobile.app.data.LocaleHelper.wrap(newBase))
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -186,6 +191,14 @@ class MainActivity : ComponentActivity() {
                     isAuthed       -> Home(vm)
                     showWelcome    -> WelcomeScreen { showWelcome = false }
                     else           -> AuthScreen(vm)
+                }
+                // §10.4 app lock: overlay above ALL content while locked. The in-call UI
+                // (incoming answers land in activeCall) bypasses the lock; the incoming
+                // ring itself lives in IncomingCallActivity, outside this overlay.
+                val appLocked by com.klic.mobile.app.data.AppLockStore.locked.collectAsState()
+                val lockEnabled by com.klic.mobile.app.data.AppLockStore.enabled.collectAsState()
+                if (isAuthed && lockEnabled && appLocked && activeCallForPip == null) {
+                    com.klic.mobile.app.ui.components.AppLockOverlay()
                 }
                 if (showReliabilityDialog) {
                     ReliabilityDialog(
@@ -271,6 +284,17 @@ class MainActivity : ComponentActivity() {
     @Composable
     private fun Home(vm: KlicViewModel) {
         val navController = rememberNavController()
+        // §10.1: errors were silently swallowed outside the auth screen — surface every
+        // repository/UI failure pushed into vm.error as a visible toast.
+        val context = LocalContext.current
+        LaunchedEffect(Unit) {
+            vm.error.collect { message ->
+                if (!message.isNullOrBlank()) {
+                    android.widget.Toast.makeText(context, message, android.widget.Toast.LENGTH_LONG).show()
+                    vm.error.value = null
+                }
+            }
+        }
         val backStack by navController.currentBackStackEntryAsState()
         val route = backStack?.destination?.route
         val showBar = route in tabRoutes

@@ -36,6 +36,7 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.res.stringResource
 import com.klic.mobile.app.R
 import com.klic.mobile.app.feature.KlicViewModel
 import com.klic.mobile.app.ui.components.KlicCheckbox
@@ -121,6 +122,17 @@ fun AuthScreen(vm: KlicViewModel) {
             ) {
                 if (isRegistering) vm.register(username, password, displayName)
                 else vm.login(username, password)
+            }
+
+            // §10.4: passkey sign-in — degrades to a clear error toast on refusal.
+            if (!isRegistering) {
+                val activityContext = androidx.compose.ui.platform.LocalContext.current
+                TextButton(onClick = { vm.loginWithPasskey(activityContext) }) {
+                    Text(
+                        stringResource(R.string.auth_sign_in_with_passkey),
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
             }
 
             TextButton(onClick = {

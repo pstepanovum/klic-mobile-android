@@ -39,6 +39,7 @@ class KlicApplication : Application(), ImageLoaderFactory {
         // OkHttp stack (via DataUsage.interceptor) read them.
         SettingsStore.init(this, container.applicationScope)
         DataUsage.init(this, container.applicationScope)
+        com.klic.mobile.app.data.AppLockStore.init(this)
         CallNotifications.createChannels(this)
         trackForeground()
     }
@@ -49,10 +50,14 @@ class KlicApplication : Application(), ImageLoaderFactory {
         registerActivityLifecycleCallbacks(object : ActivityLifecycleCallbacks {
             private var started = 0
             override fun onActivityStarted(activity: Activity) {
+                val wasBackground = started == 0
                 started++; container.appForeground = started > 0
+                // §10.4 app lock: apply the timed auto-lock window on return to foreground.
+                if (wasBackground) com.klic.mobile.app.data.AppLockStore.onAppForegrounded()
             }
             override fun onActivityStopped(activity: Activity) {
                 started = (started - 1).coerceAtLeast(0); container.appForeground = started > 0
+                if (started == 0) com.klic.mobile.app.data.AppLockStore.onAppBackgrounded()
             }
             override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) {}
             override fun onActivityResumed(activity: Activity) {}
@@ -100,6 +105,8 @@ class AppContainer(app: Application) {
 
     private val api = Network.create(tokenStore) { _sessionExpired.tryEmit(Unit) }
     val repository = KlicRepository(api, tokenStore)
+    /** Passkey add/sign-in flows (§10.4). */
+    val passkeyManager = com.klic.mobile.app.data.PasskeyManager(repository)
     val e2eeKeys = E2eeKeyManager(appContext, api)
     val e2eeMessaging = E2eeMessaging(
         e2eeKeys,

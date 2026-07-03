@@ -42,11 +42,16 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextLinkStyles
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.withLink
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import coil.imageLoader
 import com.klic.mobile.app.R
@@ -189,10 +194,12 @@ internal fun MessageBubble(
                                 verticalAlignment = Alignment.Bottom,
                                 modifier = Modifier.width(240.dp).padding(horizontal = 6.dp, vertical = 6.dp),
                             ) {
-                                Text(
-                                    bodyWithMentions(message.body, highlightMentions, mentionAccent(isMine), mentionNames),
-                                    color = textColor,
-                                    style = MaterialTheme.typography.bodyLarge,
+                                MessageBodyText(
+                                    body = message.body,
+                                    highlightMentions = highlightMentions,
+                                    accent = mentionAccent(isMine),
+                                    mentionNames = mentionNames,
+                                    textColor = textColor,
                                     modifier = Modifier.weight(1f, fill = false),
                                 )
                                 Spacer(Modifier.width(6.dp))
@@ -268,6 +275,17 @@ internal fun MessageBubble(
                     }
                 }
 
+            // §10.3: 1–3 emoji-only messages render WhatsApp-style — no bubble, big glyphs.
+            message.replyTo == null && emojiOnlyClusterCount(message.body) in 1..3 ->
+                BigEmojiBubble(
+                    body = message.body.trim(),
+                    emojiCount = emojiOnlyClusterCount(message.body),
+                    time = time,
+                    status = status,
+                    starred = message.starred,
+                    onLongPress = onLongPress,
+                )
+
             else ->
                 Box(
                     Modifier
@@ -287,10 +305,12 @@ internal fun MessageBubble(
                         // Message body + inline time + ticks, aligned to bottom of last text line.
                         Row(verticalAlignment = Alignment.Bottom) {
                             if (message.body.isNotBlank()) {
-                                Text(
-                                    bodyWithMentions(message.body, highlightMentions, mentionAccent(isMine), mentionNames),
-                                    color = textColor,
-                                    style = MaterialTheme.typography.bodyLarge,
+                                MessageBodyText(
+                                    body = message.body,
+                                    highlightMentions = highlightMentions,
+                                    accent = mentionAccent(isMine),
+                                    mentionNames = mentionNames,
+                                    textColor = textColor,
                                     modifier = Modifier.weight(1f, fill = false),
                                 )
                             }
@@ -462,6 +482,143 @@ private fun MediaTimePill(
             MessageTicks(status = status, onMedia = true)
         }
     }
+}
+
+// MARK: - Message body text with tappable links (§10.4)
+
+/**
+ * Bubble body text: mention highlighting (§9.5) plus tappable URLs. Every link tap
+ * routes through [com.klic.mobile.app.data.LinkOpener] and honors "Open links in".
+ */
+@Composable
+internal fun MessageBodyText(
+    body: String,
+    highlightMentions: Boolean,
+    accent: Color,
+    mentionNames: List<String>,
+    textColor: Color,
+    modifier: Modifier = Modifier,
+) {
+    val context = LocalContext.current
+    val annotated = remember(body, highlightMentions, accent, mentionNames, textColor) {
+        buildAnnotatedString {
+            val links = com.klic.mobile.app.data.LinkOpener.urlRegex.findAll(body).toList()
+            var pos = 0
+            links.forEach { match ->
+                if (match.range.first > pos) append(body.substring(pos, match.range.first))
+                val url = match.value
+                withLink(
+                    LinkAnnotation.Clickable(
+                        tag = url,
+                        styles = TextLinkStyles(
+                            style = SpanStyle(color = textColor, textDecoration = TextDecoration.Underline),
+                        ),
+                    ) { com.klic.mobile.app.data.LinkOpener.open(context, url) },
+                ) { append(url) }
+                pos = match.range.last + 1
+            }
+            if (pos < body.length) append(body.substring(pos))
+            if (highlightMentions) {
+                val ranges = mentionAllRanges(body) + mentionNames.flatMap { mentionNameRanges(body, it) }
+                ranges.forEach { range ->
+                    addStyle(
+                        SpanStyle(color = accent, fontWeight = FontWeight.SemiBold),
+                        range.first,
+                        range.last + 1,
+                    )
+                }
+            }
+        }
+    }
+    Text(annotated, color = textColor, style = MaterialTheme.typography.bodyLarge, modifier = modifier)
+}
+
+// MARK: - Big emoji (§10.3)
+
+/**
+ * Bubble-less render for 1–3 emoji-only messages: one emoji renders biggest, two or
+ * three slightly smaller. Time + ticks keep their usual inline overlay position.
+ */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun BigEmojiBubble(
+    body: String,
+    emojiCount: Int,
+    time: String,
+    status: String?,
+    starred: Boolean,
+    onLongPress: () -> Unit,
+) {
+    val fontSize = when (emojiCount) {
+        1 -> 46.sp
+        2 -> 38.sp
+        else -> 32.sp
+    }
+    Row(
+        verticalAlignment = Alignment.Bottom,
+        modifier = Modifier
+            .combinedClickable(onClick = {}, onLongClick = onLongPress)
+            .padding(horizontal = 2.dp, vertical = 2.dp),
+    ) {
+        Text(body, fontSize = fontSize, lineHeight = fontSize)
+        Spacer(Modifier.width(6.dp))
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(3.dp),
+        ) {
+            val timeColor = MaterialTheme.colorScheme.onSurfaceVariant
+            if (starred) StarIndicator(timeColor)
+            Text(time, style = MaterialTheme.typography.labelSmall, color = timeColor)
+            if (status != null) MessageTicks(status = status)
+        }
+    }
+}
+
+/**
+ * Number of grapheme clusters in [body] when it consists ONLY of emoji (1–3), else 0.
+ * Uses ICU's extended grapheme segmentation so ZWJ sequences, skin tones, flags and
+ * keycaps each count as ONE emoji.
+ */
+internal fun emojiOnlyClusterCount(body: String): Int {
+    val text = body.trim()
+    if (text.isEmpty()) return 0
+    val iterator = android.icu.text.BreakIterator.getCharacterInstance()
+    iterator.setText(text)
+    var count = 0
+    var start = iterator.first()
+    var end = iterator.next()
+    while (end != android.icu.text.BreakIterator.DONE) {
+        if (!isEmojiCluster(text.substring(start, end))) return 0
+        count++
+        if (count > 3) return 0
+        start = end
+        end = iterator.next()
+    }
+    return count
+}
+
+/** True when one grapheme cluster reads as an emoji (not plain text like "1" or "#"). */
+private fun isEmojiCluster(cluster: String): Boolean {
+    var i = 0
+    var hasEmoji = false
+    val hasVariation = cluster.contains('\uFE0F')
+    while (i < cluster.length) {
+        val cp = cluster.codePointAt(i)
+        when {
+            // Joiners / variation selectors / skin tones / keycap combiner — glue, not glyphs.
+            cp == 0x200D || cp == 0xFE0F || cp == 0xFE0E || cp in 0x1F3FB..0x1F3FF || cp == 0x20E3 -> Unit
+            cp in 0x1F1E6..0x1F1FF -> hasEmoji = true   // regional indicators (flags)
+            android.icu.lang.UCharacter.hasBinaryProperty(
+                cp, android.icu.lang.UProperty.EMOJI_PRESENTATION,
+            ) -> hasEmoji = true
+            hasVariation && android.icu.lang.UCharacter.hasBinaryProperty(
+                cp, android.icu.lang.UProperty.EMOJI,
+            ) -> hasEmoji = true
+            else -> return false
+        }
+        i += Character.charCount(cp)
+    }
+    return hasEmoji
 }
 
 /** Small star next to the timestamp on starred bubbles (§8.4). */

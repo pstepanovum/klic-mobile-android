@@ -131,6 +131,31 @@ private fun FriendCallRow(friend: User, onAudioCall: () -> Unit, onVideoCall: ()
     }
 }
 
+/**
+ * §10.6: the SAME recent-calls list component, reused by the Settings → Recent Calls
+ * row — no duplicate implementation. Rows call back exactly like the Calls tab.
+ */
+@Composable
+fun RecentCallsList(vm: KlicViewModel) {
+    val recents by vm.recentCalls.collectAsState()
+    LaunchedEffect(Unit) { vm.loadRecentCalls() }
+    Column(Modifier.fillMaxWidth()) {
+        if (recents.isEmpty()) {
+            Text(
+                "No recent calls.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(vertical = 12.dp),
+            )
+        }
+        recents.forEach { call ->
+            RecentCallRow(call) {
+                vm.startCall(call.conversationId, call.kind, call.peerNames)
+            }
+        }
+    }
+}
+
 @Composable
 private fun SectionHeader(title: String) {
     Text(

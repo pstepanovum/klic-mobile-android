@@ -121,7 +121,14 @@ fun ChatScreen(
     val messages by vm.messages.collectAsState()
     val me by vm.currentUser.collectAsState()
     val presenceMap by vm.presence.collectAsState()
-    var draft by remember(conversation.id) { mutableStateOf(TextFieldValue("")) }
+    // §10.4: composer drafts persist per conversation (restored here, saved on leave).
+    var draft by remember(conversation.id) {
+        val saved = com.klic.mobile.app.data.SettingsStore.snapshot.value.drafts[conversation.id].orEmpty()
+        mutableStateOf(TextFieldValue(saved, selection = androidx.compose.ui.text.TextRange(saved.length)))
+    }
+    DisposableEffect(conversation.id) {
+        onDispose { vm.saveDraft(conversation.id, draft.text) }
+    }
     val peer = conversation.members.firstOrNull()
     val isDirect = conversation.type == "DIRECT"
     val title = when {
@@ -542,10 +549,12 @@ fun ChatScreen(
                             val caption = draft.text.trim().takeIf { it.isNotBlank() }
                             pendingMedia = emptyList()
                             draft = TextFieldValue("")
+                            vm.saveDraft(conversation.id, null)
                             // Optimistic pill takes over (§9.1); the composer frees up instantly.
                             vm.sendAttachments(conversation.id, caption, toSend.map { it.attachment })
                         } else if (draft.text.isNotBlank()) {
                             vm.send(conversation.id, draft.text.trim()); draft = TextFieldValue("")
+                            vm.saveDraft(conversation.id, null)
                         }
                     },
                     onAttach = { showAttachSheet = true },

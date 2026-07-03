@@ -20,12 +20,14 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -41,6 +43,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
+import com.klic.mobile.app.R
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -212,6 +216,49 @@ fun ProfileScreen(
                                     if (index != groupsInCommon.lastIndex) InfoDivider()
                                 }
                             }
+                        }
+
+                        // §10.4: block action with confirm — the blocked list lives in
+                        // Settings → Privacy and Security → Blocked Users.
+                        var showBlockConfirm by remember { mutableStateOf(false) }
+                        Spacer(Modifier.height(16.dp))
+                        InfoCard {
+                            Row(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .clickable { showBlockConfirm = true }
+                                    .padding(vertical = 13.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text(
+                                    stringResource(R.string.profile_block_format, member.displayName),
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    color = MaterialTheme.colorScheme.error,
+                                )
+                            }
+                        }
+                        if (showBlockConfirm) {
+                            AlertDialog(
+                                onDismissRequest = { showBlockConfirm = false },
+                                title = { Text(stringResource(R.string.profile_block_format, member.displayName)) },
+                                text = { Text(stringResource(R.string.profile_block_confirm)) },
+                                confirmButton = {
+                                    TextButton(onClick = {
+                                        showBlockConfirm = false
+                                        vm.blockUser(member.id, member.displayName) { onBack() }
+                                    }) {
+                                        Text(
+                                            stringResource(R.string.profile_block),
+                                            color = MaterialTheme.colorScheme.error,
+                                        )
+                                    }
+                                },
+                                dismissButton = {
+                                    TextButton(onClick = { showBlockConfirm = false }) {
+                                        Text(stringResource(R.string.common_cancel))
+                                    }
+                                },
+                            )
                         }
                         Spacer(Modifier.height(24.dp))
                     }
