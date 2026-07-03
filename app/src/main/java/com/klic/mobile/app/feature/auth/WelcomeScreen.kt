@@ -63,8 +63,8 @@ private const val ORNAMENT_DESIGN_SIDE = 500f
 
 /** Ornament's final visual side (dp) at the reference canvas size; capped so huge canvases
  *  (tablets) don't blow it up further past taste. */
-private const val ORNAMENT_FINAL_SIDE = 2400f
-private const val ORNAMENT_MAX_FINAL_SIDE = 3400f
+private const val ORNAMENT_FINAL_SIDE = 2000f
+private const val ORNAMENT_MAX_FINAL_SIDE = 2800f
 
 @Composable
 fun WelcomeScreen(onGetStarted: () -> Unit) {
