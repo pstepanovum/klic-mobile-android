@@ -119,7 +119,8 @@ fun EditProfileScreen(vm: KlicViewModel, onDone: () -> Unit) {
                 onValueChange = { displayName = it },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
-                shape = RoundedCornerShape(16.dp),
+                // Capsule input, matching the Login-page fields (§9.8).
+                shape = CircleShape,
                 colors = TextFieldDefaults.colors(
                     focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
                     unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,

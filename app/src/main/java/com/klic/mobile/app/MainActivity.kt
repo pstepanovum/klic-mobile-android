@@ -329,13 +329,21 @@ class MainActivity : ComponentActivity() {
                 modifier = Modifier.padding(padding),
             ) {
                 composable("home") {
-                    ConversationsScreen(vm) { convo -> navController.navigate("chat/${convo.id}") }
+                    // launchSingleTop everywhere below: double-taps must never stack a
+                    // duplicate instance of the same page (§9.4).
+                    ConversationsScreen(vm) { convo ->
+                        navController.navigate("chat/${convo.id}") { launchSingleTop = true }
+                    }
                 }
                 composable("friends") {
                     FriendsScreen(
                         vm,
-                        onOpenProfile = { conversationId -> navController.navigate("profile/$conversationId") },
-                        onOpenChat = { convo -> navController.navigate("chat/${convo.id}") },
+                        onOpenProfile = { conversationId ->
+                            navController.navigate("profile/$conversationId") { launchSingleTop = true }
+                        },
+                        onOpenChat = { convo ->
+                            navController.navigate("chat/${convo.id}") { launchSingleTop = true }
+                        },
                     )
                 }
                 composable("call") {
@@ -349,15 +357,22 @@ class MainActivity : ComponentActivity() {
                 }
                 composable("chat/{conversationId}") { entry ->
                     val id = entry.arguments?.getString("conversationId").orEmpty()
-                    vm.conversations.value.firstOrNull { it.id == id }?.let { convo ->
+                    // Reactive lookup: when the conversation drops out of the list
+                    // (removed from the group, §9.3) the chat screen leaves itself.
+                    val convos by vm.conversations.collectAsState()
+                    val convo = convos.firstOrNull { it.id == id }
+                    if (convo == null) {
+                        LaunchedEffect(id) { navController.popBackStack() }
+                    } else {
                         ChatScreen(
                             vm = vm,
                             conversation = convo,
                             onBack = { navController.popBackStack() },
                             onCall = {}, // navigation is reactive on activeCall (see Home)
                             onOpenProfile = {
-                                if (convo.type == "DIRECT") navController.navigate("profile/${convo.id}")
-                                else navController.navigate("group_info/${convo.id}")
+                                val route = if (convo.type == "DIRECT") "profile/${convo.id}"
+                                            else "group_info/${convo.id}"
+                                navController.navigate(route) { launchSingleTop = true }
                             },
                         )
                     }
@@ -385,6 +400,12 @@ class MainActivity : ComponentActivity() {
                         onCall = {}, // navigation is reactive on activeCall (see Home)
                         onMessage = {
                             navController.navigate("chat/$id") { popUpTo("home") }
+                        },
+                        onOpenGroup = { groupId ->
+                            navController.navigate("chat/$groupId") {
+                                popUpTo("home")
+                                launchSingleTop = true
+                            }
                         },
                     )
                 }

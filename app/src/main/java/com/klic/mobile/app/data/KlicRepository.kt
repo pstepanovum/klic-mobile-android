@@ -82,17 +82,28 @@ class KlicRepository(
 
     /** PUT raw bytes to a presigned URL off the main thread; throws on a non-2xx response.
      *  The blocking OkHttp call MUST run on Dispatchers.IO — callers launch on viewModelScope
-     *  (Main), so executing here directly would crash with NetworkOnMainThreadException. */
-    private suspend fun putToPresignedUrl(uploadUrl: String, bytes: ByteArray, contentType: String, label: String) =
-        withContext(Dispatchers.IO) {
-            val request = Request.Builder()
-                .url(uploadUrl)
-                .put(bytes.toRequestBody(contentType.toMediaType()))
-                .build()
-            uploader.newCall(request).execute().use { resp ->
-                if (!resp.isSuccessful) error("$label upload failed (${resp.code})")
-            }
+     *  (Main), so executing here directly would crash with NetworkOnMainThreadException.
+     *  [onProgress] (bytes written so far) drives the upload pill's progress bar (§9.1). */
+    private suspend fun putToPresignedUrl(
+        uploadUrl: String,
+        bytes: ByteArray,
+        contentType: String,
+        label: String,
+        onProgress: ((Long) -> Unit)? = null,
+    ) = withContext(Dispatchers.IO) {
+        val body = if (onProgress != null) {
+            ProgressRequestBody(bytes, contentType.toMediaType(), onProgress)
+        } else {
+            bytes.toRequestBody(contentType.toMediaType())
         }
+        val request = Request.Builder()
+            .url(uploadUrl)
+            .put(body)
+            .build()
+        uploader.newCall(request).execute().use { resp ->
+            if (!resp.isSuccessful) error("$label upload failed (${resp.code})")
+        }
+    }
 
     /** Upload new avatar bytes and return the object key to attach via [updateProfile]. */
     suspend fun uploadAvatar(bytes: ByteArray, contentType: String): String {
@@ -245,14 +256,18 @@ class KlicRepository(
 
     /** Uploads one or more staged attachments (mixed images/videos/files) and sends them as
      *  a single message — each attachment is presigned/PUT using its own kind/contentType,
-     *  not hardcoded to "IMAGE" the way the old image-only path was. */
+     *  not hardcoded to "IMAGE" the way the old image-only path was. [onProgress] reports
+     *  (bytes sent, total bytes) across ALL attachments for the pill's progress bar (§9.1). */
     suspend fun uploadAttachments(
         conversationId: String,
         attachments: List<AttachmentInput>,
         body: String? = null,
         replyToId: String? = null,
+        onProgress: ((sentBytes: Long, totalBytes: Long) -> Unit)? = null,
     ): Message {
         require(attachments.isNotEmpty()) { "attachments must not be empty" }
+        val totalBytes = attachments.sumOf { (it.localBytes?.size ?: it.byteSize).toLong() }
+        var sentBase = 0L
         val uploaded = mutableListOf<AttachmentInput>()
         for (attachment in attachments) {
             val normalizedType = attachment.contentType.ifBlank { "application/octet-stream" }
@@ -261,13 +276,18 @@ class KlicRepository(
             diagnostic("upload.${attachment.kind}.presign.ok", "type=$normalizedType bytes=${attachment.byteSize}")
             diagnostic("upload.${attachment.kind}.put.start", "bytes=${attachment.byteSize}")
             val bytes = requireNotNull(attachment.localBytes) { "AttachmentInput.localBytes required for upload" }
+            val base = sentBase
+            val perAttachmentProgress = onProgress?.let { cb ->
+                { sent: Long -> cb(base + sent, totalBytes) }
+            }
             runCatching {
-                putToPresignedUrl(ticket.uploadUrl, bytes, normalizedType, attachment.kind)
+                putToPresignedUrl(ticket.uploadUrl, bytes, normalizedType, attachment.kind, perAttachmentProgress)
             }.onFailure {
                 diagnostic("upload.${attachment.kind}.put.failed", it.message ?: it::class.java.simpleName)
                 throw it
             }
             diagnostic("upload.${attachment.kind}.put.ok", "bytes=${attachment.byteSize}")
+            sentBase += bytes.size.toLong()
             uploaded += attachment.copy(key = ticket.key, localBytes = null)
         }
         diagnostic("upload.attachments.message.start")
@@ -360,6 +380,12 @@ class KlicRepository(
     ): AttachmentPage = api.conversationAttachments(conversationId, kind, cursor)
 
     // ── Group management (§8.4) ──────────────────────────────────────────────
+
+    /** Admin removes a member (§9.3). Throws on failure so the caller can reconcile. */
+    suspend fun removeConversationMember(conversationId: String, userId: String) {
+        val res = api.removeConversationMember(conversationId, userId)
+        if (!res.isSuccessful) error("Member removal failed (${res.code()})")
+    }
 
     /** Upload a new group cover and attach it — POST avatar-upload, PUT bytes, PATCH key. */
     suspend fun uploadConversationAvatar(

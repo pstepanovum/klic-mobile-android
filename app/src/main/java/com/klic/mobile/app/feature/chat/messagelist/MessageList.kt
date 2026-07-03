@@ -66,6 +66,8 @@ import com.klic.mobile.app.feature.chat.stickers.StickerBubble
 import com.klic.mobile.app.feature.chat.voice.VoiceAttachmentView
 import com.klic.mobile.app.feature.chat.voice.durationText
 import com.klic.mobile.app.ui.components.MessageTicks
+import com.klic.mobile.app.ui.components.rememberStableImageRequest
+import com.klic.mobile.app.ui.components.stableImageKey
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -83,6 +85,8 @@ internal fun MessageBubble(
     replyAuthorName: String = "",
     /** Group chats highlight "@all" mentions in bubble bodies (§8.4). */
     highlightMentions: Boolean = false,
+    /** Member display names that highlight like @all when mentioned (§9.5). */
+    mentionNames: List<String> = emptyList(),
     onCallBack: (String) -> Unit = {},
     onLongPress: () -> Unit = {},
     onReactionTap: (String) -> Unit = {},
@@ -90,6 +94,8 @@ internal fun MessageBubble(
     onFileClick: (Attachment) -> Unit = {},
 ) {
     if (message.isDeleted) { DeletedBubble(isMine); return }
+    // SYSTEM notices ("«admin» removed «target»", §9.3) render as a centred pill.
+    if (message.kind == "SYSTEM") { SystemNotice(message.body); return }
     if (message.isCallEvent && message.call != null) {
         CallEventBubble(message.call, outgoing = isMine, time = shortTime(message.createdAt), onCallBack = onCallBack)
         return
@@ -184,7 +190,7 @@ internal fun MessageBubble(
                                 modifier = Modifier.width(240.dp).padding(horizontal = 6.dp, vertical = 6.dp),
                             ) {
                                 Text(
-                                    bodyWithMentions(message.body, highlightMentions, mentionAccent(isMine)),
+                                    bodyWithMentions(message.body, highlightMentions, mentionAccent(isMine), mentionNames),
                                     color = textColor,
                                     style = MaterialTheme.typography.bodyLarge,
                                     modifier = Modifier.weight(1f, fill = false),
@@ -282,7 +288,7 @@ internal fun MessageBubble(
                         Row(verticalAlignment = Alignment.Bottom) {
                             if (message.body.isNotBlank()) {
                                 Text(
-                                    bodyWithMentions(message.body, highlightMentions, mentionAccent(isMine)),
+                                    bodyWithMentions(message.body, highlightMentions, mentionAccent(isMine), mentionNames),
                                     color = textColor,
                                     style = MaterialTheme.typography.bodyLarge,
                                     modifier = Modifier.weight(1f, fill = false),
@@ -337,7 +343,8 @@ private fun BentoImageGrid(
         var manuallyRequested by remember(att.id) { mutableStateOf(false) }
         val cached = remember(att.url) {
             runCatching {
-                context.imageLoader.diskCache?.openSnapshot(att.url)?.use { true } ?: false
+                // §9.9: the disk cache is keyed on the presign-stable URL.
+                context.imageLoader.diskCache?.openSnapshot(stableImageKey(att.url))?.use { true } ?: false
             }.getOrDefault(false)
         }
         val allowed = cached || manuallyRequested ||
@@ -353,7 +360,7 @@ private fun BentoImageGrid(
         ) {
             if (allowed) {
                 AsyncImage(
-                    model = att.url,
+                    model = rememberStableImageRequest(att.url),
                     contentDescription = "Image",
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.fillMaxSize(),
@@ -474,10 +481,15 @@ internal fun StarIndicator(tint: Color) {
 private fun mentionAccent(isMine: Boolean): Color =
     if (isMine) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.primary
 
-/** Highlights "@all" tokens (accent + semibold) when [highlight] is on (§8.4). */
-internal fun bodyWithMentions(body: String, highlight: Boolean, accent: Color): AnnotatedString {
+/** Highlights "@all" and member-name mentions (accent + semibold) when [highlight] is on (§9.5). */
+internal fun bodyWithMentions(
+    body: String,
+    highlight: Boolean,
+    accent: Color,
+    names: List<String> = emptyList(),
+): AnnotatedString {
     if (!highlight) return AnnotatedString(body)
-    val matches = mentionAllRanges(body)
+    val matches = mentionAllRanges(body) + names.flatMap { mentionNameRanges(body, it) }
     if (matches.isEmpty()) return AnnotatedString(body)
     return buildAnnotatedString {
         append(body)
@@ -489,6 +501,15 @@ internal fun bodyWithMentions(body: String, highlight: Boolean, accent: Color): 
             )
         }
     }
+}
+
+/** Character ranges of "@Display Name" mentions for one member name (§9.5). */
+internal fun mentionNameRanges(body: String, name: String): List<IntRange> {
+    if (name.isBlank()) return emptyList()
+    return Regex("""(^|\s)(@${Regex.escape(name)})""", RegexOption.IGNORE_CASE)
+        .findAll(body)
+        .mapNotNull { it.groups[2]?.range }
+        .toList()
 }
 
 /** Character ranges of "@all" tokens (same regex as the server's push gating). */
@@ -526,6 +547,27 @@ internal fun presenceSubtitle(presence: com.klic.mobile.app.realtime.SocketServi
         LocalDate.now() -> "last seen $time"
         LocalDate.now().minusDays(1) -> "last seen yesterday"
         else -> "last seen ${DateTimeFormatter.ofPattern("MMM d").format(date)}"
+    }
+}
+
+/** Centred pill for SYSTEM notices — same visual language as the date separator. */
+@Composable
+private fun SystemNotice(text: String) {
+    Box(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Surface(
+            shape = RoundedCornerShape(50),
+            color = MaterialTheme.colorScheme.surfaceVariant,
+        ) {
+            Text(
+                text,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp),
+            )
+        }
     }
 }
 

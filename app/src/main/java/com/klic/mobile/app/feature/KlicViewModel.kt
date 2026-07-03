@@ -108,6 +108,23 @@ class KlicViewModel(
                 // sends back for multi-device sync.
                 val msg = container.e2eeMessaging.materialize(raw, currentUser.value?.id)
                 if (msg.conversationId == openConversationId) upsertMessage(msg)
+                // SYSTEM fanout (e.g. "«admin» removed «target»", §9.3) means membership
+                // changed — refresh the conversations list so member rows reconcile.
+                if (msg.kind == "SYSTEM") loadConversations()
+            }
+        }
+        viewModelScope.launch {
+            // §9.3: this user was removed from a group — drop the conversation locally.
+            // Screens showing it (chat / group info) observe the list and pop themselves.
+            socket.removedConversations.collect { convId ->
+                conversations.value = conversations.value.filterNot { it.id == convId }
+                if (openConversationId == convId) {
+                    openConversationId = null
+                    messages.value = emptyList()
+                    chatActiveCall.value = null
+                    replyingTo.value = null
+                }
+                messageCache.remove(convId)
             }
         }
         viewModelScope.launch {
@@ -213,6 +230,13 @@ class KlicViewModel(
         }
         viewModelScope.launch {
             socket.deliveredReceipts.collect { applyReceipt(it, read = false) }
+        }
+        viewModelScope.launch {
+            // §9.9: write-through — every message-list mutation (send, socket event,
+            // pagination, delete…) lands in the per-conversation cache automatically.
+            messages.collect { list ->
+                openConversationId?.let { messageCache[it] = list }
+            }
         }
     }
 
@@ -337,17 +361,46 @@ class KlicViewModel(
                 .onFailure { error.value = "Couldn't update the group photo. Try again." }
         }
 
+    /** Admin removes a group member (§9.3): optimistic drop, restored if the call fails. */
+    fun removeGroupMember(conversationId: String, userId: String) = viewModelScope.launch {
+        val removed = conversations.value
+            .firstOrNull { it.id == conversationId }?.members?.firstOrNull { it.id == userId }
+            ?: return@launch
+        conversations.value = conversations.value.map { c ->
+            if (c.id == conversationId) c.copy(members = c.members.filterNot { it.id == userId }) else c
+        }
+        runCatching { repo.removeConversationMember(conversationId, userId) }
+            .onFailure {
+                // Reconcile: put the member back and surface the failure.
+                conversations.value = conversations.value.map { c ->
+                    if (c.id == conversationId && c.members.none { it.id == userId }) {
+                        c.copy(members = c.members + removed)
+                    } else c
+                }
+                error.value = "Couldn't remove ${removed.displayName}. Try again."
+            }
+    }
+
+    // §9.9: last-known message list per conversation — re-opening a chat renders
+    // instantly from here while the fresh page loads in the background.
+    private val messageCache = mutableMapOf<String, List<Message>>()
+
     fun openChat(conversationId: String) = viewModelScope.launch {
         openConversationId = conversationId
         replyingTo.value = null
-        hasMoreMessages.value = false
         isLoadingOlderMessages.value = false
         chatActiveCall.value = null
         refreshActiveCall(conversationId)
         // Clear any pending notification (and its launcher badge) for this conversation.
         CallNotifications.cancelMessage(container.appContext, conversationId)
+        // Cache-first render (§9.9), then refresh; socket events stay authoritative.
+        val cached = messageCache[conversationId]
+        messages.value = cached?.filterNot { m -> m.id in hiddenIds } ?: emptyList()
+        hasMoreMessages.value = (cached?.size ?: 0) >= 50
         runCatching { repo.messages(conversationId) }
             .onSuccess { msgs ->
+                // A different chat may have been opened while this fetch was in flight.
+                if (openConversationId != conversationId) return@onSuccess
                 messages.value = msgs.reversed().filterNot { m -> m.id in hiddenIds }
                 hasMoreMessages.value = msgs.size >= 50
             }
@@ -453,14 +506,61 @@ class KlicViewModel(
                 .onFailure { error.value = "Couldn't send photo. Try again." }
         }
 
-    fun sendAttachments(conversationId: String, body: String?, attachments: List<AttachmentInput>) =
-        viewModelScope.launch {
-            val replyId = replyingTo.value?.id
-            replyingTo.value = null
-            runCatching { repo.uploadAttachments(conversationId, attachments, body?.takeIf { it.isNotBlank() }, replyId) }
-                .onSuccess { upsertMessage(it) }
-                .onFailure { error.value = "Couldn't send attachment. Try again." }
+    // ── Optimistic uploads (§9.1) ─────────────────────────────────────────────
+
+    /** In-flight/failed optimistic uploads, rendered as progress pills in the chat. */
+    val uploadTasks = MutableStateFlow<List<UploadTask>>(emptyList())
+
+    /** Insert an optimistic pill and start uploading immediately — never blocks the UI. */
+    fun sendAttachments(conversationId: String, body: String?, attachments: List<AttachmentInput>) {
+        val replyId = replyingTo.value?.id
+        replyingTo.value = null
+        val task = UploadTask(
+            id = java.util.UUID.randomUUID().toString(),
+            conversationId = conversationId,
+            body = body?.takeIf { it.isNotBlank() },
+            attachments = attachments,
+            replyToId = replyId,
+        )
+        uploadTasks.value = uploadTasks.value + task
+        startUpload(task)
+    }
+
+    fun retryUpload(taskId: String) {
+        val task = uploadTasks.value.firstOrNull { it.id == taskId && it.failed } ?: return
+        updateUploadTask(taskId) { it.copy(failed = false, progress = 0f) }
+        startUpload(task)
+    }
+
+    fun discardUpload(taskId: String) {
+        uploadTasks.value = uploadTasks.value.filterNot { it.id == taskId }
+    }
+
+    private fun startUpload(task: UploadTask) = viewModelScope.launch {
+        runCatching {
+            repo.uploadAttachments(
+                task.conversationId, task.attachments, task.body, task.replyToId,
+            ) { sent, total ->
+                if (total > 0) {
+                    updateUploadTask(task.id) {
+                        it.copy(progress = (sent.toFloat() / total).coerceIn(0f, 1f))
+                    }
+                }
+            }
+        }.onSuccess { msg ->
+            // In-place replacement: the pill leaves and the server message lands in the
+            // same frame, so the list doesn't jump.
+            uploadTasks.value = uploadTasks.value.filterNot { it.id == task.id }
+            if (msg.conversationId == openConversationId) upsertMessage(msg)
+        }.onFailure {
+            // Keep the pill with retry/discard affordances.
+            updateUploadTask(task.id) { it.copy(failed = true) }
         }
+    }
+
+    private fun updateUploadTask(id: String, transform: (UploadTask) -> UploadTask) {
+        uploadTasks.value = uploadTasks.value.map { if (it.id == id) transform(it) else it }
+    }
 
     fun startCall(conversationId: String, kind: String, peerName: String) = viewModelScope.launch {
         if (activeCall.value != null) return@launch
@@ -724,11 +824,24 @@ class KlicViewModel(
         return result
     }
 
+    // §9.9: first pages of the chat-info attachment tabs + starred lists, cached for
+    // instant render on re-entry (refreshed in background by the pages themselves).
+    private val attachmentPageCache = mutableMapOf<String, AttachmentPage>()
+    private val starredPageCache = mutableMapOf<String, StarredPage>()
+
+    fun cachedStarred(conversationId: String?): StarredPage? =
+        starredPageCache[conversationId ?: "all"]
+
+    fun cachedAttachments(conversationId: String, kind: String?): AttachmentPage? =
+        attachmentPageCache["$conversationId:${kind ?: "all"}"]
+
     suspend fun fetchStarred(conversationId: String?, cursor: String? = null): StarredPage? =
         runCatching { repo.starredMessages(conversationId, cursor) }.getOrNull()
+            ?.also { if (cursor == null) starredPageCache[conversationId ?: "all"] = it }
 
     suspend fun fetchAttachments(conversationId: String, kind: String?, cursor: String? = null): AttachmentPage? =
         runCatching { repo.conversationAttachments(conversationId, kind, cursor) }.getOrNull()
+            ?.also { if (cursor == null) attachmentPageCache["$conversationId:${kind ?: "all"}"] = it }
 
     /** Raw history fetch for the links scan / group search fetch-back (§8.4). */
     suspend fun fetchMessagesBefore(conversationId: String, before: String?): List<Message>? =
@@ -750,8 +863,23 @@ class KlicViewModel(
         runCatching { repo.updateProfile(showLastSeen = value) }.onSuccess { currentUser.value = it }
     }
 
+    // §9.9: profiles render instantly from this session cache, refreshed in background.
+    private val profileCache = mutableMapOf<String, UserProfile>()
+
+    fun cachedProfile(userId: String): UserProfile? = profileCache[userId]
+
     suspend fun fetchProfile(userId: String): UserProfile? =
         runCatching { repo.userProfile(userId) }.getOrNull()
+            ?.also { profileCache[userId] = it }
+
+    /** Display name for any known user — me, or a member of any cached conversation. */
+    fun displayNameFor(userId: String): String? {
+        if (userId == currentUser.value?.id) return currentUser.value?.displayName
+        return conversations.value.asSequence()
+            .flatMap { it.members.asSequence() }
+            .firstOrNull { it.id == userId }
+            ?.displayName
+    }
 
     // Advance ticks on the user's own messages when a read/delivered receipt arrives.
     private fun applyReceipt(receipt: SocketService.Receipt, read: Boolean) {
@@ -868,3 +996,18 @@ class KlicViewModel(
         runCatching { block() }.onFailure { error.value = "Could not sign in. Check your details." }
     }
 }
+
+/**
+ * One optimistic upload (§9.1): shows as a pill bubble in its conversation with a real
+ * byte-level progress bar; on failure it stays with retry/discard. The staged attachments
+ * (with localBytes) are kept so a retry re-uploads without re-reading the source Uri.
+ */
+data class UploadTask(
+    val id: String,
+    val conversationId: String,
+    val body: String?,
+    val attachments: List<AttachmentInput>,
+    val replyToId: String?,
+    val progress: Float = 0f,
+    val failed: Boolean = false,
+)

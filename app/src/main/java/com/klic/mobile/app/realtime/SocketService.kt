@@ -33,6 +33,8 @@ class SocketService {
     val typing = MutableStateFlow<Map<String, Long>>(emptyMap())
     val reactionUpdates = MutableSharedFlow<ReactionUpdate>(extraBufferCapacity = 32)
     val deletedMessages = MutableSharedFlow<DeletedUpdate>(extraBufferCapacity = 16)
+    /** conversationId — this user was removed from the group; drop it locally (§9.3). */
+    val removedConversations = MutableSharedFlow<String>(extraBufferCapacity = 8)
 
     private val mainHandler = Handler(Looper.getMainLooper())
     private val typingTokens = mutableMapOf<String, Any>()
@@ -146,6 +148,13 @@ class SocketService {
                 val conversationId = json.optString("conversationId").takeIf { it.isNotBlank() } ?: return@let
                 val messageId = json.optString("messageId").takeIf { it.isNotBlank() } ?: return@let
                 deletedMessages.tryEmit(DeletedUpdate(conversationId, messageId))
+            }
+        }
+        socket.on("conversation:removed") { args ->
+            (args.firstOrNull() as? JSONObject)?.let { json ->
+                json.optString("conversationId").takeIf { it.isNotBlank() }?.let {
+                    removedConversations.tryEmit(it)
+                }
             }
         }
         socket.on("call:invite") { args ->

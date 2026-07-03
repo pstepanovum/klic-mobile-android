@@ -209,6 +209,13 @@ interface KlicApi {
         @Path("id") id: String,
         @Body body: AvatarUploadRequest,
     ): UploadTicket
+
+    // Admin-only member removal (§9.3, WP-S3) — 204 on success.
+    @DELETE("conversations/{id}/members/{userId}")
+    suspend fun removeConversationMember(
+        @Path("id") id: String,
+        @Path("userId") userId: String,
+    ): Response<ResponseBody>
 }
 
 /** Bare, synchronous refresh used by the Authenticator (no auth header, no authenticator → no recursion). */

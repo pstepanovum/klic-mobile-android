@@ -47,6 +47,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
@@ -61,7 +62,11 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
@@ -76,12 +81,17 @@ import com.klic.mobile.app.feature.chat.actions.TypingBubble
 import com.klic.mobile.app.feature.chat.composer.AttachSheet
 import com.klic.mobile.app.feature.chat.composer.CaptureMode
 import com.klic.mobile.app.feature.chat.composer.ComposerBar
+import com.klic.mobile.app.feature.chat.composer.MentionCandidate
+import com.klic.mobile.app.feature.chat.composer.MentionSuggestionStrip
 import com.klic.mobile.app.feature.chat.composer.RecordingBar
+import com.klic.mobile.app.feature.chat.composer.insertMention
+import com.klic.mobile.app.feature.chat.composer.mentionQueryAt
 import com.klic.mobile.app.feature.chat.media.AttachmentDownloads
 import com.klic.mobile.app.feature.chat.media.FileDetailSheet
 import com.klic.mobile.app.feature.chat.media.PdfViewerOverlay
 import com.klic.mobile.app.feature.chat.media.PendingMediaBar
 import com.klic.mobile.app.feature.chat.media.PendingMediaDraft
+import com.klic.mobile.app.feature.chat.media.UploadProgressPill
 import com.klic.mobile.app.feature.chat.media.isPdfAttachment
 import com.klic.mobile.app.feature.chat.media.loadFileAttachment
 import com.klic.mobile.app.feature.chat.media.loadImageDraft
@@ -111,7 +121,7 @@ fun ChatScreen(
     val messages by vm.messages.collectAsState()
     val me by vm.currentUser.collectAsState()
     val presenceMap by vm.presence.collectAsState()
-    var draft by remember { mutableStateOf("") }
+    var draft by remember(conversation.id) { mutableStateOf(TextFieldValue("")) }
     val peer = conversation.members.firstOrNull()
     val isDirect = conversation.type == "DIRECT"
     val title = when {
@@ -124,6 +134,11 @@ fun ChatScreen(
         conversation.members.isNotEmpty() -> "${conversation.members.size + 1} members"
         else -> null
     }
+    // §9.5: member names highlighted as mentions in bubbles (groups only).
+    val mentionableNames = remember(conversation.id, conversation.members, me?.displayName) {
+        if (isDirect) emptyList()
+        else conversation.members.map { it.displayName } + listOfNotNull(me?.displayName)
+    }
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
@@ -135,7 +150,6 @@ fun ChatScreen(
     var tempVideoUri by remember { mutableStateOf<Uri?>(null) }
     var pendingMedia by remember(conversation.id) { mutableStateOf<List<PendingMediaDraft>>(emptyList()) }
     var captureMode by remember(conversation.id) { mutableStateOf(CaptureMode.AUDIO) }
-    var uploading by remember { mutableStateOf(false) }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val stickerSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val stickers by vm.stickers.collectAsState()
@@ -206,14 +220,13 @@ fun ChatScreen(
     val fileLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri?.let { docUri ->
             scope.launch {
-                uploading = true
                 val attachment = loadFileAttachment(context, docUri)
                 if (attachment != null) {
-                    vm.sendAttachments(conversation.id, null, listOf(attachment)).join()
+                    // Optimistic upload pill (§9.1) — the list stays fully interactive.
+                    vm.sendAttachments(conversation.id, null, listOf(attachment))
                 } else {
                     vm.error.value = "Couldn't read selected file."
                 }
-                uploading = false
             }
         }
     }
@@ -223,14 +236,29 @@ fun ChatScreen(
         vm.markRead(conversation.id)
     }
 
+    // §9.7: re-verify the "Ongoing call" banner whenever the app returns to the
+    // foreground with this chat open — GET active-call drops it on 404/none.
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(conversation.id, lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) vm.refreshActiveCall(conversation.id)
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    // Optimistic upload pills for this conversation (§9.1).
+    val allUploadTasks by vm.uploadTasks.collectAsState()
+    val uploadsHere = allUploadTasks.filter { it.conversationId == conversation.id }
+
     // Initial open: instant scroll to bottom (no animation).
     // Subsequent new messages: animated scroll.
     // Older messages prepended: no scroll-to-bottom (lastMessageId doesn't change).
     val lastMessageId = messages.lastOrNull()?.id
     var initialScrollDone by remember(conversation.id) { mutableStateOf(false) }
 
-    LaunchedEffect(lastMessageId, peerTyping) {
-        val target = messages.size - 1 + if (peerTyping) 1 else 0
+    LaunchedEffect(lastMessageId, peerTyping, uploadsHere.size) {
+        val target = messages.size - 1 + (if (peerTyping) 1 else 0) + uploadsHere.size
         if (target >= 0) {
             if (!initialScrollDone) {
                 listState.scrollToItem(target)
@@ -372,6 +400,7 @@ fun ChatScreen(
                         isLast  = isLast,
                         replyAuthorName = msg.replyTo?.let { if (it.senderId == me?.id) "You" else title } ?: "",
                         highlightMentions = !isDirect,
+                        mentionNames = mentionableNames,
                         onCallBack = { kind -> vm.startCall(conversation.id, kind, title); onCall(kind) },
                         onLongPress = { menuTarget = msg },
                         onReactionTap = { emoji -> vm.react(conversation.id, msg.id, emoji) },
@@ -393,6 +422,19 @@ fun ChatScreen(
                         Row(Modifier.fillMaxWidth().padding(vertical = 2.dp), horizontalArrangement = Arrangement.Start) {
                             TypingBubble()
                         }
+                    }
+                }
+                // Optimistic upload pills (§9.1) — each tracks its own progress.
+                items(uploadsHere, key = { it.id }) { task ->
+                    Row(
+                        Modifier.fillMaxWidth().padding(vertical = 2.dp),
+                        horizontalArrangement = Arrangement.End,
+                    ) {
+                        UploadProgressPill(
+                            task = task,
+                            onRetry = { vm.retryUpload(task.id) },
+                            onDiscard = { vm.discardUpload(task.id) },
+                        )
                     }
                 }
             }
@@ -470,28 +512,45 @@ fun ChatScreen(
                         onCancel = { vm.setReplyTo(null) },
                     )
                 }
+                // §9.5: typing "@" in a group composer offers members + @all above the input.
+                val mentionQuery = if (isDirect) null else mentionQueryAt(draft.text, draft.selection.start)
+                if (mentionQuery != null) {
+                    val candidates = buildList {
+                        if ("all".startsWith(mentionQuery.prefix, ignoreCase = true)) {
+                            add(MentionCandidate("all", isAll = true))
+                        }
+                        conversation.members
+                            .filter {
+                                mentionQuery.prefix.isEmpty() ||
+                                    it.displayName.startsWith(mentionQuery.prefix, ignoreCase = true) ||
+                                    it.username.startsWith(mentionQuery.prefix, ignoreCase = true)
+                            }
+                            .forEach { add(MentionCandidate(it.displayName, it.username, it.avatarUrl)) }
+                    }
+                    if (candidates.isNotEmpty()) {
+                        MentionSuggestionStrip(candidates) { pick ->
+                            draft = insertMention(draft, mentionQuery, pick.display)
+                        }
+                    }
+                }
                 ComposerBar(
                     draft    = draft,
-                    onChange = { draft = it; vm.setTyping(conversation.id, it.isNotBlank()) },
+                    onChange = { draft = it; vm.setTyping(conversation.id, it.text.isNotBlank()) },
                     onSend   = {
                         if (pendingMedia.isNotEmpty()) {
                             val toSend = pendingMedia
-                            val caption = draft.trim().takeIf { it.isNotBlank() }
+                            val caption = draft.text.trim().takeIf { it.isNotBlank() }
                             pendingMedia = emptyList()
-                            draft = ""
-                            scope.launch {
-                                uploading = true
-                                vm.sendAttachments(conversation.id, caption, toSend.map { it.attachment }).join()
-                                uploading = false
-                            }
-                        } else if (draft.isNotBlank()) {
-                            vm.send(conversation.id, draft.trim()); draft = ""
+                            draft = TextFieldValue("")
+                            // Optimistic pill takes over (§9.1); the composer frees up instantly.
+                            vm.sendAttachments(conversation.id, caption, toSend.map { it.attachment })
+                        } else if (draft.text.isNotBlank()) {
+                            vm.send(conversation.id, draft.text.trim()); draft = TextFieldValue("")
                         }
                     },
                     onAttach = { showAttachSheet = true },
                     onStickers = { focusManager.clearFocus(); vm.loadStickers(); showStickerSheet = true },
                     hasPendingAttachments = pendingMedia.isNotEmpty(),
-                    uploading = uploading,
                     captureMode = captureMode,
                     onToggleCaptureMode = {
                         captureMode = if (captureMode == CaptureMode.AUDIO) CaptureMode.VIDEO else CaptureMode.AUDIO
