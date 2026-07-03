@@ -1,7 +1,6 @@
 package com.klic.mobile.app.ui.components
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -25,17 +24,21 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.klic.mobile.app.ui.theme.KlicIcons
 import androidx.compose.ui.res.stringResource
 import com.klic.mobile.app.R
@@ -47,20 +50,39 @@ fun PillButton(
     modifier: Modifier = Modifier,
     fill: Color = Color.Unspecified,
     enabled: Boolean = true,
+    isLoading: Boolean = false,
+    fontFamily: androidx.compose.ui.text.font.FontFamily? = null,
+    fontWeight: androidx.compose.ui.text.font.FontWeight? = null,
+    fontSize: androidx.compose.ui.unit.TextUnit = androidx.compose.ui.unit.TextUnit.Unspecified,
     onClick: () -> Unit,
 ) {
     val resolvedFill = if (fill == Color.Unspecified) MaterialTheme.colorScheme.primary else fill
     Button(
         onClick = onClick,
-        enabled = enabled,
+        enabled = enabled && !isLoading,
         modifier = modifier.fillMaxWidth(),
         shape = CircleShape,
         colors = ButtonDefaults.buttonColors(
             containerColor = resolvedFill,
             contentColor = MaterialTheme.colorScheme.onPrimary,
+            disabledContainerColor = resolvedFill,
+            disabledContentColor = MaterialTheme.colorScheme.onPrimary,
         ),
     ) {
-        Text(text, modifier = Modifier.padding(vertical = 6.dp))
+        Box(contentAlignment = androidx.compose.ui.Alignment.Center) {
+            Text(
+                text,
+                modifier = Modifier
+                    .padding(vertical = 6.dp)
+                    .alpha(if (isLoading) 0f else 1f),
+                fontFamily = fontFamily,
+                fontWeight = fontWeight,
+                fontSize = fontSize,
+            )
+            if (isLoading) {
+                LoadingCircle(size = 18.dp, color = MaterialTheme.colorScheme.onPrimary)
+            }
+        }
     }
 }
 
@@ -135,7 +157,8 @@ fun KlicTextField(
     )
 }
 
-/** Checkbox with "I agree to the Privacy Policy" label. */
+/** Checkbox with "I agree to the Privacy Policy" label. Solid fill, no stroke: unchecked it
+ *  sits as a muted filled square matching the auth capsule inputs; checked it goes brand red. */
 @Composable
 fun KlicCheckbox(
     checked: Boolean,
@@ -150,14 +173,15 @@ fun KlicCheckbox(
     ) {
         val primary = MaterialTheme.colorScheme.primary
         val onPrimary = MaterialTheme.colorScheme.onPrimary
-        val outline = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
+        val isDark = MaterialTheme.colorScheme.background.luminance() < 0.5f
+        val uncheckedFill = if (isDark) Color(0xFF202020) else Color(0xFFF2F2F2)
+        val mutedText = Color(0xFFB2B2B2)
 
         Box(
             modifier = Modifier
                 .size(22.dp)
                 .clip(RoundedCornerShape(6.dp))
-                .background(if (checked) primary else Color.Transparent)
-                .border(1.5.dp, if (checked) primary else outline, RoundedCornerShape(6.dp))
+                .background(if (checked) primary else uncheckedFill)
                 .clickable(
                     indication = null,
                     interactionSource = remember { MutableInteractionSource() },
@@ -186,13 +210,14 @@ fun KlicCheckbox(
         Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
             Text(
                 stringResource(R.string.checkbox_agree_prefix),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.labelSmall.copy(fontSize = 13.sp),
+                color = mutedText,
             )
             Text(
                 stringResource(R.string.checkbox_privacy_policy),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.primary,
+                style = MaterialTheme.typography.labelSmall.copy(fontSize = 13.sp),
+                color = mutedText,
+                textDecoration = TextDecoration.Underline,
                 modifier = Modifier.clickable(
                     indication = null,
                     interactionSource = remember { MutableInteractionSource() },
