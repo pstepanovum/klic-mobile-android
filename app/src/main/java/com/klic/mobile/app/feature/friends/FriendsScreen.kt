@@ -2,6 +2,7 @@ package com.klic.mobile.app.feature.friends
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -121,12 +122,27 @@ fun FriendsScreen(
 
                 item { SectionTitle(stringResource(R.string.friends_your_friends)) }
                 if (friends.isEmpty()) {
+                    // Empty state: the 01 doodle centered in the remaining screen.
                     item {
-                        Text(
-                            stringResource(R.string.friends_empty),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
+                        Column(
+                            modifier = Modifier
+                                .fillParentMaxHeight(0.75f)
+                                .fillMaxWidth(),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center,
+                        ) {
+                            KlicLottieView(
+                                name = "01",
+                                modifier = Modifier.fillMaxWidth().height(180.dp),
+                            )
+                            Text(
+                                stringResource(R.string.friends_empty),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.padding(top = 10.dp),
+                            )
+                        }
                     }
                 }
                 items(friends) { friend ->
@@ -135,23 +151,16 @@ fun FriendsScreen(
                         vm.openConversationWith(friend.id) { convo -> onOpenProfile(convo.id) }
                     }
                 }
-                item {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 8.dp, bottom = 16.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                    ) {
-                        KlicLottieView(
-                            name = "01",
-                            modifier = Modifier.fillMaxWidth().height(180.dp),
-                        )
+                if (friends.isNotEmpty()) {
+                    item {
                         Text(
                             stringResource(R.string.friends_footer),
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             textAlign = TextAlign.Center,
-                            modifier = Modifier.padding(top = 6.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 8.dp, bottom = 16.dp),
                         )
                     }
                 }
