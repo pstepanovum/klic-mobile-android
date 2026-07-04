@@ -2,7 +2,9 @@ package com.klic.mobile.app.feature.call
 
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -13,16 +15,12 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -45,6 +43,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -64,12 +63,14 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.klic.mobile.app.calling.LiveKitVideo
-import com.klic.mobile.app.calling.RemoteCallParticipant
 import com.klic.mobile.app.data.CallSession
 import com.klic.mobile.app.data.Network
 import com.klic.mobile.app.feature.KlicViewModel
 import com.klic.mobile.app.ui.components.AvatarView
 import com.klic.mobile.app.ui.components.CircleControl
+import io.livekit.android.room.Room
+import io.livekit.android.room.track.VideoTrack
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import androidx.compose.ui.res.stringResource
 import com.klic.mobile.app.R
@@ -91,6 +92,9 @@ fun CallScreen(
     val remoteVideo by manager.remoteVideoTrack.collectAsState()
     val localVideo by manager.localVideoTrack.collectAsState()
     val participants by manager.participants.collectAsState()
+    val localSpeaking by manager.localSpeaking.collectAsState()
+    val frontCamera by manager.frontCamera.collectAsState()
+    val me by vm.currentUser.collectAsState()
     val peerId by vm.callPeerId.collectAsState()
     val isGroupCall by vm.callIsGroup.collectAsState()
     val isVideo = call.kind == "VIDEO"
@@ -127,11 +131,11 @@ fun CallScreen(
     val density = LocalDensity.current
 
     // Pick which feed is full-screen and which rides in the draggable card (WhatsApp-style swap).
-    // In grid mode the remotes live in tiles, so the card always carries the local preview.
+    // §17.1: in grid mode there is NO floating card — my feed becomes a regular grid tile.
     val localTrack = if (cameraEnabled) localVideo else null
     val primaryIsLocal = !gridMode && localFullscreen && localTrack != null
     val primaryTrack = if (primaryIsLocal) localTrack else remoteVideo
-    val secondaryTrack = if (gridMode) localTrack else if (primaryIsLocal) remoteVideo else localTrack
+    val secondaryTrack = if (gridMode) null else if (primaryIsLocal) remoteVideo else localTrack
     val hasPrimaryVideo = !gridMode && shouldShowVideo && primaryTrack != null
     // §7.6: the "video-call look" keys on the REMOTE feed being fullscreen — never on the
     // local camera. No remote fullscreen → themed header with name + status pill.
@@ -223,19 +227,43 @@ fun CallScreen(
                 }
 
                 if (gridMode) {
-                    // 2-column grid of remote tiles (video, or avatar + name); the local
-                    // preview keeps riding in the floating card below.
-                    LazyVerticalGrid(
-                        columns = GridCells.Fixed(2),
+                    // §17.1: Zoom-style non-scrolling grid — remotes keep their order, MY
+                    // tile goes LAST as a regular grid citizen (mirrored selfie feed when
+                    // the camera is on, the same avatar/mute chrome as everyone when off).
+                    NonScrollingCallGrid(
+                        tileCount = participants.size + 1,
                         modifier = Modifier
                             .weight(1f)
                             .fillMaxWidth()
                             .padding(horizontal = 12.dp, vertical = 16.dp),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp),
-                    ) {
-                        items(participants, key = { it.userId }) { participant ->
-                            ParticipantTile(vm, participant)
+                    ) { index ->
+                        if (index < participants.size) {
+                            val participant = participants[index]
+                            key(participant.userId) {
+                                CallGridTile(
+                                    room = manager.room,
+                                    videoTrack = participant.videoTrack,
+                                    displayName = participant.name.ifBlank {
+                                        vm.displayNameFor(participant.userId)
+                                            ?: stringResource(R.string.call_member)
+                                    },
+                                    avatarUrl = Network.avatarUrl(participant.userId),
+                                    micMuted = participant.micMuted,
+                                    isSpeaking = participant.isSpeaking,
+                                    reconnecting = participant.reconnecting,
+                                )
+                            }
+                        } else {
+                            CallGridTile(
+                                room = manager.room,
+                                videoTrack = localTrack,
+                                displayName = stringResource(R.string.common_you),
+                                avatarUrl = me?.id?.let { Network.avatarUrl(it) },
+                                micMuted = !micEnabled,
+                                isSpeaking = localSpeaking,
+                                avatarName = me?.displayName ?: stringResource(R.string.common_you),
+                                mirrorVideo = frontCamera,
+                            )
                         }
                     }
                 } else {
@@ -281,9 +309,11 @@ fun CallScreen(
 
         }
 
-        // Draggable, tap-to-swap picture-in-picture card for the secondary feed. §7.7: the drag
-        // tracks the finger 1:1 (accumulated into Animatables, rendered via graphicsLayer) and
-        // the release springs to the nearest horizontal edge carrying the fling velocity.
+        // Draggable, tap-to-swap picture-in-picture card for the secondary feed — 1:1 layout
+        // only (in grid mode secondaryTrack is null; my feed lives in the grid, §17.1). §7.7:
+        // the drag tracks the finger 1:1 (accumulated into Animatables, rendered via
+        // graphicsLayer) and the release springs to the nearest horizontal edge carrying the
+        // fling velocity.
         if (!pip.isInPipMode && shouldShowVideo && secondaryTrack != null) {
             val leftLimitPx = with(density) { (maxWidth - 150.dp).toPx() }.coerceAtLeast(0f)
             val downLimitPx = with(density) { (maxHeight - 320.dp).toPx() }.coerceAtLeast(0f)
@@ -339,58 +369,119 @@ fun CallScreen(
                             },
                         )
                     }
-                    .clickable { if (!gridMode) localFullscreen = !localFullscreen },
+                    .clickable { localFullscreen = !localFullscreen },
             ) {
                 LiveKitVideo(manager.room, secondaryTrack, Modifier.fillMaxSize())
-                if (!gridMode) {
-                    Icon(
-                        imageVector = Icons.Filled.OpenInFull,
-                        contentDescription = "Expand",
-                        tint = Color.White,
-                        modifier = Modifier.align(Alignment.TopStart).padding(6.dp).size(16.dp),
-                    )
+                Icon(
+                    imageVector = Icons.Filled.OpenInFull,
+                    contentDescription = "Expand",
+                    tint = Color.White,
+                    modifier = Modifier.align(Alignment.TopStart).padding(6.dp).size(16.dp),
+                )
+            }
+        }
+    }
+}
+
+/** §17.1: Zoom-style group-call grid that NEVER scrolls — rows/columns derive from
+ *  [tileCount] (2 → 1×2 stacked, 3-4 → 2×2, 5-6 → 2×3, 7-9 → 3×3, …) and the tiles shrink
+ *  so every one always fits the available area. A short last row keeps the regular tile
+ *  size and centers, matching the column-centered idiom of the rest of the call screen. */
+@Composable
+internal fun NonScrollingCallGrid(
+    tileCount: Int,
+    modifier: Modifier = Modifier,
+    tile: @Composable (index: Int) -> Unit,
+) {
+    if (tileCount <= 0) return
+    BoxWithConstraints(modifier) {
+        val spacing = 10.dp
+        val columns = when {
+            tileCount <= 2 -> 1
+            tileCount <= 6 -> 2
+            tileCount <= 12 -> 3
+            else -> 4
+        }
+        val rows = (tileCount + columns - 1) / columns
+        val tileWidth = (maxWidth - spacing * (columns - 1)) / columns
+        val tileHeight = (maxHeight - spacing * (rows - 1)) / rows
+        Column(
+            Modifier.fillMaxSize(),
+            verticalArrangement = Arrangement.spacedBy(spacing),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            for (row in 0 until rows) {
+                Row(horizontalArrangement = Arrangement.spacedBy(spacing)) {
+                    for (column in 0 until columns) {
+                        val index = row * columns + column
+                        if (index < tileCount) {
+                            Box(Modifier.width(tileWidth).height(tileHeight)) { tile(index) }
+                        }
+                    }
                 }
             }
         }
     }
 }
 
-/** One remote in the group grid: their video (or avatar), name, mute badge — dimmed while
- *  they sit in their reconnect grace window. */
+/** One tile in the group grid — a remote participant or my own feed (§17.1): video (or the
+ *  camera-off avatar), name pill with mute badge, dimmed + veiled while reconnecting, and an
+ *  animated accent glow while its participant is the active speaker (short linger so brief
+ *  pauses don't flicker). §9.7: every tile gets a name, never a blank pill — the caller
+ *  resolves LiveKit metadata → cached member list → generic fallback. */
 @Composable
-private fun ParticipantTile(vm: KlicViewModel, participant: RemoteCallParticipant) {
-    val manager = vm.callManager
-    // §9.7: every tile gets a name — LiveKit metadata first, then the cached
-    // conversation member list, never a blank pill.
-    val displayName = participant.name.ifBlank {
-        vm.displayNameFor(participant.userId) ?: stringResource(R.string.call_member)
+internal fun CallGridTile(
+    room: Room?,
+    videoTrack: VideoTrack?,
+    displayName: String,
+    avatarUrl: String?,
+    micMuted: Boolean,
+    isSpeaking: Boolean,
+    modifier: Modifier = Modifier,
+    avatarName: String = displayName,
+    mirrorVideo: Boolean = false,
+    reconnecting: Boolean = false,
+) {
+    var speakingLingers by remember { mutableStateOf(false) }
+    LaunchedEffect(isSpeaking, reconnecting) {
+        if (isSpeaking && !reconnecting) {
+            speakingLingers = true
+        } else {
+            delay(400)
+            speakingLingers = false
+        }
     }
+    val glow by animateFloatAsState(
+        targetValue = if (speakingLingers) 1f else 0f,
+        animationSpec = tween(durationMillis = 220),
+        label = "speakingGlow",
+    )
     Box(
-        Modifier
-            .aspectRatio(3f / 4f)
+        modifier
+            .fillMaxSize()
             .clip(RoundedCornerShape(18.dp))
             .background(MaterialTheme.colorScheme.surfaceVariant)
             .then(
-                if (participant.isSpeaking && !participant.reconnecting) {
-                    Modifier.border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(18.dp))
+                if (glow > 0.01f) {
+                    Modifier.border(
+                        2.dp,
+                        MaterialTheme.colorScheme.primary.copy(alpha = glow),
+                        RoundedCornerShape(18.dp),
+                    )
                 } else Modifier
             ),
     ) {
-        if (participant.videoTrack != null) {
-            LiveKitVideo(manager.room, participant.videoTrack, Modifier.fillMaxSize())
+        if (videoTrack != null) {
+            LiveKitVideo(room, videoTrack, Modifier.fillMaxSize(), mirror = mirrorVideo)
         } else {
             Box(
-                Modifier.fillMaxSize().alpha(if (participant.reconnecting) 0.4f else 1f),
+                Modifier.fillMaxSize().alpha(if (reconnecting) 0.4f else 1f),
                 contentAlignment = Alignment.Center,
             ) {
-                AvatarView(
-                    url = Network.avatarUrl(participant.userId),
-                    name = displayName,
-                    size = 64.dp,
-                )
+                AvatarView(url = avatarUrl, name = avatarName, size = 64.dp)
             }
         }
-        if (participant.reconnecting) {
+        if (reconnecting) {
             Box(
                 Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.45f)),
                 contentAlignment = Alignment.Center,
@@ -414,7 +505,7 @@ private fun ParticipantTile(vm: KlicViewModel, participant: RemoteCallParticipan
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            if (participant.micMuted) {
+            if (micMuted) {
                 Spacer(Modifier.width(4.dp))
                 Icon(
                     Icons.Filled.MicOff,

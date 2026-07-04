@@ -83,6 +83,11 @@ class CallManager(
     val onHold = MutableStateFlow(false)
     /** All remote participants (connected + in-grace), for the group grid. */
     val participants = MutableStateFlow<List<RemoteCallParticipant>>(emptyList())
+    /** True while the SFU flags ME as an active speaker — drives the local tile's glow (§17.1).
+     *  Refreshed from room events (active-speaker changes included), never polled. */
+    val localSpeaking = MutableStateFlow(false)
+    /** True while the front camera captures — the local preview mirrors only then (§17.1). */
+    val frontCamera = MutableStateFlow(true)
     /** A remote participant's 60s grace expired without them coming back (value = userId). */
     val peerGraceExpired = MutableSharedFlow<String>(extraBufferCapacity = 4)
     /** True while media is being re-established — LiveKit's own resume OR our rejoin loop. */
@@ -366,6 +371,7 @@ class CallManager(
         val track = room?.localParticipant?.videoTrackPublications
             ?.firstOrNull()?.second as? LocalVideoTrack
         track?.switchCamera()
+        frontCamera.value = !frontCamera.value
         diagnostic("livekit.camera.switch.ok")
     }
 
@@ -395,6 +401,8 @@ class CallManager(
         remoteVideoDimensions.value = null
         onHold.value = false
         participants.value = emptyList()
+        localSpeaking.value = false
+        frontCamera.value = true
         if (hadRoom) diagnostic("livekit.leave.ok", callId)
         currentCallId = null
     }
@@ -437,6 +445,7 @@ class CallManager(
         }
         val liveIds = live.map { it.userId }.toSet()
         participants.value = live + graceSnapshots.values.filter { it.userId !in liveIds }
+        localSpeaking.value = r.localParticipant.isSpeaking
     }
 
     private fun createAudioHandler(callId: String, video: Boolean): AudioSwitchHandler =
