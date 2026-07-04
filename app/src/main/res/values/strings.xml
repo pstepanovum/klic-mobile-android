@@ -418,9 +418,12 @@
 
     <!-- Uploads -->
     <string name="upload_failed">Upload failed</string>
+    <string name="upload_failed_too_large">File is too large for the server</string>
+    <string name="upload_failed_network">Network error — check your connection and retry</string>
     <string name="upload_progress">Uploading… %1$d%%</string>
     <string name="upload_discard">Discard</string>
     <string name="upload_attachment">Attachment</string>
+    <string name="upload_items_count">%1$d items</string>
 
     <!-- Message actions -->
     <string name="actions_copy">Copy</string>

@@ -100,7 +100,8 @@ fun UploadProgressPill(
                     overflow = TextOverflow.Ellipsis,
                 )
                 Text(
-                    if (task.failed) stringResource(R.string.upload_failed)
+                    // §13.15: failed pills say WHY (size cap vs network) when known.
+                    if (task.failed) task.errorMessage ?: stringResource(R.string.upload_failed)
                     else stringResource(R.string.upload_progress, (task.progress * 100).toInt()),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.75f),
@@ -172,7 +173,7 @@ private fun rememberUploadPreview(task: UploadTask): Bitmap? = remember(task.id)
 @Composable
 private fun uploadLabel(task: UploadTask): String {
     val atts = task.attachments
-    if (atts.size > 1) return "${atts.size} items"
+    if (atts.size > 1) return stringResource(R.string.upload_items_count, atts.size)
     val first = atts.firstOrNull() ?: return stringResource(R.string.upload_attachment)
     return when (first.kind) {
         "IMAGE" -> stringResource(R.string.preview_photo)

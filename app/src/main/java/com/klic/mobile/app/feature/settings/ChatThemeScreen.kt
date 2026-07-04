@@ -97,6 +97,8 @@ fun ChatThemeContent() {
                         onClick = { scope.launch { ChatThemeStore.setPattern(id) } },
                     )
                 }
+                // §13.1: pad short rows so every tile keeps the same size (no jag).
+                repeat(5 - row.size) { Spacer(Modifier.weight(1f)) }
             }
         }
     }
@@ -231,6 +233,11 @@ private fun PreviewBubble(text: String, isMine: Boolean, theme: ChatThemeStore.S
     }
 }
 
+/**
+ * §13.1: one pattern tile — uniform size/spacing/radius across the grid, a hairline
+ * neutral border so unselected tiles read as tiles in both themes, and a clear
+ * selection treatment: a slightly-inset accent ring plus a checkmark badge.
+ */
 @Composable
 private fun PatternThumb(id: Int, selected: Boolean, modifier: Modifier, onClick: () -> Unit) {
     Box(
@@ -238,19 +245,27 @@ private fun PatternThumb(id: Int, selected: Boolean, modifier: Modifier, onClick
             .aspectRatio(0.85f)
             .clip(RoundedCornerShape(14.dp))
             .background(MaterialTheme.colorScheme.surface)
-            .then(
-                if (selected) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(14.dp))
-                else Modifier,
+            .border(
+                1.dp,
+                MaterialTheme.colorScheme.onBackground.copy(alpha = 0.12f),
+                RoundedCornerShape(14.dp),
             )
             .clickable(onClick = onClick),
     ) {
         // Thumbnails render the pattern well above chat opacity so it's legible.
         ChatPatternImage(patternId = id, alpha = 0.55f, modifier = Modifier.fillMaxSize())
         if (selected) {
+            // Accent ring, inset from the tile edge so it reads as a highlight.
+            Box(
+                Modifier
+                    .matchParentSize()
+                    .padding(3.dp)
+                    .border(2.5.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(11.dp)),
+            )
             Box(
                 Modifier
                     .align(Alignment.BottomEnd)
-                    .padding(5.dp)
+                    .padding(8.dp)
                     .size(18.dp)
                     .background(MaterialTheme.colorScheme.primary, CircleShape),
                 contentAlignment = Alignment.Center,

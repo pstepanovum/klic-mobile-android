@@ -45,9 +45,9 @@ import com.klic.mobile.app.ui.components.AvatarView
 import java.io.File
 
 /**
- * Settings → QR Code (§10.7): a card with the user's avatar/name and a locally
- * generated QR encoding https://klic.app/add/<username>, plus Scan (Google code
- * scanner) → add-friend flow, and Share (exports the QR bitmap).
+ * Settings → QR Code (§10.7/§13.8): a card with the user's avatar/name and a locally
+ * generated QR encoding https://klic.pstepanov.dev/u/<username>, plus Scan (Google
+ * code scanner) → add-friend flow, and Share (exports the QR bitmap).
  */
 @Composable
 fun QrCodeContent(vm: KlicViewModel) {
@@ -55,7 +55,8 @@ fun QrCodeContent(vm: KlicViewModel) {
     val me by vm.currentUser.collectAsState()
     val friendStatus by vm.friendStatus.collectAsState()
     val username = me?.username.orEmpty()
-    val link = "https://klic.app/add/$username"
+    // §13.8: the friend-link web surface — /u/<username> on klic.pstepanov.dev.
+    val link = "https://klic.pstepanov.dev/u/$username"
     val qr = remember(link) { generateQr(link, 720) }
 
     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
@@ -152,10 +153,18 @@ private fun startScan(context: Context, vm: KlicViewModel) {
         }
 }
 
-/** Accepts https://klic.app/add/<username>, @username or a bare username. */
+/**
+ * §13.8: accepts the live friend-link forms https://klic.pstepanov.dev/u/<username>
+ * and /add/<username>, the legacy https://klic.app/add/<username> payload, plus
+ * @username or a bare username (back-compat with old printed QRs).
+ */
 internal fun parseKlicUsername(raw: String): String? {
     val value = raw.trim()
     if (value.isEmpty()) return null
+    Regex(
+        """^https?://klic\.pstepanov\.dev/(?:u|add)/([A-Za-z0-9_.\-]+)/?(?:[?#].*)?$""",
+        RegexOption.IGNORE_CASE,
+    ).find(value)?.let { return it.groupValues[1].lowercase() }
     Regex("""^https?://klic\.app/add/([A-Za-z0-9_.\-]+)/?$""", RegexOption.IGNORE_CASE)
         .find(value)?.let { return it.groupValues[1].lowercase() }
     if (value.startsWith("@")) {

@@ -31,6 +31,9 @@ val TikTokSansExpanded = FontFamily(
 
 val KlicTypography = Typography(
     displayLarge = TextStyle(fontFamily = TikTokSans, fontWeight = FontWeight.Black, fontSize = 40.sp),
+    // §13.2: top-level page titles (Chats, Friends, Calls, Settings and sibling root
+    // pages) render in TikTok Sans 24pt Expanded Regular — size/spacing unchanged.
+    headlineMedium = TextStyle(fontFamily = TikTokSansExpanded, fontWeight = FontWeight.Normal, fontSize = 28.sp),
     titleLarge = TextStyle(fontFamily = TikTokSans, fontWeight = FontWeight.Bold, fontSize = 22.sp),
     titleMedium = TextStyle(fontFamily = TikTokSans, fontWeight = FontWeight.SemiBold, fontSize = 17.sp),
     bodyLarge = TextStyle(fontFamily = TikTokSans, fontWeight = FontWeight.Normal, fontSize = 16.sp),

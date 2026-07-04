@@ -86,6 +86,19 @@ object AppLockStore {
         locked.value = false
     }
 
+    /**
+     * §13.12: full reset on ANY transition to the signed-out state (logout, account
+     * deletion, rejected refresh token) — passcode hash, biometric toggle AND the
+     * auto-lock mode all go, so the next account starts from a clean slate.
+     */
+    fun wipe() {
+        if (!::prefs.isInitialized) return
+        prefs.edit().clear().apply()
+        _enabled.value = false
+        locked.value = false
+        backgroundedAt = null
+    }
+
     fun verify(passcode: String): Boolean {
         val saltHex = prefs.getString(KEY_SALT, null) ?: return false
         val stored = prefs.getString(KEY_HASH, null) ?: return false

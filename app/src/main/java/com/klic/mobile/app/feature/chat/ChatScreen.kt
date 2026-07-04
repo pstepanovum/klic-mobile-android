@@ -59,6 +59,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
@@ -333,9 +334,21 @@ fun ChatScreen(
     val chatTheme by com.klic.mobile.app.data.ChatThemeStore.snapshot.collectAsState()
     com.klic.mobile.app.ui.components.ChatBubbleTheme(chatTheme) {
     Box(Modifier.fillMaxSize()) {
+    // §13.4: the background stack is anchored to the SCREEN, not the keyboard-adjusted
+    // content area — measure it at the full window height (the incoming constraints
+    // shrink when the IME opens) and pin it to the top, so only messages/composer move.
+    val hostView = androidx.compose.ui.platform.LocalView.current
     com.klic.mobile.app.ui.components.ChatThemeLayers(
         theme = chatTheme,
-        modifier = Modifier.matchParentSize(),
+        modifier = Modifier
+            .matchParentSize()
+            .layout { measurable, constraints ->
+                val fullHeight = maxOf(constraints.maxHeight, hostView.rootView.height)
+                val placeable = measurable.measure(
+                    constraints.copy(minHeight = fullHeight, maxHeight = fullHeight),
+                )
+                layout(constraints.maxWidth, constraints.maxHeight) { placeable.place(0, 0) }
+            },
     )
     Scaffold(
         containerColor = androidx.compose.ui.graphics.Color.Transparent,
@@ -624,12 +637,18 @@ fun ChatScreen(
         // §10.11/§11.2: ONE Klic attachment sheet — camera tile + Gallery | Files tabs.
         KlicAttachmentSheet(
             onSendMedia = { uris ->
-                // §11.2 bulk send: stage in SELECTION ORDER, then one message per item
-                // through the upload-pill pipeline.
+                // §13.17: bulk image/video selections stage in SELECTION ORDER and go
+                // out as ONE message with multiple attachments (a bento grid bubble);
+                // oversized selections chunk into batches of 10.
                 scope.launch {
                     val staged = uris.mapNotNull { loadMediaDraft(context, it)?.attachment }
-                    if (staged.isEmpty()) vm.error.value = context.getString(R.string.err_read_media)
-                    else vm.sendAttachmentsSequentially(conversation.id, staged)
+                    if (staged.isEmpty()) {
+                        vm.error.value = context.getString(R.string.err_read_media)
+                    } else {
+                        staged.chunked(10).forEach { batch ->
+                            vm.sendAttachments(conversation.id, null, batch)
+                        }
+                    }
                 }
             },
             onOpenCamera = { showCamera = true },

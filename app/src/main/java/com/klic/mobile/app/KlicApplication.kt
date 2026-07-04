@@ -110,7 +110,7 @@ class AppContainer(app: Application) {
     val sessionExpired: SharedFlow<Unit> = _sessionExpired
 
     private val api = Network.create(tokenStore) { _sessionExpired.tryEmit(Unit) }
-    val repository = KlicRepository(api, tokenStore)
+    val repository = KlicRepository(api, tokenStore, appContext)
     /** Passkey add/sign-in flows (§10.4). */
     val passkeyManager = com.klic.mobile.app.data.PasskeyManager(repository)
     /** Email add/verify via Google (§12.2). */

@@ -100,7 +100,8 @@ fun SettingsScreen(vm: KlicViewModel, onEditProfile: () -> Unit = {}) {
 
     BackHandler(enabled = route != SettingsRoute.Main) {
         route = when (route) {
-            SettingsRoute.AutoNightMode -> SettingsRoute.Appearance
+            SettingsRoute.AutoNightMode,
+            SettingsRoute.ChatTheme -> SettingsRoute.Appearance
             SettingsRoute.PrivacyBlocked,
             SettingsRoute.PrivacyAppLock,
             SettingsRoute.PrivacyPasskeys -> SettingsRoute.Privacy
@@ -178,13 +179,7 @@ fun SettingsScreen(vm: KlicViewModel, onEditProfile: () -> Unit = {}) {
                                 onClick = { route = SettingsRoute.Appearance },
                             )
                             HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
-                            // §12.3: chat theme (pattern, gradient, bubble color).
-                            SettingsRow(
-                                icon = painterResource(R.drawable.ic_line_gallery),
-                                title = stringResource(R.string.settings_chat_themes),
-                                onClick = { route = SettingsRoute.ChatTheme },
-                            )
-                            HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
+                            // §13.6: the Chat theme entry lives ONLY under Appearance.
                             SettingsRow(
                                 icon = painterResource(R.drawable.ic_line_notification),
                                 title = stringResource(R.string.settings_notifications),
@@ -551,7 +546,7 @@ fun SettingsScreen(vm: KlicViewModel, onEditProfile: () -> Unit = {}) {
                     SettingsRoute.ChatTheme -> {
                         SubScreenHeader(
                             title = stringResource(R.string.settings_chat_themes),
-                            onBack = { route = SettingsRoute.Main },
+                            onBack = { route = SettingsRoute.Appearance },
                         )
                         ChatThemeContent()
                     }
