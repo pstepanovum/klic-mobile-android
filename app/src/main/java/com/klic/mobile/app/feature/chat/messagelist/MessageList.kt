@@ -148,7 +148,10 @@ internal fun MessageBubble(
     val soleVideoAtt = mediaAtts.singleOrNull()?.takeIf { it.kind == "VIDEO" }
     val fileAtt = message.attachments.firstOrNull { it.kind == "FILE" }
 
-    val time = shortTime(message.createdAt)
+    // §19.1: date formatting and emoji segmentation are pure functions of the message
+    // content — memoize them so they don't re-run on every scroll-path recomposition.
+    val time = remember(message.createdAt) { shortTime(message.createdAt) }
+    val emojiCount = remember(message.body) { emojiOnlyClusterCount(message.body) }
     val status = if (isMine) message.status else null
     // §16.4: lowercase "edited" immediately before the time in every meta placement.
     val edited = message.editedAt != null
@@ -363,10 +366,10 @@ internal fun MessageBubble(
                 }
 
             // §10.3: 1–3 emoji-only messages render WhatsApp-style — no bubble, big glyphs.
-            message.replyTo == null && emojiOnlyClusterCount(message.body) in 1..3 ->
+            message.replyTo == null && emojiCount in 1..3 ->
                 BigEmojiBubble(
                     body = message.body.trim(),
-                    emojiCount = emojiOnlyClusterCount(message.body),
+                    emojiCount = emojiCount,
                     time = time,
                     status = status,
                     starred = message.starred,
@@ -1057,6 +1060,24 @@ internal fun DateSeparator(isoDate: String) {
 }
 
 // MARK: - Helpers
+
+/**
+ * §19.1: a stable LazyColumn `contentType` for a message row so the list only recycles
+ * a row's layout nodes into structurally-similar rows (image bubble ↔ image bubble),
+ * instead of re-inflating a text bubble's slot into an image grid mid-scroll. Rows that
+ * share a content type reuse their sub-composition, which is what keeps scrolling smooth.
+ */
+internal fun messageContentType(m: Message): String = when {
+    m.isDeleted -> "deleted"
+    m.kind == "SYSTEM" -> "system"
+    m.isCallEvent -> "call"
+    m.isSticker -> "sticker"
+    m.attachments.any { it.kind == "VOICE" } -> "voice"
+    m.attachments.any { it.kind == "VIDEO_NOTE" } -> "videonote"
+    m.attachments.any { it.kind == "IMAGE" || it.kind == "VIDEO" } -> "media"
+    m.attachments.any { it.kind == "FILE" } -> "file"
+    else -> "text"
+}
 
 internal fun sameDay(a: String, b: String): Boolean = a.take(10) == b.take(10)
 
