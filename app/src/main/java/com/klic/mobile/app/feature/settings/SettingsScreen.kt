@@ -179,7 +179,7 @@ fun SettingsScreen(
                             EmailRow(vm)
                             HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
                             SettingsRow(
-                                icon = painterResource(R.drawable.ic_line_sun),
+                                icon = painterResource(KlicIcons.appearance),
                                 title = stringResource(R.string.settings_appearance),
                                 onClick = { route = SettingsRoute.Appearance },
                             )
@@ -217,7 +217,7 @@ fun SettingsScreen(
                             HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
                             // §14.4: everything the user starred, across all chats.
                             SettingsRow(
-                                icon = painterResource(KlicIcons.star),
+                                icon = painterResource(KlicIcons.starLine),
                                 title = stringResource(R.string.settings_saved_messages),
                                 onClick = { route = SettingsRoute.SavedMessages },
                             )
@@ -330,7 +330,7 @@ fun SettingsScreen(
                                 .padding(horizontal = 18.dp),
                         ) {
                             SettingsRow(
-                                icon = painterResource(R.drawable.ic_line_gallery),
+                                icon = painterResource(KlicIcons.theme),
                                 title = stringResource(R.string.settings_chat_themes),
                                 onClick = { route = SettingsRoute.ChatTheme },
                             )
@@ -614,7 +614,7 @@ private fun EmailRow(vm: KlicViewModel) {
             contentAlignment = Alignment.Center,
         ) {
             Icon(
-                painter = painterResource(R.drawable.ic_line_message),
+                painter = painterResource(KlicIcons.email),
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.size(18.dp),

@@ -16,6 +16,16 @@ private val DarkColors = darkColorScheme(
     onSurfaceVariant = DarkTextMuted,
     error            = BrandDanger,
     onError          = BrandOnPrimary,
+    // Pure-grayscale containers: the M3 baseline tints these purple, which leaked
+    // into the tab bar, modals and sheets. surfaceTint = surface kills elevation tint.
+    surfaceTint             = DarkSurface,
+    surfaceContainerLowest  = DarkBackground,
+    surfaceContainerLow     = androidx.compose.ui.graphics.Color(0xFF141414),
+    surfaceContainer        = DarkSurface,
+    surfaceContainerHigh    = androidx.compose.ui.graphics.Color(0xFF222222),
+    surfaceContainerHighest = DarkSurfaceRaised,
+    secondaryContainer      = DarkSurfaceRaised,
+    onSecondaryContainer    = DarkTextPrimary,
 )
 
 private val LightColors = lightColorScheme(
@@ -29,6 +39,15 @@ private val LightColors = lightColorScheme(
     onSurfaceVariant = LightTextMuted,
     error            = BrandDanger,
     onError          = BrandOnPrimary,
+    // Pure-grayscale containers (tab bar, modals, sheets) — no purple baseline tint.
+    surfaceTint             = LightSurface,
+    surfaceContainerLowest  = LightSurface,
+    surfaceContainerLow     = androidx.compose.ui.graphics.Color(0xFFFAFAFA),
+    surfaceContainer        = androidx.compose.ui.graphics.Color(0xFFF0F0F0),
+    surfaceContainerHigh    = androidx.compose.ui.graphics.Color(0xFFEBEBEB),
+    surfaceContainerHighest = LightSurfaceRaised,
+    secondaryContainer      = LightSurfaceRaised,
+    onSecondaryContainer    = LightTextPrimary,
 )
 
 @Composable

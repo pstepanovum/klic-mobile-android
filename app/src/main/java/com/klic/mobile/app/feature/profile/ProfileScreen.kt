@@ -223,14 +223,14 @@ fun ProfileScreen(
                         }
                         Spacer(Modifier.height(24.dp))
                         Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                            CallActionButton(KlicIcons.phone, stringResource(R.string.action_audio)) {
+                            CallActionButton(KlicIcons.callSolid, stringResource(R.string.action_audio)) {
                                 vm.startCall(conversationId, "AUDIO", member.displayName); onCall("AUDIO")
                             }
-                            CallActionButton(KlicIcons.video, stringResource(R.string.action_video)) {
+                            CallActionButton(KlicIcons.videoSolid, stringResource(R.string.action_video)) {
                                 vm.startCall(conversationId, "VIDEO", member.displayName); onCall("VIDEO")
                             }
                             if (onMessage != null) {
-                                CallActionButton(KlicIcons.message, stringResource(R.string.action_message)) { onMessage() }
+                                CallActionButton(KlicIcons.messageSolid, stringResource(R.string.action_message)) { onMessage() }
                             }
                         }
 

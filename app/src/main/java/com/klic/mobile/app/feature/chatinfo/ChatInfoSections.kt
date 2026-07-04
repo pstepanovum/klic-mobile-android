@@ -159,7 +159,7 @@ fun ChatInfoSectionsCard(
             InfoDivider()
             // §14.3: per-DM local theme / shared group theme (admin).
             InfoRowItem(
-                icon = painterResource(R.drawable.ic_line_gallery),
+                icon = painterResource(KlicIcons.theme),
                 title = stringResource(R.string.info_chat_theme),
                 onClick = { onOpen(ChatInfoSub.THEME) },
             )
@@ -230,7 +230,7 @@ fun ChatNotificationsCard(
     InfoSectionLabel(stringResource(R.string.info_notifications_label))
     InfoCard {
         InfoRowItem(
-            icon = painterResource(KlicIcons.message),
+            icon = painterResource(KlicIcons.tabChat),
             title = stringResource(R.string.info_mute_messages),
             value = muteLabel(prefs.messagesMutedUntil),
             onClick = { showMessagesMuteSheet = true },
@@ -261,21 +261,21 @@ fun ChatNotificationsCard(
         }
         InfoDivider()
         InfoRowItem(
-            icon = painterResource(KlicIcons.notification),
+            icon = painterResource(KlicIcons.bell),
             title = stringResource(R.string.info_alert_tone),
             value = if (settings.messageTones[conversationId] != null) stringResource(R.string.info_custom) else stringResource(R.string.common_default),
             onClick = { showMessageToneSheet = true },
         )
         InfoDivider()
         InfoRowItem(
-            icon = painterResource(KlicIcons.phone),
+            icon = painterResource(KlicIcons.tabCall),
             title = stringResource(R.string.info_mute_calls),
             value = muteLabel(prefs.callsMutedUntil),
             onClick = { showCallsMuteSheet = true },
         )
         InfoDivider()
         InfoRowItem(
-            icon = painterResource(KlicIcons.video),
+            icon = painterResource(KlicIcons.callSolid),
             title = stringResource(R.string.info_ringtone),
             value = if (settings.callTones[conversationId] != null) stringResource(R.string.info_custom) else stringResource(R.string.common_default),
             onClick = { showCallToneSheet = true },

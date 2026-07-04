@@ -446,14 +446,14 @@ private fun NewMessageSheet(
                         }
                         item {
                             NewMsgActionRow(
-                                iconRes = KlicIcons.user,
+                                iconRes = KlicIcons.usersGroup,
                                 label = stringResource(R.string.convos_new_group),
                                 onClick = { screen = NewMsgScreen.NEW_GROUP_PICKER },
                             )
                         }
                         item {
                             NewMsgActionRow(
-                                iconRes = KlicIcons.addUser,
+                                iconRes = KlicIcons.userLine,
                                 label = stringResource(R.string.convos_new_contact),
                                 onClick = { screen = NewMsgScreen.NEW_CONTACT },
                             )

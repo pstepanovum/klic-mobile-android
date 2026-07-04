@@ -37,18 +37,35 @@ object KlicIcons {
     val qr       = R.drawable.ic_klic_qr
     val update   = R.drawable.ic_klic_update
     val report   = R.drawable.ic_klic_report
+    val appearance = R.drawable.ic_klic_appearance
+    val email    = R.drawable.ic_klic_email
+    val starLine = R.drawable.ic_klic_star
     val gallery  = R.drawable.ic_bold_gallery
     val document = R.drawable.ic_bold_document
-    val star     = R.drawable.ic_line_star_1
-    val starBold = R.drawable.ic_bold_star_1
+    // Owner-supplied star pair: outline for rows, solid for the starred indicator.
+    val star     = R.drawable.ic_klic_star
+    val starBold = R.drawable.ic_klic_star_solid
+    val theme    = R.drawable.ic_klic_theme
+    // Profile/Call action artwork (filled).
+    val callSolid    = R.drawable.ic_klic_call_solid
+    val videoSolid   = R.drawable.ic_klic_video_solid
+    val messageSolid = R.drawable.ic_klic_message_solid
+    // New-message modal artwork: single user + group of users.
+    val userLine = R.drawable.ic_klic_tab_user
+    val usersGroup = R.drawable.ic_klic_users_group
     val folder   = R.drawable.ic_line_folder
     val notification = R.drawable.ic_line_notification
     val chart    = R.drawable.ic_line_chart
     val link     = R.drawable.ic_line_export
-    // Tab bar — line (inactive) and bold (active) pairs
-    val messageChat     = R.drawable.ic_line_message_3
-    val messageChatBold = R.drawable.ic_bold_message_3
-    val userBold        = R.drawable.ic_bold_user
-    val phoneBold       = R.drawable.ic_bold_phone
-    val settingsBold    = R.drawable.ic_bold_setting
+    // Tab bar — owner-supplied artwork (selection is conveyed by tint + pill,
+    // so the active state reuses the same asset).
+    val tabChat     = R.drawable.ic_klic_tab_chat
+    val tabUser     = R.drawable.ic_klic_tab_user
+    val tabCall     = R.drawable.ic_klic_tab_call
+    val tabSettings = R.drawable.ic_klic_tab_settings
+    val messageChat     = R.drawable.ic_klic_tab_chat
+    val messageChatBold = R.drawable.ic_klic_tab_chat
+    val userBold        = R.drawable.ic_klic_tab_user
+    val phoneBold       = R.drawable.ic_klic_tab_call
+    val settingsBold    = R.drawable.ic_klic_tab_settings
 }
