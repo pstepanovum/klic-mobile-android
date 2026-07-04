@@ -38,6 +38,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.Layout
@@ -239,7 +240,7 @@ internal fun MessageBubble(
                                     )
                                 }
                             }
-                            BentoMediaGrid(mediaAtts, tileRadius = 14.dp, onMediaClick = onMediaClick, onLongPress = onLongPress)
+                            BentoMediaGrid(mediaAtts, tileRadius = 14.dp, onMediaClick = onMediaClick, onLongPress = onLongPress, roundBottom = false)
                             // §15.2: caption + tucked time/ticks share the media card width.
                             BodyWithInlineMeta(
                                 body = message.body,
@@ -432,6 +433,12 @@ internal fun MessageBubble(
 // §7.2/§13.17 bento grid: 2 → side-by-side; 3 → one large + two stacked; 4+ → 2x2 with
 // a "+N" scrim on the fourth tile. Tiles render images AND videos (play badge +
 // duration); every tile opens the media viewer paged to the tapped attachment.
+//
+// §19.3: each tile rounds ONLY the corners that sit on the collage's outer boundary;
+// the interior junctions where tiles meet stay square. Previously every tile rounded
+// all four corners at [tileRadius], so the grid read as several disconnected cards with
+// rounded notches at the centre instead of "one unit" (§13.17). [roundBottom] squares
+// the bottom edge when a caption follows the grid inside the same card.
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun BentoMediaGrid(
@@ -439,11 +446,18 @@ private fun BentoMediaGrid(
     tileRadius: Dp,
     onMediaClick: (Attachment) -> Unit,
     onLongPress: () -> Unit,
+    roundBottom: Boolean = true,
 ) {
     val spacing = 2.dp
+    val r = tileRadius
+    val z = 0.dp
+    // Rounded corner only where a tile touches the collage's outer edge.
+    fun sh(topStart: Dp, topEnd: Dp, bottomStart: Dp, bottomEnd: Dp): Shape =
+        RoundedCornerShape(topStart = topStart, topEnd = topEnd, bottomStart = bottomStart, bottomEnd = bottomEnd)
+    val br = if (roundBottom) r else z
 
     @Composable
-    fun Tile(att: Attachment, modifier: Modifier, overflow: Int = 0) {
+    fun Tile(att: Attachment, modifier: Modifier, shape: Shape, overflow: Int = 0) {
         // §8.3 auto-download matrix: photos auto-fetch only when the current network
         // allows it; otherwise a placeholder with a manual download button. Already
         // Coil-cached images always render (no network needed).
@@ -462,7 +476,7 @@ private fun BentoMediaGrid(
 
         Box(
             modifier
-                .clip(RoundedCornerShape(tileRadius))
+                .clip(shape)
                 .combinedClickable(
                     onClick = { if (allowed) onMediaClick(att) else manuallyRequested = true },
                     onLongClick = onLongPress,
@@ -546,26 +560,30 @@ private fun BentoMediaGrid(
     }
 
     when (atts.size) {
-        1 -> Tile(atts[0], Modifier.width(240.dp).aspectRatio(imageAspect(atts[0]).coerceIn(0.75f, 1.6f)))
+        1 -> Tile(
+            atts[0],
+            Modifier.width(240.dp).aspectRatio(imageAspect(atts[0]).coerceIn(0.75f, 1.6f)),
+            sh(r, r, br, br),
+        )
         2 -> Row(Modifier.width(240.dp), horizontalArrangement = Arrangement.spacedBy(spacing)) {
-            Tile(atts[0], Modifier.weight(1f).aspectRatio(0.75f))
-            Tile(atts[1], Modifier.weight(1f).aspectRatio(0.75f))
+            Tile(atts[0], Modifier.weight(1f).aspectRatio(0.75f), sh(r, z, br, z))
+            Tile(atts[1], Modifier.weight(1f).aspectRatio(0.75f), sh(z, r, z, br))
         }
         3 -> Row(Modifier.width(240.dp).height(240.dp), horizontalArrangement = Arrangement.spacedBy(spacing)) {
-            Tile(atts[0], Modifier.weight(2f).fillMaxHeight())
+            Tile(atts[0], Modifier.weight(2f).fillMaxHeight(), sh(r, z, br, z))
             Column(Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(spacing)) {
-                Tile(atts[1], Modifier.weight(1f).fillMaxWidth())
-                Tile(atts[2], Modifier.weight(1f).fillMaxWidth())
+                Tile(atts[1], Modifier.weight(1f).fillMaxWidth(), sh(z, r, z, z))
+                Tile(atts[2], Modifier.weight(1f).fillMaxWidth(), sh(z, z, z, br))
             }
         }
         else -> Column(Modifier.width(240.dp), verticalArrangement = Arrangement.spacedBy(spacing)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(spacing)) {
-                Tile(atts[0], Modifier.weight(1f).aspectRatio(1f))
-                Tile(atts[1], Modifier.weight(1f).aspectRatio(1f))
+                Tile(atts[0], Modifier.weight(1f).aspectRatio(1f), sh(r, z, z, z))
+                Tile(atts[1], Modifier.weight(1f).aspectRatio(1f), sh(z, r, z, z))
             }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(spacing)) {
-                Tile(atts[2], Modifier.weight(1f).aspectRatio(1f))
-                Tile(atts[3], Modifier.weight(1f).aspectRatio(1f), overflow = atts.size - 4)
+                Tile(atts[2], Modifier.weight(1f).aspectRatio(1f), sh(z, z, br, z))
+                Tile(atts[3], Modifier.weight(1f).aspectRatio(1f), sh(z, z, z, br), overflow = atts.size - 4)
             }
         }
     }
