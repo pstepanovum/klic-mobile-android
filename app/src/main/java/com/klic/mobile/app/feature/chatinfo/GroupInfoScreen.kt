@@ -289,14 +289,14 @@ private fun GroupInfoMain(
             Spacer(Modifier.height(20.dp))
             // Audio/Video — start the group call, or join the one already live.
             Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                GroupCallButton(KlicIcons.phone, stringResource(R.string.action_audio)) {
+                GroupCallButton(KlicIcons.callSolid, stringResource(R.string.action_audio)) {
                     if (vm.chatActiveCall.value?.conversationId == conversationId) {
                         vm.joinOngoingCall(conversationId)
                     } else {
                         vm.startCall(conversationId, "AUDIO", title)
                     }
                 }
-                GroupCallButton(KlicIcons.video, stringResource(R.string.action_video)) {
+                GroupCallButton(KlicIcons.videoSolid, stringResource(R.string.action_video)) {
                     if (vm.chatActiveCall.value?.conversationId == conversationId) {
                         vm.joinOngoingCall(conversationId)
                     } else {

@@ -11,7 +11,7 @@ object KlicIcons {
     val phone    = R.drawable.ic_line_phone
     val callEnd  = R.drawable.ic_bold_call_slash
     val message  = R.drawable.ic_line_message
-    val send     = R.drawable.ic_bold_send
+    val send     = R.drawable.ic_klic_send
     val search   = R.drawable.ic_line_search
     val user     = R.drawable.ic_line_user
     val addUser  = R.drawable.ic_line_user_plus
@@ -46,6 +46,10 @@ object KlicIcons {
     val star     = R.drawable.ic_klic_star
     val starBold = R.drawable.ic_klic_star_solid
     val theme    = R.drawable.ic_klic_theme
+    // Profile row artwork.
+    val ringtone = R.drawable.ic_klic_ringtone
+    val media    = R.drawable.ic_klic_media
+    val storage  = R.drawable.ic_klic_storage
     // Profile/Call action artwork (filled).
     val callSolid    = R.drawable.ic_klic_call_solid
     val videoSolid   = R.drawable.ic_klic_video_solid

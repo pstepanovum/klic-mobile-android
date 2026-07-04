@@ -170,7 +170,7 @@ fun SettingsScreen(
                                 .padding(horizontal = 18.dp),
                         ) {
                             SettingsRow(
-                                icon = painterResource(KlicIcons.user),
+                                icon = painterResource(KlicIcons.userLine),
                                 title = stringResource(R.string.settings_my_profile),
                                 onClick = onEditProfile,
                             )
@@ -210,7 +210,7 @@ fun SettingsScreen(
                             )
                             HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
                             SettingsRow(
-                                icon = painterResource(KlicIcons.phone),
+                                icon = painterResource(KlicIcons.tabCall),
                                 title = stringResource(R.string.settings_recent_calls),
                                 onClick = { route = SettingsRoute.RecentCalls },
                             )

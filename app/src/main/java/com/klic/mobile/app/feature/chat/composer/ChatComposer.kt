@@ -382,7 +382,11 @@ fun ComposerBar(
                             contentColor   = MaterialTheme.colorScheme.onPrimary,
                         ),
                     ) {
-                        Icon(Icons.Filled.Send, contentDescription = "Send recording", modifier = Modifier.size(20.dp))
+                        Icon(
+                            painter = painterResource(KlicIcons.send),
+                            contentDescription = "Send recording",
+                            modifier = Modifier.size(20.dp),
+                        )
                     }
                 }
                 canSend -> {
@@ -394,12 +398,20 @@ fun ComposerBar(
                             contentColor   = MaterialTheme.colorScheme.onPrimary,
                         ),
                     ) {
-                        Icon(
-                            // §16.4: the apply-edit affordance is a CHECKMARK.
-                            imageVector = if (editingOriginal != null) Icons.Filled.Check else Icons.Filled.Send,
-                            contentDescription = if (editingOriginal != null) "Apply edit" else "Send",
-                            modifier = Modifier.size(20.dp),
-                        )
+                        // §16.4: the apply-edit affordance is a CHECKMARK.
+                        if (editingOriginal != null) {
+                            Icon(
+                                imageVector = Icons.Filled.Check,
+                                contentDescription = "Apply edit",
+                                modifier = Modifier.size(20.dp),
+                            )
+                        } else {
+                            Icon(
+                                painter = painterResource(KlicIcons.send),
+                                contentDescription = "Send",
+                                modifier = Modifier.size(20.dp),
+                            )
+                        }
                     }
                 }
                 else -> {

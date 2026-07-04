@@ -145,7 +145,7 @@ fun ChatInfoSectionsCard(
 
     InfoCard {
         InfoRowItem(
-            icon = painterResource(KlicIcons.gallery),
+            icon = painterResource(KlicIcons.media),
             title = stringResource(R.string.info_media_links_docs),
             onClick = { onOpen(ChatInfoSub.MEDIA) },
         )
@@ -173,7 +173,7 @@ fun ChatInfoSectionsCard(
         )
         InfoDivider()
         InfoRowItem(
-            icon = painterResource(KlicIcons.folder),
+            icon = painterResource(KlicIcons.storage),
             title = stringResource(R.string.info_manage_storage),
             onClick = { onOpen(ChatInfoSub.STORAGE) },
         )
@@ -275,7 +275,7 @@ fun ChatNotificationsCard(
         )
         InfoDivider()
         InfoRowItem(
-            icon = painterResource(KlicIcons.callSolid),
+            icon = painterResource(KlicIcons.ringtone),
             title = stringResource(R.string.info_ringtone),
             value = if (settings.callTones[conversationId] != null) stringResource(R.string.info_custom) else stringResource(R.string.common_default),
             onClick = { showCallToneSheet = true },
