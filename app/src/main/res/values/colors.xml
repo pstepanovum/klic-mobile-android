@@ -1,5 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="background">#0E0F16</color>
+    <!-- Pre-Compose window background (light; overridden in values-night). -->
+    <color name="background">#F5F5F5</color>
     <color name="primary">#ED122B</color>
+    <!-- Brand red shared by the app icon and the Android 12+ splash screen. -->
+    <color name="brand_splash">#D90429</color>
 </resources>

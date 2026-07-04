@@ -21,6 +21,14 @@ val TikTokSans = FontFamily(
 // Bangers — a bold display face used for the brand tagline.
 val Bangers = FontFamily(Font(R.font.bangers_regular, FontWeight.Normal))
 
+// TikTok Sans, 24pt-optical-size Expanded cut — the auth pages' big-title/CTA face
+// (Welcome "Get Started", Login/Sign Up titles and primary buttons).
+val TikTokSansExpanded = FontFamily(
+    Font(R.font.tiktoksans_24pt_expanded_regular, FontWeight.Normal),
+    Font(R.font.tiktoksans_24pt_expanded_medium, FontWeight.Medium),
+    Font(R.font.tiktoksans_24pt_expanded_bold, FontWeight.Bold),
+)
+
 val KlicTypography = Typography(
     displayLarge = TextStyle(fontFamily = TikTokSans, fontWeight = FontWeight.Black, fontSize = 40.sp),
     titleLarge = TextStyle(fontFamily = TikTokSans, fontWeight = FontWeight.Bold, fontSize = 22.sp),

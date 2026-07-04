@@ -153,6 +153,11 @@
     <string name="auth_pw_strong">极强</string>
     <string name="checkbox_agree_prefix">我同意</string>
     <string name="checkbox_privacy_policy">隐私政策</string>
+    <string name="login_title">登录</string>
+    <string name="login_subtitle">欢迎回来 — 登录以继续聊天。</string>
+    <string name="signup_title">注册</string>
+    <string name="signup_subtitle">嘿！让我们为你创建一个账号</string>
+    <string name="auth_waiting_for_passkey">正在等待通行密钥…</string>
     <string name="welcome_tagline">交流。聊天。连接。</string>
     <string name="welcome_subtitle">高清通话与即时消息，\n尽在一处。</string>
     <string name="welcome_get_started">开始使用</string>

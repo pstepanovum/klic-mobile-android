@@ -153,6 +153,11 @@
     <string name="auth_pw_strong">Надёжный</string>
     <string name="checkbox_agree_prefix">Я принимаю условия</string>
     <string name="checkbox_privacy_policy">Политики конфиденциальности</string>
+    <string name="login_title">Вход</string>
+    <string name="login_subtitle">С возвращением — войдите, чтобы продолжить общение.</string>
+    <string name="signup_title">Регистрация</string>
+    <string name="signup_subtitle">Йо! Давайте создадим вам аккаунт</string>
+    <string name="auth_waiting_for_passkey">Ожидание ключа доступа…</string>
     <string name="welcome_tagline">Звоните. Пишите. Общайтесь.</string>
     <string name="welcome_subtitle">Кристально чистые звонки и мгновенные сообщения\nв одном приложении.</string>
     <string name="welcome_get_started">Начать</string>

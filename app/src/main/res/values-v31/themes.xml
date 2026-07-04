@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Android 12+ splash: solid brand red behind the launcher icon, and the icon's own
+         red background blended into it, so no circle outline is visible — just the white
+         star on red, matching the iOS launch. -->
+    <style name="Theme.Klic" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/background</item>
+        <item name="android:statusBarColor">@color/background</item>
+        <item name="android:navigationBarColor">@color/background</item>
+        <item name="android:windowSplashScreenBackground">@color/brand_splash</item>
+        <item name="android:windowSplashScreenIconBackgroundColor">@color/brand_splash</item>
+    </style>
+</resources>
