@@ -52,6 +52,17 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <!-- §13.8: verified app links for the friend-link web surface — /u/<username>
+                 and /add/<username> route straight into the add-friend flow. -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" />
+                <data android:host="klic.pstepanov.dev" />
+                <data android:pathPrefix="/u/" />
+                <data android:pathPrefix="/add/" />
+            </intent-filter>
         </activity>
 
         <!-- System share target: other apps share images/videos/text into Klic -->

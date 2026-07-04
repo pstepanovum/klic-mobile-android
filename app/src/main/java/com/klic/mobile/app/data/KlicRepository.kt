@@ -15,11 +15,21 @@ import okhttp3.RequestBody.Companion.toRequestBody
 class KlicRepository(
     private val api: KlicApi,
     private val tokenStore: TokenStore,
+    /** App context — resolves staged content Uris for streamed uploads (§13.15). */
+    private val appContext: android.content.Context? = null,
 ) {
     private val json = Json { ignoreUnknownKeys = true }
     // Bare client for presigned PUT uploads — no auth header, no base URL.
     // Carries the data-usage interceptor so uploads are attributed by media kind (§8.3).
-    private val uploader = OkHttpClient.Builder().addInterceptor(DataUsage.interceptor).build()
+    // §13.15: generous timeouts so a multi-hundred-MB video on a slow uplink can finish —
+    // the write timeout only trips on a fully stalled socket, never on slow progress,
+    // and there is deliberately no whole-call timeout.
+    private val uploader = OkHttpClient.Builder()
+        .addInterceptor(DataUsage.interceptor)
+        .connectTimeout(java.time.Duration.ofSeconds(30))
+        .writeTimeout(java.time.Duration.ofMinutes(5))
+        .readTimeout(java.time.Duration.ofMinutes(5))
+        .build()
 
     var currentUser: User? = null
         private set
@@ -127,6 +137,26 @@ class KlicRepository(
         } else {
             bytes.toRequestBody(contentType.toMediaType())
         }
+        executePut(uploadUrl, body, label)
+    }
+
+    /** §13.15: PUT a staged attachment streamed from its content Uri — no buffering. */
+    private suspend fun putUriToPresignedUrl(
+        uploadUrl: String,
+        uri: String,
+        contentType: String,
+        byteSize: Long,
+        label: String,
+        onProgress: ((Long) -> Unit)? = null,
+    ) = withContext(Dispatchers.IO) {
+        val resolver = requireNotNull(appContext) { "appContext required for streamed uploads" }.contentResolver
+        val body = UriStreamRequestBody(
+            resolver, android.net.Uri.parse(uri), contentType.toMediaType(), byteSize, onProgress,
+        )
+        executePut(uploadUrl, body, label)
+    }
+
+    private fun executePut(uploadUrl: String, body: okhttp3.RequestBody, label: String) {
         val request = Request.Builder()
             .url(uploadUrl)
             .put(body)
@@ -306,20 +336,30 @@ class KlicRepository(
             val ticket = api.requestUpload(UploadRequest(conversationId, attachment.kind, normalizedType, attachment.byteSize))
             diagnostic("upload.${attachment.kind}.presign.ok", "type=$normalizedType bytes=${attachment.byteSize}")
             diagnostic("upload.${attachment.kind}.put.start", "bytes=${attachment.byteSize}")
-            val bytes = requireNotNull(attachment.localBytes) { "AttachmentInput.localBytes required for upload" }
             val base = sentBase
             val perAttachmentProgress = onProgress?.let { cb ->
                 { sent: Long -> cb(base + sent, totalBytes) }
             }
             runCatching {
-                putToPresignedUrl(ticket.uploadUrl, bytes, normalizedType, attachment.kind, perAttachmentProgress)
+                // §13.15: big media staged as a Uri streams from disk; small staged
+                // payloads (compressed images, voice notes) keep the in-memory path.
+                val uri = attachment.localUri
+                if (uri != null) {
+                    putUriToPresignedUrl(
+                        ticket.uploadUrl, uri, normalizedType,
+                        attachment.byteSize.toLong(), attachment.kind, perAttachmentProgress,
+                    )
+                } else {
+                    val bytes = requireNotNull(attachment.localBytes) { "AttachmentInput.localBytes or localUri required for upload" }
+                    putToPresignedUrl(ticket.uploadUrl, bytes, normalizedType, attachment.kind, perAttachmentProgress)
+                }
             }.onFailure {
                 diagnostic("upload.${attachment.kind}.put.failed", it.message ?: it::class.java.simpleName)
                 throw it
             }
             diagnostic("upload.${attachment.kind}.put.ok", "bytes=${attachment.byteSize}")
-            sentBase += bytes.size.toLong()
-            uploaded += attachment.copy(key = ticket.key, localBytes = null)
+            sentBase += attachment.byteSize.toLong()
+            uploaded += attachment.copy(key = ticket.key, localBytes = null, localUri = null)
         }
         diagnostic("upload.attachments.message.start")
         return runCatching {

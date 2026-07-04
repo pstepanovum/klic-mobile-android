@@ -72,7 +72,16 @@ fun FriendsScreen(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             TopAppBar(
-                title = { Text(stringResource(R.string.tab_friends), style = MaterialTheme.typography.titleLarge) },
+                title = {
+                    // §13.2: root page title — TikTok Sans 24pt Expanded Regular (size unchanged).
+                    Text(
+                        stringResource(R.string.tab_friends),
+                        style = MaterialTheme.typography.titleLarge.copy(
+                            fontFamily = com.klic.mobile.app.ui.theme.TikTokSansExpanded,
+                            fontWeight = androidx.compose.ui.text.font.FontWeight.Normal,
+                        ),
+                    )
+                },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.background,
                 ),

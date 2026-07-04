@@ -253,6 +253,10 @@ data class AttachmentInput(
     val waveform: String? = null,
     val fileName: String? = null,
     @Transient val localBytes: ByteArray? = null,
+    /** §13.15: large media/files upload streamed straight from this content Uri —
+     *  never buffered in memory. At most one of [localBytes]/[localUri] is set for
+     *  staged uploads; both stay off the wire. */
+    @Transient val localUri: String? = null,
 )
 
 @Serializable

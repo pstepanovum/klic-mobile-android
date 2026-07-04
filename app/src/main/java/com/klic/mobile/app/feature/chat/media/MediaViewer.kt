@@ -9,8 +9,11 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.calculatePan
+import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -45,6 +48,7 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -57,6 +61,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChanged
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -82,6 +87,8 @@ import kotlinx.coroutines.launch
  * Full-screen media viewer (§10.9). Type detection keys STRICTLY on the attachment
  * kind — images never get a Play overlay. Single tap toggles immersive chrome; the
  * footer actions (Share / Forward / Star / Reply) all work and are Klic-styled.
+ * §13.17: bento messages open at the tapped attachment and page horizontally through
+ * ALL of the message's media (images + videos) with a position chip up top.
  */
 @Composable
 fun MediaViewerOverlay(
@@ -96,17 +103,38 @@ fun MediaViewerOverlay(
     val scope = rememberCoroutineScope()
     var chrome by remember { mutableStateOf(true) }
     var showForward by remember { mutableStateOf(false) }
-    val isVideo = att.kind == "VIDEO"
+
+    // §13.17: all pageable media in this message, starting on the tapped one.
+    val mediaAtts = remember(message.id) {
+        message.attachments.filter { it.kind == "IMAGE" || it.kind == "VIDEO" }
+            .ifEmpty { listOf(att) }
+    }
+    val pagerState = androidx.compose.foundation.pager.rememberPagerState(
+        initialPage = mediaAtts.indexOfFirst { it.id == att.id }.coerceAtLeast(0),
+    ) { mediaAtts.size }
+    val current = mediaAtts[pagerState.currentPage.coerceIn(mediaAtts.indices)]
+    val isVideo = current.kind == "VIDEO"
 
     // Live star state — follows the message in the open list.
     val messages by vm.messages.collectAsState()
     val starred = messages.firstOrNull { it.id == message.id }?.starred ?: message.starred
 
     Box(Modifier.fillMaxSize().background(Color.Black)) {
-        if (isVideo) {
-            VideoSurface(att = att, onChromeChange = { chrome = it })
-        } else {
-            ZoomableImage(att = att, onTap = { chrome = !chrome })
+        androidx.compose.foundation.pager.HorizontalPager(
+            state = pagerState,
+            modifier = Modifier.fillMaxSize(),
+        ) { page ->
+            val pageAtt = mediaAtts[page]
+            if (pageAtt.kind == "VIDEO") {
+                // Only the settled page owns a playing player — neighbors stay idle.
+                VideoSurface(
+                    att = pageAtt,
+                    autoPlay = page == pagerState.settledPage,
+                    onChromeChange = { chrome = it },
+                )
+            } else {
+                ZoomableImage(att = pageAtt, onTap = { chrome = !chrome })
+            }
         }
 
         // Top bar (fades in immersive mode).
@@ -129,18 +157,34 @@ fun MediaViewerOverlay(
                     )
                 }
                 // §10.9: duration chip top-left for videos (after the back affordance).
-                if (isVideo && att.durationMs != null) {
+                if (isVideo && current.durationMs != null) {
                     Box(
                         Modifier
                             .background(Color.White.copy(alpha = 0.16f), CircleShape)
                             .padding(horizontal = 10.dp, vertical = 4.dp),
                     ) {
                         Text(
-                            durationText(att.durationMs),
+                            durationText(current.durationMs!!),
                             style = MaterialTheme.typography.labelSmall,
                             color = Color.White,
                         )
                     }
+                }
+                // §13.17: "n / N" position chip for multi-media messages.
+                if (mediaAtts.size > 1) {
+                    Spacer(Modifier.weight(1f))
+                    Box(
+                        Modifier
+                            .background(Color.White.copy(alpha = 0.16f), CircleShape)
+                            .padding(horizontal = 10.dp, vertical = 4.dp),
+                    ) {
+                        Text(
+                            "${pagerState.currentPage + 1} / ${mediaAtts.size}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color.White,
+                        )
+                    }
+                    Spacer(Modifier.width(44.dp))
                 }
             }
         }
@@ -162,8 +206,8 @@ fun MediaViewerOverlay(
             ) {
                 ViewerAction(Icons.Filled.Share, stringResource(R.string.viewer_share)) {
                     scope.launch {
-                        val file = AttachmentDownloads.ensureLocal(context, att, conversationId)
-                        if (file != null) shareFile(context, file, att.contentType)
+                        val file = AttachmentDownloads.ensureLocal(context, current, conversationId)
+                        if (file != null) shareFile(context, file, current.contentType)
                         else Toast.makeText(context, context.getString(R.string.viewer_share_failed), Toast.LENGTH_SHORT).show()
                     }
                 }
@@ -192,7 +236,7 @@ fun MediaViewerOverlay(
             onSend = { targets ->
                 showForward = false
                 scope.launch {
-                    val file = AttachmentDownloads.ensureLocal(context, att, conversationId)
+                    val file = AttachmentDownloads.ensureLocal(context, current, conversationId)
                     val bytes = file?.readBytes()
                     if (bytes == null) {
                         Toast.makeText(context, context.getString(R.string.viewer_forward_failed), Toast.LENGTH_SHORT).show()
@@ -200,13 +244,13 @@ fun MediaViewerOverlay(
                     }
                     val input = AttachmentInput(
                         key = "",
-                        kind = att.kind,
-                        contentType = att.contentType,
+                        kind = current.kind,
+                        contentType = current.contentType,
                         byteSize = bytes.size,
-                        width = att.width,
-                        height = att.height,
-                        durationMs = att.durationMs,
-                        fileName = att.fileName,
+                        width = current.width,
+                        height = current.height,
+                        durationMs = current.durationMs,
+                        fileName = current.fileName,
                         localBytes = bytes,
                     )
                     targets.forEach { convId -> vm.sendAttachments(convId, null, listOf(input)) }
@@ -225,9 +269,24 @@ private fun ZoomableImage(att: Attachment, onTap: () -> Unit) {
         Modifier
             .fillMaxSize()
             .pointerInput(Unit) {
-                detectTransformGestures { _, pan, zoom, _ ->
-                    scale = (scale * zoom).coerceIn(1f, 5f)
-                    offset = if (scale > 1f) offset + pan else Offset.Zero
+                // §13.17: consume only pinches (2+ pointers) and single-finger pans
+                // while zoomed — an unzoomed one-finger swipe falls through to the
+                // pager so multi-media messages page naturally.
+                awaitEachGesture {
+                    awaitFirstDown(requireUnconsumed = false)
+                    do {
+                        val event = awaitPointerEvent()
+                        val pressed = event.changes.count { it.pressed }
+                        if (pressed >= 2 || scale > 1f) {
+                            val zoom = event.calculateZoom()
+                            val pan = event.calculatePan()
+                            if (zoom != 1f || pan != Offset.Zero) {
+                                scale = (scale * zoom).coerceIn(1f, 5f)
+                                offset = if (scale > 1f) offset + pan else Offset.Zero
+                                event.changes.forEach { if (it.positionChanged()) it.consume() }
+                            }
+                        }
+                    } while (event.changes.any { it.pressed })
                 }
             }
             .pointerInput(Unit) {
@@ -255,15 +314,16 @@ private fun ZoomableImage(att: Attachment, onTap: () -> Unit) {
 }
 
 @Composable
-private fun VideoSurface(att: Attachment, onChromeChange: (Boolean) -> Unit) {
+private fun VideoSurface(att: Attachment, autoPlay: Boolean = true, onChromeChange: (Boolean) -> Unit) {
     val context = LocalContext.current
     val player = remember(att.id) {
         ExoPlayer.Builder(context).build().apply {
             setMediaItem(MediaItem.fromUri(att.url))
             prepare()
-            playWhenReady = true
         }
     }
+    // §13.17: only the pager's settled page plays; swiping away pauses it.
+    LaunchedEffect(autoPlay) { player.playWhenReady = autoPlay }
     DisposableEffect(player) {
         onDispose { player.release() }
     }

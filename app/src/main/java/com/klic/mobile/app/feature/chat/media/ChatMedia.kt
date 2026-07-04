@@ -77,8 +77,8 @@ suspend fun loadImageDraft(context: Context, uri: Uri): PendingMediaDraft? = wit
 }
 
 suspend fun loadVideoDraft(context: Context, uri: Uri): PendingMediaDraft? = withContext(Dispatchers.IO) {
-    val bytes = runCatching { context.contentResolver.openInputStream(uri)?.use { it.readBytes() } }
-        .getOrNull() ?: return@withContext null
+    // §13.15: NEVER read the video into memory — stage the Uri and stream at upload time.
+    val byteSize = queryByteSize(context, uri) ?: return@withContext null
     val contentType = context.contentResolver.getType(uri) ?: "video/mp4"
     val retriever = MediaMetadataRetriever()
     try {
@@ -96,12 +96,12 @@ suspend fun loadVideoDraft(context: Context, uri: Uri): PendingMediaDraft? = wit
                 key = "",
                 kind = "VIDEO",
                 contentType = contentType,
-                byteSize = bytes.size,
+                byteSize = byteSize,
                 width = width,
                 height = height,
                 durationMs = durationMs,
                 fileName = queryDisplayName(context, uri),
-                localBytes = bytes,
+                localUri = uri.toString(),
             ),
         )
     } catch (e: Exception) {
@@ -117,18 +117,32 @@ suspend fun loadMediaDraft(context: Context, uri: Uri): PendingMediaDraft? {
     return if (type.startsWith("video/")) loadVideoDraft(context, uri) else loadImageDraft(context, uri)
 }
 
-/** Reads an arbitrary document Uri (from the file picker) into an uploadable attachment. */
+/** Stages an arbitrary document Uri (from the file picker) as an uploadable attachment.
+ *  §13.15: only the size/name are read here — the payload streams at upload time. */
 suspend fun loadFileAttachment(context: Context, uri: Uri): AttachmentInput? = withContext(Dispatchers.IO) {
-    val bytes = runCatching { context.contentResolver.openInputStream(uri)?.use { it.readBytes() } }
-        .getOrNull() ?: return@withContext null
+    val byteSize = queryByteSize(context, uri) ?: return@withContext null
     AttachmentInput(
         key = "",
         kind = "FILE",
         contentType = context.contentResolver.getType(uri) ?: "application/octet-stream",
-        byteSize = bytes.size,
+        byteSize = byteSize,
         fileName = queryDisplayName(context, uri),
-        localBytes = bytes,
+        localUri = uri.toString(),
     )
+}
+
+/** Resolves a content Uri's byte size without reading it (SIZE column, fd fallback). */
+private fun queryByteSize(context: Context, uri: Uri): Int? {
+    val fromColumn = runCatching {
+        context.contentResolver.query(uri, arrayOf(OpenableColumns.SIZE), null, null, null)?.use { cursor ->
+            val idx = cursor.getColumnIndex(OpenableColumns.SIZE)
+            if (idx >= 0 && cursor.moveToFirst() && !cursor.isNull(idx)) cursor.getLong(idx) else null
+        }
+    }.getOrNull()
+    val size = fromColumn ?: runCatching {
+        context.contentResolver.openAssetFileDescriptor(uri, "r")?.use { it.length }
+    }.getOrNull()
+    return size?.takeIf { it > 0 && it <= Int.MAX_VALUE }?.toInt()
 }
 
 private fun queryDisplayName(context: Context, uri: Uri): String? =

@@ -39,6 +39,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.AnnotatedString
@@ -131,8 +132,10 @@ internal fun MessageBubble(
     )
 
     val voiceAtt = message.attachments.firstOrNull { it.kind == "VOICE" }
-    val imageAtts = message.attachments.filter { it.kind == "IMAGE" }
-    val videoAtt = message.attachments.firstOrNull { it.kind == "VIDEO" }
+    // §13.17: images AND videos share one media list so a bulk message renders as a
+    // single bento grid; a lone video keeps its dedicated player-style bubble.
+    val mediaAtts = message.attachments.filter { it.kind == "IMAGE" || it.kind == "VIDEO" }
+    val soleVideoAtt = mediaAtts.singleOrNull()?.takeIf { it.kind == "VIDEO" }
     val fileAtt = message.attachments.firstOrNull { it.kind == "FILE" }
 
     val time = shortTime(message.createdAt)
@@ -140,7 +143,7 @@ internal fun MessageBubble(
 
     // §8.4 Save to Photos (Always): incoming media auto-saves once, deduped by attachment id.
     val autoSaveContext = LocalContext.current
-    if (!isMine && (imageAtts.isNotEmpty() || videoAtt != null)) {
+    if (!isMine && mediaAtts.isNotEmpty()) {
         LaunchedEffect(message.id) { GallerySaver.maybeAutoSave(autoSaveContext, message) }
     }
 
@@ -160,13 +163,13 @@ internal fun MessageBubble(
                     )
                 }
 
-            imageAtts.isNotEmpty() ->
+            mediaAtts.isNotEmpty() && (soleVideoAtt == null || message.body.isNotBlank()) ->
                 Column(horizontalAlignment = if (isMine) Alignment.End else Alignment.Start) {
                     if (message.body.isBlank()) {
                         // No caption: bare image/bento with the overlay time + ticks pill.
                         message.replyTo?.let { ReplyQuote(it, replyAuthorName) }
                         Box(Modifier.clip(RoundedCornerShape(16.dp))) {
-                            BentoImageGrid(imageAtts, tileRadius = 12.dp, onImageClick = onMediaClick, onLongPress = onLongPress)
+                            BentoMediaGrid(mediaAtts, tileRadius = 12.dp, onMediaClick = onMediaClick, onLongPress = onLongPress)
                             MediaTimePill(
                                 time = time,
                                 status = status,
@@ -193,7 +196,7 @@ internal fun MessageBubble(
                                     ReplyQuote(it, replyAuthorName, onPrimary = isMine)
                                 }
                             }
-                            BentoImageGrid(imageAtts, tileRadius = 14.dp, onImageClick = onMediaClick, onLongPress = onLongPress)
+                            BentoMediaGrid(mediaAtts, tileRadius = 14.dp, onMediaClick = onMediaClick, onLongPress = onLongPress)
                             Row(
                                 verticalAlignment = Alignment.Bottom,
                                 modifier = Modifier.width(240.dp).padding(horizontal = 6.dp, vertical = 6.dp),
@@ -222,17 +225,17 @@ internal fun MessageBubble(
                     }
                 }
 
-            videoAtt != null ->
+            soleVideoAtt != null && message.body.isBlank() ->
                 Column(horizontalAlignment = if (isMine) Alignment.End else Alignment.Start) {
                     message.replyTo?.let { ReplyQuote(it, replyAuthorName) }
                     Box(
                         Modifier
                             .widthIn(max = 240.dp)
                             .heightIn(max = 320.dp)
-                            .aspectRatio(imageAspect(videoAtt))
+                            .aspectRatio(imageAspect(soleVideoAtt))
                             .clip(RoundedCornerShape(16.dp))
                             .background(Color(0xFF1A1A1A))
-                            .combinedClickable(onClick = { onMediaClick(videoAtt) }, onLongClick = onLongPress),
+                            .combinedClickable(onClick = { onMediaClick(soleVideoAtt) }, onLongClick = onLongPress),
                     ) {
                         Icon(
                             imageVector = Icons.Filled.PlayArrow,
@@ -241,9 +244,9 @@ internal fun MessageBubble(
                             modifier = Modifier.size(48.dp).align(Alignment.Center),
                         )
                         // Duration pill — bottom-left.
-                        if (videoAtt.durationMs != null) {
+                        if (soleVideoAtt.durationMs != null) {
                             MediaTimePill(
-                                text = durationText(videoAtt.durationMs),
+                                text = durationText(soleVideoAtt.durationMs),
                                 modifier = Modifier.align(Alignment.BottomStart).padding(8.dp),
                             )
                         }
@@ -305,7 +308,9 @@ internal fun MessageBubble(
             else ->
                 Box(
                     Modifier
-                        .widthIn(max = 280.dp)
+                        // §13.3: bubbles cap at ~85% of the row (own AND peer) so text
+                        // fills more width before wrapping; short messages still hug.
+                        .bubbleWidthCap()
                         .background(
                             if (isMine) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
                             shape,
@@ -357,14 +362,15 @@ internal fun MessageBubble(
     }
 }
 
-// §7.2 bento grid: 2 → side-by-side; 3 → one large + two stacked; 4+ → 2x2 with a "+N"
-// scrim on the fourth tile. Every tile opens the existing viewer on the tapped image.
+// §7.2/§13.17 bento grid: 2 → side-by-side; 3 → one large + two stacked; 4+ → 2x2 with
+// a "+N" scrim on the fourth tile. Tiles render images AND videos (play badge +
+// duration); every tile opens the media viewer paged to the tapped attachment.
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun BentoImageGrid(
+private fun BentoMediaGrid(
     atts: List<Attachment>,
     tileRadius: Dp,
-    onImageClick: (Attachment) -> Unit,
+    onMediaClick: (Attachment) -> Unit,
     onLongPress: () -> Unit,
 ) {
     val spacing = 2.dp
@@ -375,6 +381,7 @@ private fun BentoImageGrid(
         // allows it; otherwise a placeholder with a manual download button. Already
         // Coil-cached images always render (no network needed).
         val context = LocalContext.current
+        val isVideo = att.kind == "VIDEO"
         val settings by SettingsStore.snapshot.collectAsState()
         var manuallyRequested by remember(att.id) { mutableStateOf(false) }
         val cached = remember(att.url) {
@@ -383,18 +390,34 @@ private fun BentoImageGrid(
                 context.imageLoader.diskCache?.openSnapshot(stableImageKey(att.url))?.use { true } ?: false
             }.getOrDefault(false)
         }
-        val allowed = cached || manuallyRequested ||
+        val allowed = isVideo || cached || manuallyRequested ||
             settings.autoDownloadAllowed(SettingsStore.KIND_PHOTOS, DataUsage.isOnWifi())
 
         Box(
             modifier
                 .clip(RoundedCornerShape(tileRadius))
                 .combinedClickable(
-                    onClick = { if (allowed) onImageClick(att) else manuallyRequested = true },
+                    onClick = { if (allowed) onMediaClick(att) else manuallyRequested = true },
                     onLongClick = onLongPress,
                 ),
         ) {
-            if (allowed) {
+            if (isVideo) {
+                // §13.17: video tile — dark placeholder with a play badge + duration.
+                Box(Modifier.fillMaxSize().background(Color(0xFF1A1A1A))) {
+                    Icon(
+                        imageVector = Icons.Filled.PlayArrow,
+                        contentDescription = "Play video",
+                        tint = Color.White.copy(alpha = 0.85f),
+                        modifier = Modifier.size(34.dp).align(Alignment.Center),
+                    )
+                    if (att.durationMs != null && overflow <= 0) {
+                        MediaTimePill(
+                            text = durationText(att.durationMs),
+                            modifier = Modifier.align(Alignment.BottomStart).padding(4.dp),
+                        )
+                    }
+                }
+            } else if (allowed) {
                 AsyncImage(
                     model = rememberStableImageRequest(att.url),
                     contentDescription = "Image",
@@ -553,7 +576,7 @@ internal fun MessageBodyText(
 
 /**
  * Bubble-less render for 1–3 emoji-only messages: one emoji renders biggest, two or
- * three slightly smaller. Time + ticks keep their usual inline overlay position.
+ * three slightly smaller. Time + ticks render below the emoji, bottom-trailing (§13.7).
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -570,14 +593,15 @@ private fun BigEmojiBubble(
         2 -> 38.sp
         else -> 32.sp
     }
-    Row(
-        verticalAlignment = Alignment.Bottom,
+    // §13.7: time + ticks sit BELOW the emoji (bottom-trailing), never beside it.
+    Column(
+        horizontalAlignment = Alignment.End,
         modifier = Modifier
             .combinedClickable(onClick = {}, onLongClick = onLongPress)
             .padding(horizontal = 2.dp, vertical = 2.dp),
     ) {
         Text(body, fontSize = fontSize, lineHeight = fontSize)
-        Spacer(Modifier.width(6.dp))
+        Spacer(Modifier.height(2.dp))
         Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(3.dp),
@@ -691,6 +715,18 @@ internal fun mentionAllRanges(body: String): List<IntRange> =
         .findAll(body)
         .mapNotNull { it.groups[2]?.range }
         .toList()
+
+/** §13.3: constrains a bubble to 85% of the incoming row width without forcing it wide. */
+private fun Modifier.bubbleWidthCap(fraction: Float = 0.85f): Modifier =
+    layout { measurable, constraints ->
+        val cap = if (constraints.hasBoundedWidth) {
+            (constraints.maxWidth * fraction).toInt()
+        } else {
+            constraints.maxWidth
+        }
+        val placeable = measurable.measure(constraints.copy(minWidth = 0, maxWidth = cap))
+        layout(placeable.width, placeable.height) { placeable.place(0, 0) }
+    }
 
 // Aspect ratio for an inline image/video, clamped so extreme shapes stay reasonable.
 private fun imageAspect(att: Attachment): Float {

@@ -357,9 +357,12 @@
     <string name="share_sending_progress">Отправка: %1$d из %2$d…</string>
     <string name="share_sent">Отправлено</string>
     <string name="upload_failed">Ошибка загрузки</string>
+    <string name="upload_failed_too_large">Файл слишком большой для сервера</string>
+    <string name="upload_failed_network">Ошибка сети — проверьте подключение и попробуйте ещё раз</string>
     <string name="upload_progress">Загрузка… %1$d%%</string>
     <string name="upload_discard">Отменить</string>
     <string name="upload_attachment">Вложение</string>
+    <string name="upload_items_count">%1$d объектов</string>
     <string name="actions_copy">Копировать</string>
     <string name="actions_reply_to">Ответить %1$s</string>
     <string name="actions_message_deleted">Это сообщение было удалено</string>

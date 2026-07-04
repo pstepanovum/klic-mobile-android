@@ -92,6 +92,9 @@ private val tabRoutes = tabs.map { it.route }.toSet()
 
 class MainActivity : ComponentActivity() {
     private val pendingCall = MutableStateFlow<CallInvite?>(null)
+    // §13.8: username parsed from an incoming friend link (app link / scanned QR URL),
+    // held until the authed UI is up and can fire the add-friend flow.
+    private val pendingAddFriend = MutableStateFlow<String?>(null)
     private val isInPipMode = mutableStateOf(false)
     private val pipSupported: Boolean by lazy {
         android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O &&
@@ -243,6 +246,12 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun handleIntent(intent: Intent?) {
+        // §13.8: https://klic.pstepanov.dev/u/<username> (and /add/) → add-friend flow.
+        if (intent?.action == Intent.ACTION_VIEW) {
+            intent.data?.toString()
+                ?.let { com.klic.mobile.app.feature.settings.parseKlicUsername(it) }
+                ?.let { pendingAddFriend.value = it }
+        }
         if (intent?.action == IncomingCallActivity.ACTION_ACCEPT_CALL) {
             val invite = CallInvite.fromIntent(intent)
             pendingCall.value = invite
@@ -328,6 +337,17 @@ class MainActivity : ComponentActivity() {
             incoming?.let { invite ->
                 vm.acceptIncomingCall(invite.callId, invite.displayLabel, isGroup = invite.isGroup)
                 pendingCall.value = null
+            }
+        }
+
+        // §13.8: consume a pending friend link — land on the Friends tab and send the
+        // request; the outcome surfaces through the global toast channel.
+        val addFriendLink by pendingAddFriend.collectAsState()
+        LaunchedEffect(addFriendLink) {
+            addFriendLink?.let { username ->
+                navController.navigate("friends") { launchSingleTop = true }
+                vm.addFriendFromLink(username)
+                pendingAddFriend.value = null
             }
         }
 

@@ -267,6 +267,9 @@ class KlicViewModel(
     fun logout() = viewModelScope.launch {
         repo.logout()
         socket.disconnect()
+        // §13.12: the app lock never survives the signed-out transition — the next
+        // account must not inherit the previous user's passcode/biometrics/auto-lock.
+        com.klic.mobile.app.data.AppLockStore.wipe()
         isAuthenticated.value = false
     }
 
@@ -316,6 +319,19 @@ class KlicViewModel(
         } else {
             runCatching { repo.sendFriendRequest(user.id) }
             friendStatus.value = str(com.klic.mobile.app.R.string.friends_request_sent, user.displayName)
+        }
+    }
+
+    /** §13.8: QR / universal-link add-friend — the outcome surfaces as a toast. */
+    fun addFriendFromLink(username: String) = viewModelScope.launch {
+        val name = username.trim().removePrefix("@").lowercase()
+        if (name.isEmpty()) return@launch
+        val user = runCatching { repo.findUser(name) }.getOrNull()
+        if (user == null) {
+            error.value = str(com.klic.mobile.app.R.string.err_no_user_named, name)
+        } else {
+            runCatching { repo.sendFriendRequest(user.id) }
+            error.value = str(com.klic.mobile.app.R.string.friends_request_sent, user.displayName)
         }
     }
 
@@ -570,7 +586,7 @@ class KlicViewModel(
 
     fun retryUpload(taskId: String) {
         val task = uploadTasks.value.firstOrNull { it.id == taskId && it.failed } ?: return
-        updateUploadTask(taskId) { it.copy(failed = false, progress = 0f) }
+        updateUploadTask(taskId) { it.copy(failed = false, progress = 0f, errorMessage = null) }
         startUpload(task)
     }
 
@@ -595,9 +611,18 @@ class KlicViewModel(
             uploadTasks.value = uploadTasks.value.filterNot { it.id == task.id }
             if (msg.conversationId == openConversationId) upsertMessage(msg)
             bumpSent(task.conversationId)
-        }.onFailure {
-            // Keep the pill with retry/discard affordances.
-            updateUploadTask(task.id) { it.copy(failed = true) }
+        }.onFailure { e ->
+            // Keep the pill with retry/discard affordances, and say WHY it failed —
+            // size cap (server message / 413) vs plain network trouble (§13.15).
+            val reason = repo.serverMessage(e) ?: when {
+                (e as? retrofit2.HttpException)?.code() == 413 ||
+                    e.message?.contains("(413)") == true ->
+                    str(com.klic.mobile.app.R.string.upload_failed_too_large)
+                e is java.io.IOException ->
+                    str(com.klic.mobile.app.R.string.upload_failed_network)
+                else -> null
+            }
+            updateUploadTask(task.id) { it.copy(failed = true, errorMessage = reason) }
         }
     }
 
@@ -746,6 +771,8 @@ class KlicViewModel(
     private fun handleSessionExpired() {
         socket.disconnect()
         currentUser.value = null
+        // §13.12: any transition to the signed-out state wipes the app lock.
+        com.klic.mobile.app.data.AppLockStore.wipe()
         isAuthenticated.value = false
     }
 
@@ -1140,7 +1167,8 @@ class KlicViewModel(
         runCatching { repo.deleteAccount() }
             .onSuccess {
                 SettingsStore.deleteAllDrafts()
-                com.klic.mobile.app.data.AppLockStore.clearPasscode()
+                // §13.12: full wipe (passcode + biometric toggle + auto-lock mode).
+                com.klic.mobile.app.data.AppLockStore.wipe()
                 repo.logout()
                 socket.disconnect()
                 conversations.value = emptyList()
@@ -1265,4 +1293,6 @@ data class UploadTask(
     val replyToId: String?,
     val progress: Float = 0f,
     val failed: Boolean = false,
+    /** §13.15: human-readable failure reason (size cap vs network), when known. */
+    val errorMessage: String? = null,
 )

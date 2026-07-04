@@ -1,6 +1,7 @@
 package com.klic.mobile.app.feature.auth
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -23,6 +24,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.luminance
@@ -61,12 +63,23 @@ fun AuthTextField(
     var revealSecure by rememberSaveable { mutableStateOf(false) }
     val textColor = MaterialTheme.colorScheme.onBackground
     val keyboardController = LocalSoftwareKeyboardController.current
+    // §13.11: a tap ANYWHERE in the 52dp capsule focuses the field (not just the
+    // one-line text region), so the effective touch target is the whole pill.
+    val focusRequester = remember { androidx.compose.ui.focus.FocusRequester() }
+
 
     Row(
         modifier = modifier
             .fillMaxWidth()
             .height(52.dp)
             .background(AuthStyle.fieldFill(isDark), CircleShape)
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+            ) {
+                focusRequester.requestFocus()
+                keyboardController?.show()
+            }
             .padding(horizontal = 18.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -93,7 +106,9 @@ fun AuthTextField(
             BasicTextField(
                 value = value,
                 onValueChange = onValueChange,
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .focusRequester(focusRequester),
                 singleLine = true,
                 textStyle = TextStyle(
                     fontFamily = TikTokSans,
