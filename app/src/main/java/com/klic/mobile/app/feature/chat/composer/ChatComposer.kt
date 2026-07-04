@@ -31,15 +31,21 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
@@ -146,8 +152,12 @@ fun ComposerBar(
     onToggleCaptureMode: () -> Unit,
     onHoldStart: () -> Unit,
     onHoldEnd: () -> Unit,
+    // §15.1: reply preview lives INSIDE the input container (banner above the field).
+    replyAuthor: String? = null,
+    replyPreview: String = "",
+    onCancelReply: () -> Unit = {},
+    focusRequester: FocusRequester = remember { FocusRequester() },
 ) {
-    val focusRequester = remember { FocusRequester() }
     LaunchedEffect(Unit) {
         kotlinx.coroutines.delay(200)
         runCatching { focusRequester.requestFocus() }
@@ -157,6 +167,7 @@ fun ComposerBar(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 12.dp, vertical = 10.dp),
+        // All controls pin to the BOTTOM edge as the input grows (§15.1).
         verticalAlignment = Alignment.Bottom,
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
@@ -188,24 +199,45 @@ fun ComposerBar(
                 modifier = Modifier.size(22.dp),
             )
         }
-        TextField(
-            value = draft,
-            onValueChange = onChange,
-            modifier = Modifier.weight(1f).focusRequester(focusRequester),
-            placeholder = { Text(stringResource(R.string.composer_message), color = MaterialTheme.colorScheme.onSurfaceVariant) },
-            maxLines = 4,
-            // Fully rounded capsule, matching the Login-page inputs (§9.8).
-            shape = CircleShape,
-            colors = TextFieldDefaults.colors(
-                focusedContainerColor      = MaterialTheme.colorScheme.surfaceVariant,
-                unfocusedContainerColor    = MaterialTheme.colorScheme.surfaceVariant,
-                focusedIndicatorColor      = Color.Transparent,
-                unfocusedIndicatorColor    = Color.Transparent,
-                disabledIndicatorColor     = Color.Transparent,
-                focusedTextColor           = MaterialTheme.colorScheme.onSurface,
-                unfocusedTextColor         = MaterialTheme.colorScheme.onSurface,
-            ),
-        )
+        // §15.1: ONE rounded container holding the reply banner (when replying) on top
+        // and the text field below. The corner radius continuously flattens as the
+        // container grows: a full capsule at one line, easing down to a 16dp floor.
+        var inputHeightPx by remember { mutableIntStateOf(0) }
+        val density = LocalDensity.current
+        val singleLine = 56.dp   // M3 text-field single-line height → 28dp capsule radius
+        val cornerTarget = run {
+            val h = with(density) { inputHeightPx.toDp() }
+            if (inputHeightPx == 0 || h <= singleLine) singleLine / 2
+            else (singleLine / 2 * (singleLine.value / h.value)).coerceAtLeast(16.dp)
+        }
+        val corner by animateDpAsState(cornerTarget, label = "composerCorner")
+        Column(
+            Modifier
+                .weight(1f)
+                .onSizeChanged { inputHeightPx = it.height }
+                .clip(RoundedCornerShape(corner))
+                .background(MaterialTheme.colorScheme.surfaceVariant),
+        ) {
+            if (replyAuthor != null) {
+                InlineReplyBanner(replyAuthor, replyPreview, onCancelReply)
+            }
+            TextField(
+                value = draft,
+                onValueChange = onChange,
+                modifier = Modifier.fillMaxWidth().focusRequester(focusRequester),
+                placeholder = { Text(stringResource(R.string.composer_message), color = MaterialTheme.colorScheme.onSurfaceVariant) },
+                maxLines = 6,
+                colors = TextFieldDefaults.colors(
+                    focusedContainerColor      = Color.Transparent,
+                    unfocusedContainerColor    = Color.Transparent,
+                    focusedIndicatorColor      = Color.Transparent,
+                    unfocusedIndicatorColor    = Color.Transparent,
+                    disabledIndicatorColor     = Color.Transparent,
+                    focusedTextColor           = MaterialTheme.colorScheme.onSurface,
+                    unfocusedTextColor         = MaterialTheme.colorScheme.onSurface,
+                ),
+            )
+        }
 
         val canSend = hasPendingAttachments || draft.text.isNotBlank()
         if (canSend) {
@@ -226,6 +258,46 @@ fun ComposerBar(
                 onTap = onToggleCaptureMode,
                 onHoldStart = onHoldStart,
                 onHoldEnd = onHoldEnd,
+            )
+        }
+    }
+}
+
+/**
+ * §15.1: the "replying to …" preview rendered INSIDE the composer's input container,
+ * directly above the text field, sharing the container's single rounded shape.
+ */
+@Composable
+private fun InlineReplyBanner(authorName: String, preview: String, onCancel: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().padding(start = 14.dp, top = 10.dp, end = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            Modifier
+                .size(width = 3.dp, height = 32.dp)
+                .background(MaterialTheme.colorScheme.primary, RoundedCornerShape(2.dp)),
+        )
+        Column(Modifier.weight(1f).padding(start = 10.dp)) {
+            Text(
+                stringResource(R.string.actions_reply_to, authorName),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.primary,
+            )
+            Text(
+                preview,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        IconButton(onClick = onCancel, modifier = Modifier.size(32.dp)) {
+            Icon(
+                painter = painterResource(KlicIcons.close),
+                contentDescription = "Cancel reply",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(18.dp),
             )
         }
     }
