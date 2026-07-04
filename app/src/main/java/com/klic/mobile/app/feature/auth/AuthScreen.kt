@@ -17,40 +17,52 @@ import com.klic.mobile.app.feature.KlicViewModel
  * circle-container backdrop) instead of one toggle-mode form; this just hosts the
  * horizontal push between them, mirroring the iOS AuthView's navigation stack.
  */
+private enum class AuthPage { LOGIN, SIGN_UP, FORGOT }
+
 @Composable
 fun AuthScreen(vm: KlicViewModel) {
-    var showSignUp by rememberSaveable { mutableStateOf(false) }
+    var page by rememberSaveable { mutableStateOf(AuthPage.LOGIN) }
 
     // Don't carry a stale error from a previous visit into a fresh auth flow.
     androidx.compose.runtime.LaunchedEffect(Unit) { vm.error.value = null }
 
-    // Hardware back from Sign Up pops back to Login, like a navigation stack.
-    BackHandler(enabled = showSignUp) {
+    // Hardware back from Sign Up / Forgot pops back to Login, like a navigation stack.
+    BackHandler(enabled = page != AuthPage.LOGIN) {
         vm.error.value = null
-        showSignUp = false
+        page = AuthPage.LOGIN
     }
 
     AnimatedContent(
-        targetState = showSignUp,
+        targetState = page,
         transitionSpec = {
-            if (targetState) {
+            if (targetState != AuthPage.LOGIN) {
                 slideInHorizontally { it } togetherWith slideOutHorizontally { -it / 3 }
             } else {
                 slideInHorizontally { -it / 3 } togetherWith slideOutHorizontally { it }
             }
         },
         label = "authPages",
-    ) { signUp ->
-        if (signUp) {
-            SignUpScreen(vm, onHaveAccount = {
+    ) { current ->
+        when (current) {
+            AuthPage.SIGN_UP -> SignUpScreen(vm, onHaveAccount = {
                 vm.error.value = null
-                showSignUp = false
+                page = AuthPage.LOGIN
             })
-        } else {
-            LoginScreen(vm, onCreateAccount = {
+            AuthPage.FORGOT -> ForgotPasswordScreen(vm, onBack = {
                 vm.error.value = null
-                showSignUp = true
+                page = AuthPage.LOGIN
             })
+            AuthPage.LOGIN -> LoginScreen(
+                vm,
+                onCreateAccount = {
+                    vm.error.value = null
+                    page = AuthPage.SIGN_UP
+                },
+                onForgotPassword = {
+                    vm.error.value = null
+                    page = AuthPage.FORGOT
+                },
+            )
         }
     }
 }

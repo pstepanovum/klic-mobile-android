@@ -290,6 +290,37 @@ interface KlicApi {
     @DELETE("me/email")
     suspend fun removeEmail(): Response<ResponseBody>
 
+    // ── v0.6.0 (§18.2): account recovery — change password + recovery email ──
+
+    // Raw body: 401 on wrong current password surfaces via serverMessage().
+    @POST("auth/change-password")
+    suspend fun changePassword(@Body body: ChangePasswordRequest): ResponseBody
+
+    // Set an unverified recovery email; server triggers Firebase verification and
+    // returns the updated self-user. Non-2xx (409 email in use) throws HttpException.
+    @POST("me/email")
+    suspend fun setRecoveryEmail(@Body body: SetEmailRequest): User
+
+    @GET("me/email/status")
+    suspend fun emailStatus(): EmailStatusResponse
+
+    // ── v0.6.0 (§18.4): server-side message search ──
+
+    @GET("search/messages")
+    suspend fun searchMessages(
+        @Query("q") q: String,
+        @Query("limit") limit: Int = 30,
+        @Query("cursor") cursor: String? = null,
+    ): MessageSearchResponse
+
+    @GET("conversations/{id}/messages/search")
+    suspend fun searchConversationMessages(
+        @Path("id") id: String,
+        @Query("q") q: String,
+        @Query("limit") limit: Int = 50,
+        @Query("cursor") cursor: String? = null,
+    ): ConversationSearchResponse
+
     // ── v0.5.9 (§16.3/§16.4): pins + message editing (WP-S9) ──
 
     @POST("conversations/{id}/messages/{messageId}/pin")

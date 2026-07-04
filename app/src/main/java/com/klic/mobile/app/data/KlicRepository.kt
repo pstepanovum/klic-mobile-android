@@ -37,6 +37,12 @@ class KlicRepository(
     /** E2EE bridge — set by the container right after construction. */
     var e2ee: E2eeMessaging? = null
 
+    /**
+     * Supplies this install's stable id (shared with the crypto bundle) so every
+     * device registration keys the same server row. Set by the container. (§18.3)
+     */
+    var installIdProvider: (suspend () -> String)? = null
+
     // Authenticated as long as we hold a refresh token — the access token may be
     // expired but is renewable, so a stale access token must not look like a sign-out.
     val isAuthenticated: Boolean get() = tokenStore.hasSession
@@ -176,7 +182,13 @@ class KlicRepository(
     suspend fun userProfile(id: String): UserProfile = api.userProfile(id)
 
     suspend fun registerDevice(pushToken: String) {
-        runCatching { api.registerDevice(mapOf("platform" to "ANDROID", "pushToken" to pushToken)) }
+        runCatching {
+            val body = mutableMapOf("platform" to "ANDROID", "pushToken" to pushToken)
+            // §18.3: send the stable installId so the server keys device rows reliably and
+            // never loses a token under concurrent registrations. Harmless if unavailable.
+            installIdProvider?.let { body["installId"] = it() }
+            api.registerDevice(body)
+        }
     }
 
     suspend fun mobileDiagnostic(event: String, callId: String? = null, detail: String? = null) {
@@ -633,6 +645,35 @@ class KlicRepository(
         if (!res.isSuccessful) error("Email removal failed (${res.code()})")
         return refreshMe()
     }
+
+    // ── v0.6.0 (§18.2): account recovery ──────────────────────────────────────
+
+    /** POST /auth/change-password — 401 (wrong current) throws HttpException. */
+    suspend fun changePassword(currentPassword: String, newPassword: String) {
+        api.changePassword(ChangePasswordRequest(currentPassword, newPassword))
+    }
+
+    /** POST /me/email — set an unverified recovery email; 409 throws HttpException.
+     *  [password] is the current plaintext so the Firebase shadow gets a matching
+     *  password (needed for reset sync-back). Returns the updated self-user. */
+    suspend fun setRecoveryEmail(email: String, password: String?): User {
+        val user = api.setRecoveryEmail(SetEmailRequest(email, password))
+        currentUser = user
+        return user
+    }
+
+    /** GET /me/email/status — Firebase-backed verification state. */
+    suspend fun emailStatus(): EmailStatusResponse = api.emailStatus()
+
+    // ── v0.6.0 (§18.4): message search ────────────────────────────────────────
+
+    /** GET /search/messages — matches across every conversation the caller is in. */
+    suspend fun searchMessages(q: String, cursor: String? = null): MessageSearchResponse =
+        api.searchMessages(q = q, cursor = cursor)
+
+    /** GET /conversations/:id/messages/search — scoped ids+timestamps for in-chat jump. */
+    suspend fun searchConversationMessages(conversationId: String, q: String, cursor: String? = null): ConversationSearchResponse =
+        api.searchConversationMessages(conversationId, q, cursor = cursor)
 
     // ── v0.5.9 (§16.3/§16.4): pins + message editing ──────────────────────────
 

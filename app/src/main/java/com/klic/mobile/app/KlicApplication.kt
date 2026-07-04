@@ -115,7 +115,10 @@ class AppContainer(app: Application) {
     val passkeyManager = com.klic.mobile.app.data.PasskeyManager(repository)
     /** Email add/verify via Google (§12.2). */
     val googleEmailManager = com.klic.mobile.app.data.GoogleEmailManager(repository)
-    val e2eeKeys = E2eeKeyManager(appContext, api)
+    val e2eeKeys = E2eeKeyManager(appContext, api).also {
+        // §18.3: device registration reuses the crypto install's stable id.
+        repository.installIdProvider = it::installId
+    }
     val e2eeMessaging = E2eeMessaging(
         e2eeKeys,
         E2eeSessions(e2eeKeys, api),

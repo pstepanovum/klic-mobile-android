@@ -464,3 +464,58 @@ data class PinMessageRequest(val notify: Boolean)
 /** PATCH /conversations/:id/messages/:messageId — sender-only body edit (≤48h). */
 @Serializable
 data class EditMessageRequest(val body: String)
+
+// ── v0.6.0 (§18.2): account recovery ────────────────────────────────────────────
+
+/** POST /auth/change-password — verified against the Postgres hash server-side. */
+@Serializable
+data class ChangePasswordRequest(val currentPassword: String, val newPassword: String)
+
+/**
+ * POST /me/email — set an unverified recovery email + trigger Firebase verify.
+ * [password] is the user's current plaintext, passed so the Firebase shadow gets a
+ * MATCHING password (otherwise a Firebase-side reset can't sync back to login).
+ */
+@Serializable
+data class SetEmailRequest(val email: String, val password: String? = null)
+
+/** GET /me/email/status — Firebase-backed verification state. */
+@Serializable
+data class EmailStatusResponse(val email: String? = null, val emailVerified: Boolean = false)
+
+// ── v0.6.0 (§18.4): message search ──────────────────────────────────────────────
+
+/** GET /search/messages row — a match across any conversation the caller is in.
+ *  [snippet] wraps matched terms in <b>…</b>; strip or render bold. */
+@Serializable
+data class MessageSearchResult(
+    val conversationId: String,
+    val conversationTitle: String? = null,
+    val conversationAvatarUrl: String? = null,
+    val messageId: String,
+    val snippet: String? = null,
+    val kind: String? = null,
+    val senderName: String? = null,
+    val createdAt: String,
+)
+
+/** GET /search/messages envelope — results + opaque forward cursor. */
+@Serializable
+data class MessageSearchResponse(
+    val results: List<MessageSearchResult> = emptyList(),
+    val nextCursor: String? = null,
+)
+
+/** GET /conversations/:id/messages/search row — id + timestamp for in-chat jump. */
+@Serializable
+data class ConversationSearchHit(
+    val messageId: String,
+    val createdAt: String,
+)
+
+/** GET /conversations/:id/messages/search envelope — results + forward cursor. */
+@Serializable
+data class ConversationSearchResponse(
+    val results: List<ConversationSearchHit> = emptyList(),
+    val nextCursor: String? = null,
+)
