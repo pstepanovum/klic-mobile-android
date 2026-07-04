@@ -5,6 +5,12 @@
 
     <application
         android:usesCleartextTraffic="true"
-        tools:replace="android:usesCleartextTraffic" />
+        tools:replace="android:usesCleartextTraffic">
+        <!-- Debug-only harness to inspect the group-call grid layout without live peers. -->
+        <activity
+            android:name=".feature.call.CallGridDebugActivity"
+            android:exported="true"
+            android:theme="@style/Theme.Klic" />
+    </application>
 
 </manifest>

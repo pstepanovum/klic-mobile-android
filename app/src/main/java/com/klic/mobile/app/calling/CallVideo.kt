@@ -8,9 +8,10 @@ import io.livekit.android.renderer.TextureViewRenderer
 import io.livekit.android.room.Room
 import io.livekit.android.room.track.VideoTrack
 
-/** Renders a LiveKit [VideoTrack] inside Compose via a TextureViewRenderer. */
+/** Renders a LiveKit [VideoTrack] inside Compose via a TextureViewRenderer.
+ *  [mirror] flips the frame horizontally — selfie-style preview for the front camera (§17.1). */
 @Composable
-fun LiveKitVideo(room: Room?, track: VideoTrack?, modifier: Modifier = Modifier) {
+fun LiveKitVideo(room: Room?, track: VideoTrack?, modifier: Modifier = Modifier, mirror: Boolean = false) {
     if (room == null || track == null) return
     key(track.sid) {
         AndroidView(
@@ -18,9 +19,11 @@ fun LiveKitVideo(room: Room?, track: VideoTrack?, modifier: Modifier = Modifier)
             factory = { ctx ->
                 TextureViewRenderer(ctx).apply {
                     room.initVideoRenderer(this)
+                    setMirror(mirror)
                     track.addRenderer(this)
                 }
             },
+            update = { view -> view.setMirror(mirror) },
             onRelease = { view ->
                 track.removeRenderer(view)
                 view.release()
