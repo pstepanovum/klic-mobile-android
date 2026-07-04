@@ -26,10 +26,17 @@ object KlicIcons {
     val klicCheck = R.drawable.ic_klic_check
     // Combined "check and a half" glyph — delivered/read (§8.1, one asset, both paths).
     val klicCheckDouble = R.drawable.ic_klic_check_double
-    val add      = R.drawable.ic_bold_add
-    // Thin rounded plus — the composer's attach button (owner-supplied artwork,
-    // stroke follows the Icon tint).
+    // Thin rounded plus — ALL "+" affordances use this owner-supplied artwork
+    // (stroke follows the Icon tint).
+    val add      = R.drawable.ic_klic_plus
     val plus     = R.drawable.ic_klic_plus
+    // Owner-supplied settings artwork (stroke/fill follows the Icon tint).
+    val language = R.drawable.ic_klic_language
+    val bell     = R.drawable.ic_klic_bell
+    val data     = R.drawable.ic_klic_data
+    val qr       = R.drawable.ic_klic_qr
+    val update   = R.drawable.ic_klic_update
+    val report   = R.drawable.ic_klic_report
     val gallery  = R.drawable.ic_bold_gallery
     val document = R.drawable.ic_bold_document
     val star     = R.drawable.ic_line_star_1

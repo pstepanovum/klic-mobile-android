@@ -186,25 +186,25 @@ fun SettingsScreen(
                             HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
                             // §13.6: the Chat theme entry lives ONLY under Appearance.
                             SettingsRow(
-                                icon = painterResource(R.drawable.ic_line_notification),
+                                icon = painterResource(KlicIcons.bell),
                                 title = stringResource(R.string.settings_notifications),
                                 onClick = { route = SettingsRoute.Notifications },
                             )
                             HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
                             SettingsRow(
-                                icon = painterResource(R.drawable.ic_line_chart),
+                                icon = painterResource(KlicIcons.data),
                                 title = stringResource(R.string.settings_data_storage),
                                 onClick = { route = SettingsRoute.DataStorage },
                             )
                             HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
                             SettingsRow(
-                                icon = painterResource(R.drawable.ic_line_sun),
+                                icon = painterResource(KlicIcons.language),
                                 title = stringResource(R.string.settings_language),
                                 onClick = { route = SettingsRoute.Language },
                             )
                             HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
                             SettingsRow(
-                                icon = painterResource(KlicIcons.gallery),
+                                icon = painterResource(KlicIcons.qr),
                                 title = stringResource(R.string.settings_qr_code),
                                 onClick = { route = SettingsRoute.QrCode },
                             )
@@ -233,7 +233,7 @@ fun SettingsScreen(
                                 .padding(horizontal = 18.dp),
                         ) {
                             SettingsRow(
-                                icon = painterResource(R.drawable.ic_bold_arrow_bottom),
+                                icon = painterResource(KlicIcons.update),
                                 title = stringResource(R.string.settings_updates),
                                 onClick = { route = SettingsRoute.Updates },
                             )
@@ -256,7 +256,7 @@ fun SettingsScreen(
                             HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
                             // §12.1: target-less report — "something in the app is broken".
                             SettingsRow(
-                                icon = painterResource(R.drawable.ic_line_report),
+                                icon = painterResource(KlicIcons.report),
                                 title = stringResource(R.string.settings_report_problem),
                                 onClick = { showProblemReport = true },
                             )
