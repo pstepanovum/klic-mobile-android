@@ -306,10 +306,6 @@ fun SettingsScreen(
 
                         Spacer(Modifier.height(20.dp))
 
-                        KlicLottieView(
-                            name = "07",
-                            modifier = Modifier.fillMaxWidth().height(140.dp),
-                        )
                         Text(
                             stringResource(R.string.settings_version_format, versionName),
                             style = MaterialTheme.typography.labelSmall,
@@ -426,11 +422,9 @@ fun SettingsScreen(
                                 .padding(18.dp),
                             horizontalAlignment = Alignment.CenterHorizontally,
                         ) {
-                            Icon(
-                                painter = painterResource(KlicIcons.add),
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(56.dp),
+                            KlicLottieView(
+                                name = "07",
+                                modifier = Modifier.fillMaxWidth().height(140.dp),
                             )
                             Spacer(Modifier.height(12.dp))
                             Text(
