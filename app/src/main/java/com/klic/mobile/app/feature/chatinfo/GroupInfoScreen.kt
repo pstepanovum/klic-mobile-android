@@ -23,8 +23,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -122,9 +120,11 @@ fun GroupInfoScreen(
                             GroupInfoRoute.Main -> stringResource(R.string.group_info_title)
                             GroupInfoRoute.Search -> stringResource(R.string.group_search_messages)
                             is GroupInfoRoute.Sub -> when ((route as GroupInfoRoute.Sub).sub) {
-                                ChatInfoSub.MEDIA -> "Media, links, docs"
-                                ChatInfoSub.STARRED -> "Starred"
-                                ChatInfoSub.STORAGE -> "Manage storage"
+                                ChatInfoSub.MEDIA -> stringResource(R.string.info_media_links_docs)
+                                ChatInfoSub.STARRED -> stringResource(R.string.info_starred)
+                                ChatInfoSub.STORAGE -> stringResource(R.string.info_manage_storage)
+                                ChatInfoSub.THEME -> stringResource(R.string.info_chat_theme)
+                                ChatInfoSub.ENCRYPTION -> stringResource(R.string.info_encryption)
                             }
                         },
                         style = MaterialTheme.typography.titleMedium,
@@ -132,7 +132,11 @@ fun GroupInfoScreen(
                 },
                 navigationIcon = {
                     IconButton(onClick = { if (route == GroupInfoRoute.Main) onBack() else route = GroupInfoRoute.Main }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(
+                            painter = painterResource(KlicIcons.back),
+                            contentDescription = "Back",
+                            modifier = Modifier.size(24.dp),
+                        )
                     }
                 },
                 actions = {
@@ -163,6 +167,25 @@ fun GroupInfoScreen(
                         },
                     )
                     ChatInfoSub.STORAGE -> ManageStoragePage(conversationId)
+                    // §14.3: SHARED group theme — admin-only edit surface.
+                    ChatInfoSub.THEME -> Column(
+                        Modifier
+                            .widthIn(max = 680.dp)
+                            .fillMaxWidth()
+                            .verticalScroll(rememberScrollState())
+                            .padding(20.dp),
+                    ) {
+                        com.klic.mobile.app.feature.settings.GroupThemeContent(vm, conversationId)
+                    }
+                    // §14.3: encryption info page (lock row).
+                    ChatInfoSub.ENCRYPTION -> Column(
+                        Modifier
+                            .widthIn(max = 680.dp)
+                            .fillMaxWidth()
+                            .verticalScroll(rememberScrollState()),
+                    ) {
+                        EncryptionInfoPage()
+                    }
                 }
 
                 GroupInfoRoute.Search -> GroupMessageSearch(
@@ -207,8 +230,13 @@ private fun GroupInfoMain(
     val conversationId = conversation.id
     var memberSheet by remember { mutableStateOf<Member?>(null) }
     var removeTarget by remember { mutableStateOf<Member?>(null) }
+    // §14.3: member picked "Transfer admin" — confirm before the POST.
+    var transferTarget by remember { mutableStateOf<Member?>(null) }
     // §12.1: member picked "Report" on the action sheet.
     var reportTarget by remember { mutableStateOf<Member?>(null) }
+    // §14.3: friends list powers the member sheet's "Add friend" affordance.
+    val friends by vm.friends.collectAsState()
+    LaunchedEffect(Unit) { vm.loadFriends() }
     // §11.5: adjust step (pinch-zoom in a rounded-square mask) before the cover upload.
     var adjustCoverUri by remember { mutableStateOf<android.net.Uri?>(null) }
 
@@ -286,9 +314,10 @@ private fun GroupInfoMain(
         Spacer(Modifier.height(24.dp))
         ChatNotificationsCard(vm, conversationId, isGroup = true)
 
-        // ── Media / starred / storage ─────────────────────────────────────────
+        // ── Media / starred / theme / encryption / storage ────────────────────
         Spacer(Modifier.height(16.dp))
-        ChatInfoSectionsCard(conversationId) { onOpenSub(it) }
+        // §14.3: the shared group theme is admin-only; encryption info shows for all.
+        ChatInfoSectionsCard(conversationId, showThemeRow = conversation.isAdmin) { onOpenSub(it) }
 
         // ── Members ───────────────────────────────────────────────────────────
         Spacer(Modifier.height(16.dp))
@@ -361,13 +390,21 @@ private fun GroupInfoMain(
         )
     }
 
-    // Member action sheet — admins get the danger-zone "Remove from group" (§9.3);
-    // everyone gets "Report" (§12.1).
+    // §14.3: member profile sheet — identity (avatar/name/@username/About) with
+    // "Add friend" when applicable, plus admin actions: transfer admin (§14.3),
+    // remove from group (§9.3) and "Report" (§12.1) for everyone.
     memberSheet?.let { member ->
         MemberActionSheet(
             member = member,
             isCreator = conversation.createdById == member.id,
             canRemove = conversation.isAdmin && member.id != meId,
+            canTransfer = conversation.isAdmin && member.id != meId,
+            isFriend = friends.any { it.id == member.id },
+            onAddFriend = { vm.sendFriendRequestTo(member.id, member.displayName) },
+            onTransfer = {
+                memberSheet = null
+                transferTarget = member
+            },
             onRemove = {
                 memberSheet = null
                 removeTarget = member
@@ -405,6 +442,24 @@ private fun GroupInfoMain(
             },
             dismissButton = {
                 TextButton(onClick = { removeTarget = null }) { Text(stringResource(R.string.common_cancel)) }
+            },
+        )
+    }
+
+    // §14.3: confirm before handing the group over — permissions follow immediately.
+    transferTarget?.let { member ->
+        AlertDialog(
+            onDismissRequest = { transferTarget = null },
+            title = { Text(stringResource(R.string.group_transfer_confirm_title, member.displayName)) },
+            text = { Text(stringResource(R.string.group_transfer_confirm_body)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    vm.transferAdmin(conversationId, member.id)
+                    transferTarget = null
+                }) { Text(stringResource(R.string.group_transfer_admin), color = MaterialTheme.colorScheme.primary) }
+            },
+            dismissButton = {
+                TextButton(onClick = { transferTarget = null }) { Text(stringResource(R.string.common_cancel)) }
             },
         )
     }
@@ -480,58 +535,103 @@ private fun MemberRow(
     }
 }
 
-/** Rounded member sheet: identity header, "Report" (§12.1) + admin-only
- *  "Remove from group" (§9.3). */
+/** §14.3: member profile sheet — works for NON-FRIENDS too: avatar, display name,
+ *  @username, About (per visibility) and "Add friend" when applicable; then the
+ *  actions: admin-only "Transfer admin" (§14.3) + "Remove from group" (§9.3),
+ *  and "Report" (§12.1) for everyone. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun MemberActionSheet(
     member: Member,
     isCreator: Boolean,
     canRemove: Boolean,
+    canTransfer: Boolean,
+    isFriend: Boolean,
+    onAddFriend: () -> Unit,
+    onTransfer: () -> Unit,
     onRemove: () -> Unit,
     onReport: () -> Unit,
     onDismiss: () -> Unit,
 ) {
+    // Local "request sent" latch so a second tap can't double-send.
+    var requestSent by remember(member.id) { mutableStateOf(false) }
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         containerColor = MaterialTheme.colorScheme.background,
         shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
     ) {
-        Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 28.dp)) {
-            Row(
-                Modifier.fillMaxWidth().padding(bottom = 14.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                AvatarView(url = member.avatarUrl, name = member.displayName, size = 48.dp)
-                Column(Modifier.weight(1f).padding(start = 12.dp)) {
+        Column(
+            Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 28.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            AvatarView(url = member.avatarUrl, name = member.displayName, size = 84.dp)
+            Spacer(Modifier.height(10.dp))
+            Text(
+                member.displayName,
+                style = MaterialTheme.typography.titleLarge,
+                color = MaterialTheme.colorScheme.onBackground,
+                textAlign = TextAlign.Center,
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(
+                if (isCreator) {
+                    stringResource(R.string.group_member_username_admin, member.username)
+                } else "@${member.username}",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+            )
+            // §11.5: About/status line, when the member's visibility allows it.
+            member.about?.takeIf { it.isNotBlank() }?.let {
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    it,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    textAlign = TextAlign.Center,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            // §14.3: no phone numbers in Klic — the @username + Add friend stand in.
+            if (!isFriend) {
+                Spacer(Modifier.height(14.dp))
+                Button(
+                    onClick = { requestSent = true; onAddFriend() },
+                    enabled = !requestSent,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = CircleShape,
+                ) {
                     Text(
-                        member.displayName,
-                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
-                        color = MaterialTheme.colorScheme.onBackground,
+                        if (requestSent) stringResource(R.string.group_member_request_sent)
+                        else stringResource(R.string.group_member_add_friend),
+                        modifier = Modifier.padding(vertical = 6.dp),
                     )
-                    Text(
-                        if (isCreator) "@${member.username} · admin" else "@${member.username}",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    // §11.5: About/status line inside the member sheet.
-                    member.about?.takeIf { it.isNotBlank() }?.let {
-                        Text(
-                            it,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    }
                 }
             }
+            Spacer(Modifier.height(14.dp))
             Column(
                 Modifier
                     .fillMaxWidth()
                     .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(20.dp))
                     .padding(horizontal = 18.dp),
             ) {
+                if (canTransfer) {
+                    // §14.3: hand the group to this member (confirmed by the caller).
+                    Row(
+                        Modifier.fillMaxWidth().clickable(onClick = onTransfer).padding(vertical = 14.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            stringResource(R.string.group_transfer_admin),
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                    }
+                    androidx.compose.material3.HorizontalDivider(
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f),
+                    )
+                }
                 // §12.1: report this member — the shared report sheet, user target.
                 Row(
                     Modifier.fillMaxWidth().clickable(onClick = onReport).padding(vertical = 14.dp),

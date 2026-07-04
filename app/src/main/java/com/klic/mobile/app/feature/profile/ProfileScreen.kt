@@ -18,8 +18,6 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -105,6 +103,8 @@ fun ProfileScreen(
                             ChatInfoSub.MEDIA -> stringResource(R.string.info_media_links_docs)
                             ChatInfoSub.STARRED -> stringResource(R.string.info_starred)
                             ChatInfoSub.STORAGE -> stringResource(R.string.info_manage_storage)
+                            ChatInfoSub.THEME -> stringResource(R.string.info_chat_theme)
+                            ChatInfoSub.ENCRYPTION -> stringResource(R.string.info_encryption)
                             null -> stringResource(R.string.profile_title)
                         },
                         style = MaterialTheme.typography.titleMedium,
@@ -112,7 +112,11 @@ fun ProfileScreen(
                 },
                 navigationIcon = {
                     IconButton(onClick = { if (sub == null) onBack() else sub = null }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(
+                            painter = painterResource(KlicIcons.back),
+                            contentDescription = "Back",
+                            modifier = Modifier.size(24.dp),
+                        )
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
@@ -141,6 +145,35 @@ fun ProfileScreen(
             }
             ChatInfoSub.STORAGE -> Box(Modifier.fillMaxSize().padding(padding)) {
                 ManageStoragePage(conversationId)
+            }
+            // §14.3: per-DM LOCAL theme override, scoped to this conversation id.
+            ChatInfoSub.THEME -> Box(
+                Modifier.fillMaxSize().padding(padding),
+                contentAlignment = Alignment.TopCenter,
+            ) {
+                Column(
+                    Modifier
+                        .widthIn(max = 680.dp)
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState())
+                        .padding(20.dp),
+                ) {
+                    com.klic.mobile.app.feature.settings.ConversationThemeContent(conversationId)
+                }
+            }
+            // §14.3: encryption info page (lock row).
+            ChatInfoSub.ENCRYPTION -> Box(
+                Modifier.fillMaxSize().padding(padding),
+                contentAlignment = Alignment.TopCenter,
+            ) {
+                Column(
+                    Modifier
+                        .widthIn(max = 680.dp)
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState()),
+                ) {
+                    com.klic.mobile.app.feature.chatinfo.EncryptionInfoPage()
+                }
             }
             null -> {
                 val live = presenceMap[member.id]

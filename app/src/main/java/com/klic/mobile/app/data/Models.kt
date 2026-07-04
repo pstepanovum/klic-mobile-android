@@ -108,6 +108,21 @@ data class Conversation(
     val createdById: String? = null,    // group creator (drives the "Created by" footer)
     val createdAt: String? = null,
     val isAdmin: Boolean = false,       // true when the current user created this group
+    /** §14.3: shared group chat theme (admin-set, server-synced); null = none. */
+    val theme: ConversationTheme? = null,
+)
+
+/**
+ * §14.3: the server-shared group theme — mirrors WP-S8's zod shape on
+ * PATCH /conversations/:id {theme}. All fields optional; null theme = default.
+ */
+@Serializable
+data class ConversationTheme(
+    val pattern: Int? = null,
+    val patternOpacity: Float? = null,
+    val gradientId: String? = null,
+    val gradientIntensity: Float? = null,
+    val bubbleColorId: String? = null,
 )
 
 @Serializable

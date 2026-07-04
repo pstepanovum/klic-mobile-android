@@ -27,6 +27,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -42,22 +43,97 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.klic.mobile.app.R
 import com.klic.mobile.app.data.ChatThemeStore
+import com.klic.mobile.app.feature.KlicViewModel
 import com.klic.mobile.app.ui.components.ChatPatternImage
 import com.klic.mobile.app.ui.components.ChatThemeLayers
 import com.klic.mobile.app.ui.theme.KlicIcons
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
  * Chat theme page (§12.3): live mini-chat preview, pattern grid (default = 1),
  * pattern-opacity slider (clamped subtle), curated gradient presets + intensity,
- * own-bubble color palette, and a "Reset theme" button. Everything persists locally
- * through [ChatThemeStore] and applies to ALL conversations.
+ * own-bubble color palette, and a reset button. The GLOBAL page persists through
+ * [ChatThemeStore] and applies to every conversation without an override.
  */
 @Composable
 fun ChatThemeContent() {
     val theme by ChatThemeStore.snapshot.collectAsState()
     val scope = rememberCoroutineScope()
+    ChatThemeEditor(
+        theme = theme,
+        resetLabel = stringResource(R.string.theme_reset),
+        resetEnabled = !theme.isDefault,
+        footer = stringResource(R.string.theme_footer),
+        onChange = { updated -> scope.launch { ChatThemeStore.setGlobal(updated) } },
+        onReset = { scope.launch { ChatThemeStore.reset() } },
+    )
+}
 
+/**
+ * §14.3: per-DM LOCAL theme — the same editor scoped to ONE conversation id.
+ * "Use default theme" clears the override so the global theme applies again.
+ */
+@Composable
+fun ConversationThemeContent(conversationId: String) {
+    val global by ChatThemeStore.snapshot.collectAsState()
+    val overrides by ChatThemeStore.overrides.collectAsState()
+    val scope = rememberCoroutineScope()
+    val override = overrides[conversationId]
+    ChatThemeEditor(
+        theme = override ?: global,
+        resetLabel = stringResource(R.string.theme_use_default),
+        resetEnabled = override != null,
+        footer = stringResource(R.string.theme_footer_conversation),
+        onChange = { updated -> scope.launch { ChatThemeStore.setConversationTheme(conversationId, updated) } },
+        onReset = { scope.launch { ChatThemeStore.setConversationTheme(conversationId, null) } },
+    )
+}
+
+/**
+ * §14.3: SHARED group theme (admin-only edit surface) — commits debounced PATCHes to
+ * the server; members re-render live off the socket's conversation update.
+ */
+@Composable
+fun GroupThemeContent(vm: KlicViewModel, conversationId: String) {
+    val conversations by vm.conversations.collectAsState()
+    val serverTheme = conversations.firstOrNull { it.id == conversationId }?.theme
+    val scope = rememberCoroutineScope()
+    // Local draft for instant feedback; the PATCH is debounced so slider drags
+    // don't spam the server. The draft resets whenever the server state changes
+    // under us (another admin device, live socket update).
+    var draft by remember(conversationId, serverTheme) {
+        mutableStateOf(serverTheme?.let(ChatThemeStore::snapshotFrom))
+    }
+    var patchJob by remember { mutableStateOf<Job?>(null) }
+    fun commit(snapshot: ChatThemeStore.Snapshot?) {
+        patchJob?.cancel()
+        patchJob = scope.launch {
+            delay(400)
+            vm.updateGroupTheme(conversationId, snapshot?.let(ChatThemeStore::toConversationTheme))
+        }
+    }
+    ChatThemeEditor(
+        theme = draft ?: ChatThemeStore.Snapshot(),
+        resetLabel = stringResource(R.string.theme_use_default),
+        resetEnabled = draft != null || serverTheme != null,
+        footer = stringResource(R.string.theme_footer_group),
+        onChange = { updated -> draft = updated; commit(updated) },
+        onReset = { draft = null; commit(null) },
+    )
+}
+
+/** The shared theme editor body — stateless, fully driven by [theme] + [onChange]. */
+@Composable
+private fun ChatThemeEditor(
+    theme: ChatThemeStore.Snapshot,
+    resetLabel: String,
+    resetEnabled: Boolean,
+    footer: String,
+    onChange: (ChatThemeStore.Snapshot) -> Unit,
+    onReset: () -> Unit,
+) {
     // ── Live preview ─────────────────────────────────────────────────────────
     Box(
         Modifier
@@ -94,7 +170,7 @@ fun ChatThemeContent() {
                         id = id,
                         selected = theme.patternId == id,
                         modifier = Modifier.weight(1f),
-                        onClick = { scope.launch { ChatThemeStore.setPattern(id) } },
+                        onClick = { onChange(theme.copy(patternId = id)) },
                     )
                 }
                 // §13.1: pad short rows so every tile keeps the same size (no jag).
@@ -110,7 +186,7 @@ fun ChatThemeContent() {
         value = theme.patternOpacity,
         valueRange = ChatThemeStore.MIN_PATTERN_OPACITY..ChatThemeStore.MAX_PATTERN_OPACITY,
         valueLabel = "${(theme.patternOpacity * 100).toInt()}%",
-        onChangeFinished = { scope.launch { ChatThemeStore.setPatternOpacity(it) } },
+        onChangeFinished = { onChange(theme.copy(patternOpacity = it)) },
     )
 
     // ── Gradient presets + intensity ─────────────────────────────────────────
@@ -127,7 +203,7 @@ fun ChatThemeContent() {
             label = stringResource(R.string.theme_gradient_none),
             selected = theme.gradientId == ChatThemeStore.DEFAULT_GRADIENT,
             modifier = Modifier.weight(1f),
-            onClick = { scope.launch { ChatThemeStore.setGradient(ChatThemeStore.DEFAULT_GRADIENT) } },
+            onClick = { onChange(theme.copy(gradientId = ChatThemeStore.DEFAULT_GRADIENT)) },
         )
         ChatThemeStore.gradientPresets.forEach { preset ->
             GradientSwatch(
@@ -135,7 +211,7 @@ fun ChatThemeContent() {
                 label = null,
                 selected = theme.gradientId == preset.id,
                 modifier = Modifier.weight(1f),
-                onClick = { scope.launch { ChatThemeStore.setGradient(preset.id) } },
+                onClick = { onChange(theme.copy(gradientId = preset.id)) },
             )
         }
     }
@@ -146,7 +222,7 @@ fun ChatThemeContent() {
             value = theme.gradientIntensity,
             valueRange = 0f..1f,
             valueLabel = "${(theme.gradientIntensity * 100).toInt()}%",
-            onChangeFinished = { scope.launch { ChatThemeStore.setGradientIntensity(it) } },
+            onChangeFinished = { onChange(theme.copy(gradientIntensity = it)) },
         )
     }
 
@@ -170,7 +246,7 @@ fun ChatThemeContent() {
                             Modifier.border(3.dp, MaterialTheme.colorScheme.onBackground, CircleShape)
                         } else Modifier,
                     )
-                    .clickable { scope.launch { ChatThemeStore.setBubble(palette.id) } },
+                    .clickable { onChange(theme.copy(bubbleId = palette.id)) },
                 contentAlignment = Alignment.Center,
             ) {
                 if (theme.bubbleId == palette.id) {
@@ -188,19 +264,19 @@ fun ChatThemeContent() {
     // ── Reset ────────────────────────────────────────────────────────────────
     Spacer(Modifier.height(24.dp))
     Button(
-        onClick = { scope.launch { ChatThemeStore.reset() } },
+        onClick = onReset,
         modifier = Modifier.fillMaxWidth(),
         shape = CircleShape,
-        enabled = !theme.isDefault,
+        enabled = resetEnabled,
         colors = ButtonDefaults.buttonColors(
             containerColor = MaterialTheme.colorScheme.surfaceVariant,
             contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
         ),
-    ) { Text(stringResource(R.string.theme_reset), modifier = Modifier.padding(vertical = 6.dp)) }
+    ) { Text(resetLabel, modifier = Modifier.padding(vertical = 6.dp)) }
 
     Spacer(Modifier.height(8.dp))
     Text(
-        stringResource(R.string.theme_footer),
+        footer,
         style = MaterialTheme.typography.labelSmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         textAlign = TextAlign.Center,

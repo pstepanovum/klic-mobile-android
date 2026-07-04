@@ -118,6 +118,23 @@ class KlicViewModel(
             }
         }
         viewModelScope.launch {
+            // §14.3: live conversation updates (title/avatar/theme/admin transfer) — merge
+            // into the list so open screens re-render. isAdmin is recomputed locally from
+            // createdById because the fan-out payload isn't personalized.
+            socket.conversationUpdates.collect { updated ->
+                conversations.value = conversations.value.map { existing ->
+                    if (existing.id == updated.id) {
+                        val meId = currentUser.value?.id
+                        updated.copy(
+                            isAdmin = updated.createdById != null && updated.createdById == meId,
+                            lastMessage = updated.lastMessage ?: existing.lastMessage,
+                            unreadCount = existing.unreadCount,
+                        )
+                    } else existing
+                }
+            }
+        }
+        viewModelScope.launch {
             // §9.3: this user was removed from a group — drop the conversation locally.
             // Screens showing it (chat / group info) observe the list and pop themselves.
             socket.removedConversations.collect { convId ->
@@ -335,6 +352,13 @@ class KlicViewModel(
         }
     }
 
+    /** §14.3: "Add friend" from a group member's profile sheet — direct by user id. */
+    fun sendFriendRequestTo(userId: String, displayName: String) = viewModelScope.launch {
+        runCatching { repo.sendFriendRequest(userId) }
+            .onSuccess { error.value = str(com.klic.mobile.app.R.string.friends_request_sent, displayName) }
+            .onFailure { error.value = repo.serverMessage(it) ?: str(com.klic.mobile.app.R.string.err_friend_request) }
+    }
+
     fun acceptRequest(id: String) = viewModelScope.launch {
         runCatching { repo.acceptFriendRequest(id) }; loadFriends()
     }
@@ -414,6 +438,41 @@ class KlicViewModel(
                     } else c
                 }
                 error.value = str(com.klic.mobile.app.R.string.err_remove_member, removed.displayName)
+            }
+    }
+
+    /** §14.3: current admin hands the group to [userId] — optimistic, reverted on failure. */
+    fun transferAdmin(conversationId: String, userId: String) = viewModelScope.launch {
+        val before = conversations.value
+        conversations.value = conversations.value.map { c ->
+            if (c.id == conversationId) c.copy(createdById = userId, isAdmin = false) else c
+        }
+        runCatching { repo.transferAdmin(conversationId, userId) }
+            .onFailure {
+                conversations.value = before
+                error.value = repo.serverMessage(it)
+                    ?: str(com.klic.mobile.app.R.string.err_transfer_admin)
+            }
+    }
+
+    /** §14.3: admin sets (or clears) the SHARED group theme via PATCH /conversations/:id. */
+    fun updateGroupTheme(
+        conversationId: String,
+        theme: com.klic.mobile.app.data.ConversationTheme?,
+    ) = viewModelScope.launch {
+        val before = conversations.value
+        // Optimistic: members see it via the socket; the admin sees it instantly.
+        conversations.value = conversations.value.map { c ->
+            if (c.id == conversationId) c.copy(theme = theme) else c
+        }
+        runCatching { repo.updateConversationTheme(conversationId, theme) }
+            .onSuccess { updated ->
+                conversations.value = conversations.value.map { if (it.id == updated.id) updated else it }
+            }
+            .onFailure {
+                conversations.value = before
+                error.value = repo.serverMessage(it)
+                    ?: str(com.klic.mobile.app.R.string.err_group_theme)
             }
     }
 
@@ -606,6 +665,16 @@ class KlicViewModel(
                 }
             }
         }.onSuccess { msg ->
+            // §14.2: seed video thumbnails from the LOCAL source so the sender's bubble
+            // shows a real first frame instantly (no remote fetch of the video).
+            task.attachments.zip(msg.attachments).forEach { (input, uploaded) ->
+                if (uploaded.kind == "VIDEO" && input.localUri != null) {
+                    viewModelScope.launch {
+                        com.klic.mobile.app.feature.chat.media.VideoThumbnails
+                            .seedFromLocal(container.appContext, uploaded.url, input.localUri)
+                    }
+                }
+            }
             // In-place replacement: the pill leaves and the server message lands in the
             // same frame, so the list doesn't jump.
             uploadTasks.value = uploadTasks.value.filterNot { it.id == task.id }

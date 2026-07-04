@@ -28,7 +28,6 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Videocam
@@ -331,7 +330,14 @@ fun ChatScreen(
 
     // §12.3: chat theme — bubble color becomes `primary` inside, and the scaffold body
     // turns transparent over the background → gradient → pattern layer stack.
-    val chatTheme by com.klic.mobile.app.data.ChatThemeStore.snapshot.collectAsState()
+    // §14.3 precedence: group theme (server) > per-chat local override > global.
+    val globalTheme by com.klic.mobile.app.data.ChatThemeStore.snapshot.collectAsState()
+    val themeOverrides by com.klic.mobile.app.data.ChatThemeStore.overrides.collectAsState()
+    val chatTheme = remember(globalTheme, themeOverrides, conversation.id, conversation.theme) {
+        com.klic.mobile.app.data.ChatThemeStore.resolve(
+            globalTheme, themeOverrides[conversation.id], conversation.theme,
+        )
+    }
     com.klic.mobile.app.ui.components.ChatBubbleTheme(chatTheme) {
     Box(Modifier.fillMaxSize()) {
     // §13.4: the background stack is anchored to the SCREEN, not the keyboard-adjusted
@@ -377,7 +383,11 @@ fun ChatScreen(
                 },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(
+                            painter = androidx.compose.ui.res.painterResource(com.klic.mobile.app.ui.theme.KlicIcons.back),
+                            contentDescription = "Back",
+                            modifier = Modifier.size(24.dp),
+                        )
                     }
                 },
                 actions = {

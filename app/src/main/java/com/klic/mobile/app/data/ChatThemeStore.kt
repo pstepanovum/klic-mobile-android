@@ -8,6 +8,8 @@ import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import kotlinx.serialization.builtins.MapSerializer
+import kotlinx.serialization.builtins.serializer
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -115,6 +117,23 @@ object ChatThemeStore {
     private val _snapshot = MutableStateFlow(Snapshot())
     val snapshot: StateFlow<Snapshot> = _snapshot
 
+    // §14.3: per-conversation LOCAL overrides (DM chat themes) — conversation id →
+    // full theme snapshot, persisted as one JSON map in the same DataStore.
+    private val _overrides = MutableStateFlow<Map<String, Snapshot>>(emptyMap())
+    val overrides: StateFlow<Map<String, Snapshot>> = _overrides
+
+    @kotlinx.serialization.Serializable
+    private data class OverrideDto(
+        val patternId: Int = DEFAULT_PATTERN,
+        val patternOpacity: Float = DEFAULT_PATTERN_OPACITY,
+        val gradientId: String = DEFAULT_GRADIENT,
+        val gradientIntensity: Float = DEFAULT_GRADIENT_INTENSITY,
+        val bubbleId: String = DEFAULT_BUBBLE,
+    )
+
+    private val json = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
+    private val overridesSerializer = MapSerializer(String.serializer(), OverrideDto.serializer())
+
     private lateinit var appContext: Context
 
     /** Idempotent; call once from Application.onCreate. */
@@ -124,9 +143,63 @@ object ChatThemeStore {
         scope.launch {
             appContext.chatThemeDataStore.data.collect { prefs ->
                 _snapshot.value = parse(prefs)
+                _overrides.value = parseOverrides(prefs)
             }
         }
     }
+
+    /** §14.3: set (or clear with null) the local theme override for one conversation. */
+    suspend fun setConversationTheme(conversationId: String, theme: Snapshot?) = edit { prefs ->
+        val current = parseOverridesMap(prefs[CONV_OVERRIDES])
+        val next = if (theme == null) current - conversationId else current + (conversationId to theme.toDto())
+        if (next.isEmpty()) {
+            prefs.remove(CONV_OVERRIDES)
+        } else {
+            prefs[CONV_OVERRIDES] = json.encodeToString(overridesSerializer, next)
+        }
+    }
+
+    /** §14.3: server group theme → a full snapshot (missing fields fall to defaults). */
+    fun snapshotFrom(theme: ConversationTheme): Snapshot = Snapshot(
+        patternId = (theme.pattern ?: DEFAULT_PATTERN).coerceIn(1, PATTERN_COUNT),
+        patternOpacity = (theme.patternOpacity ?: DEFAULT_PATTERN_OPACITY)
+            .coerceIn(MIN_PATTERN_OPACITY, MAX_PATTERN_OPACITY),
+        gradientId = theme.gradientId ?: DEFAULT_GRADIENT,
+        gradientIntensity = (theme.gradientIntensity ?: DEFAULT_GRADIENT_INTENSITY).coerceIn(0f, 1f),
+        bubbleId = theme.bubbleId(),
+    )
+
+    /** Snapshot → the server wire shape (WP-S8 zod) for the group-theme PATCH. */
+    fun toConversationTheme(snapshot: Snapshot): ConversationTheme = ConversationTheme(
+        pattern = snapshot.patternId,
+        patternOpacity = snapshot.patternOpacity,
+        gradientId = snapshot.gradientId.takeIf { it != DEFAULT_GRADIENT },
+        gradientIntensity = snapshot.gradientIntensity,
+        bubbleColorId = snapshot.bubbleId,
+    )
+
+    /** §14.3 precedence: group (server) > per-chat local > global. */
+    fun resolve(global: Snapshot, override: Snapshot?, group: ConversationTheme?): Snapshot =
+        group?.let { snapshotFrom(it) } ?: override ?: global
+
+    private fun ConversationTheme.bubbleId(): String =
+        bubbleColorId?.takeIf { id -> bubblePalettes.any { it.id == id } } ?: DEFAULT_BUBBLE
+
+    private fun Snapshot.toDto() = OverrideDto(patternId, patternOpacity, gradientId, gradientIntensity, bubbleId)
+
+    private fun OverrideDto.toSnapshot() = Snapshot(
+        patternId = patternId.coerceIn(1, PATTERN_COUNT),
+        patternOpacity = patternOpacity.coerceIn(MIN_PATTERN_OPACITY, MAX_PATTERN_OPACITY),
+        gradientId = gradientId,
+        gradientIntensity = gradientIntensity.coerceIn(0f, 1f),
+        bubbleId = bubbleId,
+    )
+
+    private fun parseOverridesMap(raw: String?): Map<String, OverrideDto> =
+        raw?.let { runCatching { json.decodeFromString(overridesSerializer, it) }.getOrNull() } ?: emptyMap()
+
+    private fun parseOverrides(prefs: Preferences): Map<String, Snapshot> =
+        parseOverridesMap(prefs[CONV_OVERRIDES]).mapValues { (_, dto) -> dto.toSnapshot() }
 
     suspend fun setPattern(id: Int) = edit {
         it[PATTERN] = id.coerceIn(1, PATTERN_COUNT)
@@ -144,6 +217,15 @@ object ChatThemeStore {
 
     suspend fun setBubble(id: String) = edit { it[BUBBLE] = id }
 
+    /** §14.3: write the whole global theme in one DataStore edit (theme editor commits). */
+    suspend fun setGlobal(snapshot: Snapshot) = edit {
+        it[PATTERN] = snapshot.patternId.coerceIn(1, PATTERN_COUNT)
+        it[PATTERN_OPACITY] = snapshot.patternOpacity.coerceIn(MIN_PATTERN_OPACITY, MAX_PATTERN_OPACITY)
+        it[GRADIENT] = snapshot.gradientId
+        it[GRADIENT_INTENSITY] = snapshot.gradientIntensity.coerceIn(0f, 1f)
+        it[BUBBLE] = snapshot.bubbleId
+    }
+
     /** "Reset theme" — back to pattern 1, default opacity, no gradient, Klic red. */
     suspend fun reset() = edit {
         it.remove(PATTERN)
@@ -153,6 +235,7 @@ object ChatThemeStore {
         it.remove(BUBBLE)
     }
 
+    private val CONV_OVERRIDES = stringPreferencesKey("conversation_overrides")
     private val PATTERN = intPreferencesKey("pattern_id")
     private val PATTERN_OPACITY = floatPreferencesKey("pattern_opacity")
     private val GRADIENT = stringPreferencesKey("gradient_id")
