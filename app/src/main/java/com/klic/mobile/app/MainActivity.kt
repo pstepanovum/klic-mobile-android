@@ -408,7 +408,15 @@ class MainActivity : ComponentActivity() {
                     CallDialScreen(vm)
                 }
                 composable("settings") {
-                    SettingsScreen(vm, onEditProfile = { navController.navigate("edit_profile") })
+                    SettingsScreen(
+                        vm,
+                        onEditProfile = { navController.navigate("edit_profile") },
+                        // §14.4: a saved message opens its conversation at the message.
+                        onOpenMessage = { conversationId, messageId ->
+                            vm.requestJumpTo(messageId)
+                            navController.navigate("chat/$conversationId") { launchSingleTop = true }
+                        },
+                    )
                 }
                 composable("edit_profile") {
                     EditProfileScreen(vm) { navController.popBackStack() }
