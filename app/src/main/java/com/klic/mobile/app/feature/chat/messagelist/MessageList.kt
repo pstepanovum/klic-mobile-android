@@ -40,13 +40,16 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextLinkStyles
+import androidx.compose.ui.text.style.ResolvedTextDirection
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
@@ -208,29 +211,16 @@ internal fun MessageBubble(
                                 }
                             }
                             BentoMediaGrid(mediaAtts, tileRadius = 14.dp, onMediaClick = onMediaClick, onLongPress = onLongPress)
-                            Row(
-                                verticalAlignment = Alignment.Bottom,
+                            // §15.2: caption + tucked time/ticks share the media card width.
+                            BodyWithInlineMeta(
+                                body = message.body,
+                                highlightMentions = highlightMentions,
+                                accent = mentionAccent(isMine),
+                                mentionNames = mentionNames,
+                                textColor = textColor,
                                 modifier = Modifier.width(240.dp).padding(horizontal = 6.dp, vertical = 6.dp),
                             ) {
-                                MessageBodyText(
-                                    body = message.body,
-                                    highlightMentions = highlightMentions,
-                                    accent = mentionAccent(isMine),
-                                    mentionNames = mentionNames,
-                                    textColor = textColor,
-                                    modifier = Modifier.weight(1f, fill = false),
-                                )
-                                Spacer(Modifier.width(6.dp))
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(3.dp),
-                                ) {
-                                    if (message.starred) StarIndicator(timeColor)
-                                    Text(time, style = MaterialTheme.typography.labelSmall, color = timeColor)
-                                    if (status != null) {
-                                        MessageTicks(status = status, onPrimary = isMine)
-                                    }
-                                }
+                                MetaRow(time, status, message.starred, timeColor, isMine)
                             }
                             // §14.5: reactions inside the card's bottom edge.
                             ReactionChipsInline(
@@ -372,33 +362,16 @@ internal fun MessageBubble(
                                     else MaterialTheme.colorScheme.onSurfaceVariant
                     Column {
                         message.replyTo?.let { ReplyQuote(it, replyAuthorName, onPrimary = isMine) }
-                        // Message body + inline time + ticks, aligned to bottom of last text line.
-                        Row(verticalAlignment = Alignment.Bottom) {
-                            if (message.body.isNotBlank()) {
-                                MessageBodyText(
-                                    body = message.body,
-                                    highlightMentions = highlightMentions,
-                                    accent = mentionAccent(isMine),
-                                    mentionNames = mentionNames,
-                                    textColor = textColor,
-                                    modifier = Modifier.weight(1f, fill = false),
-                                )
-                            }
-                            Spacer(Modifier.width(6.dp))
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(3.dp),
-                            ) {
-                                if (message.starred) StarIndicator(timeColor)
-                                Text(
-                                    time,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = timeColor,
-                                )
-                                if (status != null) {
-                                    MessageTicks(status = status, onPrimary = isMine)
-                                }
-                            }
+                        // §15.2: body text with the time+ticks tucked into the last
+                        // line's trailing gap when they fit, else a compact trailing row.
+                        BodyWithInlineMeta(
+                            body = message.body,
+                            highlightMentions = highlightMentions,
+                            accent = mentionAccent(isMine),
+                            mentionNames = mentionNames,
+                            textColor = textColor,
+                        ) {
+                            MetaRow(time, status, message.starred, timeColor, isMine)
                         }
                         // §14.5: reactions at the bubble's bottom edge, inside it.
                         ReactionChipsInline(
@@ -601,6 +574,7 @@ internal fun MessageBodyText(
     mentionNames: List<String>,
     textColor: Color,
     modifier: Modifier = Modifier,
+    onTextLayout: (TextLayoutResult) -> Unit = {},
 ) {
     val context = LocalContext.current
     val annotated = remember(body, highlightMentions, accent, mentionNames, textColor) {
@@ -633,7 +607,101 @@ internal fun MessageBodyText(
             }
         }
     }
-    Text(annotated, color = textColor, style = MaterialTheme.typography.bodyLarge, modifier = modifier)
+    Text(
+        annotated,
+        color = textColor,
+        style = MaterialTheme.typography.bodyLarge,
+        onTextLayout = onTextLayout,
+        modifier = modifier,
+    )
+}
+
+// MARK: - Inline time+ticks tucking (§15.2)
+
+/** The star + time + ticks cluster shown at a bubble's trailing edge. */
+@Composable
+internal fun MetaRow(
+    time: String,
+    status: String?,
+    starred: Boolean,
+    timeColor: Color,
+    isMine: Boolean,
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(3.dp),
+    ) {
+        if (starred) StarIndicator(timeColor)
+        Text(time, style = MaterialTheme.typography.labelSmall, color = timeColor)
+        if (status != null) MessageTicks(status = status, onPrimary = isMine)
+    }
+}
+
+/**
+ * §15.2: lays out the body text with the [meta] cluster (time + ticks) tucked into
+ * the LAST line's trailing gap when it fits there, and wrapped to a compact
+ * bottom-trailing row only when it doesn't — the bubble always hugs the longest
+ * text line and never reserves an empty band beside every line.
+ */
+@Composable
+internal fun BodyWithInlineMeta(
+    body: String,
+    highlightMentions: Boolean,
+    accent: Color,
+    mentionNames: List<String>,
+    textColor: Color,
+    modifier: Modifier = Modifier,
+    metaSpacing: Dp = 6.dp,
+    meta: @Composable () -> Unit,
+) {
+    if (body.isBlank()) {
+        Box(modifier) { meta() }
+        return
+    }
+    // Written by the text child during its measure pass, read right after below.
+    var textLayout: TextLayoutResult? = null
+    Layout(
+        modifier = modifier,
+        content = {
+            MessageBodyText(
+                body = body,
+                highlightMentions = highlightMentions,
+                accent = accent,
+                mentionNames = mentionNames,
+                textColor = textColor,
+                onTextLayout = { textLayout = it },
+            )
+            meta()
+        },
+    ) { measurables, constraints ->
+        val loose = constraints.copy(minWidth = 0, minHeight = 0)
+        val text = measurables[0].measure(loose)
+        val metaPlaceable = measurables[1].measure(loose)
+        val spacing = metaSpacing.roundToPx()
+        val layoutResult = textLayout
+
+        val lastLine = (layoutResult?.lineCount ?: 1) - 1
+        val lastLineEnd = layoutResult?.getLineRight(lastLine) ?: text.width.toFloat()
+        // RTL paragraphs end at the LEFT edge — always give the meta its own row there.
+        val lastLineRtl = layoutResult
+            ?.getParagraphDirection(layoutResult.getLineStart(lastLine)) == ResolvedTextDirection.Rtl
+        val neededInline = kotlin.math.ceil(lastLineEnd).toInt() + spacing + metaPlaceable.width
+        val fitsInline = !lastLineRtl && neededInline <= constraints.maxWidth
+
+        val width: Int
+        val height: Int
+        if (fitsInline) {
+            width = maxOf(text.width, neededInline).coerceIn(constraints.minWidth, constraints.maxWidth)
+            height = text.height
+        } else {
+            width = maxOf(text.width, metaPlaceable.width).coerceIn(constraints.minWidth, constraints.maxWidth)
+            height = text.height + metaPlaceable.height
+        }
+        layout(width, height) {
+            text.place(0, 0)
+            metaPlaceable.place(width - metaPlaceable.width, height - metaPlaceable.height)
+        }
+    }
 }
 
 // MARK: - Big emoji (§10.3)

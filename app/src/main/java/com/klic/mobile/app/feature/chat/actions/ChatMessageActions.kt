@@ -262,28 +262,6 @@ fun ReplyQuote(reply: ReplyPreview, authorName: String, onPrimary: Boolean = fal
     }
 }
 
-@Composable
-fun ReplyComposerBar(authorName: String, preview: String, onCancel: () -> Unit) {
-    Row(
-        Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(horizontal = 14.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Box(Modifier.size(width = 3.dp, height = 32.dp).background(MaterialTheme.colorScheme.primary, RoundedCornerShape(2.dp)))
-        Column(Modifier.weight(1f).padding(start = 10.dp)) {
-            Text(stringResource(R.string.actions_reply_to, authorName), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
-            Text(preview, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
-        }
-        IconButton(onClick = onCancel) {
-            Icon(
-                painter = androidx.compose.ui.res.painterResource(com.klic.mobile.app.ui.theme.KlicIcons.close),
-                contentDescription = "Cancel reply",
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(20.dp),
-            )
-        }
-    }
-}
-
 // MARK: - Tombstone
 
 @Composable

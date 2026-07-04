@@ -74,7 +74,7 @@ import com.klic.mobile.app.data.Conversation
 import com.klic.mobile.app.data.Message
 import com.klic.mobile.app.feature.KlicViewModel
 import com.klic.mobile.app.feature.chat.actions.MessageActionsOverlay
-import com.klic.mobile.app.feature.chat.actions.ReplyComposerBar
+import androidx.compose.ui.focus.FocusRequester
 import com.klic.mobile.app.feature.chat.actions.TypingBubble
 import com.klic.mobile.app.feature.chat.composer.CaptureMode
 import com.klic.mobile.app.feature.chat.composer.KlicAttachmentSheet
@@ -103,6 +103,7 @@ import com.klic.mobile.app.feature.chat.messagelist.MessageBubble
 import com.klic.mobile.app.feature.chat.messagelist.messagePreview
 import com.klic.mobile.app.feature.chat.messagelist.presenceSubtitle
 import com.klic.mobile.app.feature.chat.messagelist.sameDay
+import com.klic.mobile.app.feature.chat.messagelist.SwipeToReplyContainer
 import com.klic.mobile.app.feature.chat.stickers.StickerPickerSheet
 import com.klic.mobile.app.feature.chat.voice.VoiceRecorder
 import com.klic.mobile.app.ui.components.AvatarView
@@ -168,6 +169,11 @@ fun ChatScreen(
 
     val typingMap by vm.typing.collectAsState()
     val replyingTo by vm.replyingTo.collectAsState()
+    // §15.3: starting a reply (swipe or long-press) focuses the composer input.
+    val composerFocus = remember { FocusRequester() }
+    LaunchedEffect(replyingTo) {
+        if (replyingTo != null) runCatching { composerFocus.requestFocus() }
+    }
     val clipboard = LocalClipboardManager.current
     var menuTarget by remember { mutableStateOf<Message?>(null) }
     var deleteTarget by remember { mutableStateOf<Message?>(null) }
@@ -444,29 +450,35 @@ fun ChatScreen(
                     if (idx == 0 || !sameDay(messages[idx - 1].createdAt, msg.createdAt)) {
                         DateSeparator(msg.createdAt)
                     }
-                    MessageBubble(
-                        message = msg,
-                        isMine  = isMine,
-                        isFirst = isFirst,
-                        isLast  = isLast,
-                        replyAuthorName = msg.replyTo?.let { if (it.senderId == me?.id) stringResource(R.string.common_you) else title } ?: "",
-                        highlightMentions = !isDirect,
-                        mentionNames = mentionableNames,
-                        onCallBack = { kind -> vm.startCall(conversation.id, kind, title); onCall(kind) },
-                        onLongPress = { menuTarget = msg },
-                        onReactionTap = { emoji -> vm.react(conversation.id, msg.id, emoji) },
-                        onMediaClick = { att -> viewerTarget = msg to att },
-                        onFileClick = { att ->
-                            scope.launch {
-                                val file = AttachmentDownloads.ensureLocal(context, att, conversation.id)
-                                when {
-                                    file == null -> vm.error.value = context.getString(R.string.err_download_file)
-                                    isPdfAttachment(att) -> pdfFile = file
-                                    else -> fileDetail = att to file
+                    // §15.3: swipe any bubble LEFT to reply (own and peer, every kind).
+                    SwipeToReplyContainer(
+                        enabled = !msg.isDeleted && msg.kind != "SYSTEM" && !msg.isCallEvent,
+                        onReply = { vm.setReplyTo(msg) },
+                    ) {
+                        MessageBubble(
+                            message = msg,
+                            isMine  = isMine,
+                            isFirst = isFirst,
+                            isLast  = isLast,
+                            replyAuthorName = msg.replyTo?.let { if (it.senderId == me?.id) stringResource(R.string.common_you) else title } ?: "",
+                            highlightMentions = !isDirect,
+                            mentionNames = mentionableNames,
+                            onCallBack = { kind -> vm.startCall(conversation.id, kind, title); onCall(kind) },
+                            onLongPress = { menuTarget = msg },
+                            onReactionTap = { emoji -> vm.react(conversation.id, msg.id, emoji) },
+                            onMediaClick = { att -> viewerTarget = msg to att },
+                            onFileClick = { att ->
+                                scope.launch {
+                                    val file = AttachmentDownloads.ensureLocal(context, att, conversation.id)
+                                    when {
+                                        file == null -> vm.error.value = context.getString(R.string.err_download_file)
+                                        isPdfAttachment(att) -> pdfFile = file
+                                        else -> fileDetail = att to file
+                                    }
                                 }
-                            }
-                        },
-                    )
+                            },
+                        )
+                    }
                 }
                 if (peerTyping) {
                     item {
@@ -557,13 +569,6 @@ fun ChatScreen(
                         onEdit = { id -> editorTarget = pendingMedia.firstOrNull { it.id == id } },
                     )
                 }
-                replyingTo?.let { target ->
-                    ReplyComposerBar(
-                        authorName = if (target.senderId == me?.id) stringResource(R.string.chat_yourself) else title,
-                        preview = messagePreview(target),
-                        onCancel = { vm.setReplyTo(null) },
-                    )
-                }
                 // §9.5: typing "@" in a group composer offers members + @all above the input.
                 val mentionQuery = if (isDirect) null else mentionQueryAt(draft.text, draft.selection.start)
                 if (mentionQuery != null) {
@@ -587,6 +592,13 @@ fun ChatScreen(
                 }
                 ComposerBar(
                     draft    = draft,
+                    // §15.1: reply preview renders inside the composer's input container.
+                    replyAuthor = replyingTo?.let { target ->
+                        if (target.senderId == me?.id) stringResource(R.string.chat_yourself) else title
+                    },
+                    replyPreview = replyingTo?.let { messagePreview(it) } ?: "",
+                    onCancelReply = { vm.setReplyTo(null) },
+                    focusRequester = composerFocus,
                     onChange = { draft = it; vm.setTyping(conversation.id, it.text.isNotBlank()) },
                     onSend   = {
                         if (pendingMedia.isNotEmpty()) {
