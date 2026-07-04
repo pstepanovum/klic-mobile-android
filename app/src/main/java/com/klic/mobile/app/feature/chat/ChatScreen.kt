@@ -661,13 +661,43 @@ fun ChatScreen(
                                 RoundedCornerShape(10.dp),
                             ),
                     ) {
+                    // §16.1: when the server's ReplyPreview lacks the parent's media
+                    // (pre-WP-S9 servers) but the parent is loaded in this window,
+                    // enrich the quote card locally so the thumbnail still renders.
+                    val displayMsg = msg.replyTo?.let { r ->
+                        if (r.attachment != null || r.deleted == true) {
+                            msg
+                        } else {
+                            val parent = messages.firstOrNull { it.id == r.id }
+                            val parentAtt = parent?.attachments?.firstOrNull()
+                            when {
+                                parent == null -> msg
+                                parent.isDeleted -> msg.copy(replyTo = r.copy(deleted = true))
+                                parentAtt != null -> msg.copy(
+                                    replyTo = r.copy(
+                                        attachment = com.klic.mobile.app.data.ReplyAttachment(
+                                            id = parentAtt.id,
+                                            kind = parentAtt.kind,
+                                            url = parentAtt.url,
+                                            contentType = parentAtt.contentType,
+                                            width = parentAtt.width,
+                                            height = parentAtt.height,
+                                            durationMs = parentAtt.durationMs,
+                                            fileName = parentAtt.fileName,
+                                        ),
+                                    ),
+                                )
+                                else -> msg
+                            }
+                        }
+                    } ?: msg
                     // §15.3: swipe any bubble LEFT to reply (own and peer, every kind).
                     SwipeToReplyContainer(
                         enabled = !msg.isDeleted && msg.kind != "SYSTEM" && !msg.isCallEvent,
                         onReply = { vm.setReplyTo(msg) },
                     ) {
                         MessageBubble(
-                            message = msg,
+                            message = displayMsg,
                             isMine  = isMine,
                             isFirst = isFirst,
                             isLast  = isLast,

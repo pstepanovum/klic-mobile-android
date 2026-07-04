@@ -256,28 +256,15 @@ fun ComposerBar(
                     ),
                 ) {
                     Icon(
-                        painter = painterResource(KlicIcons.add),
+                        painter = painterResource(KlicIcons.plus),
                         contentDescription = "Attach",
-                        modifier = Modifier.size(20.dp),
-                    )
-                }
-                IconButton(
-                    onClick = onStickers,
-                    modifier = Modifier.size(44.dp),
-                    colors = IconButtonDefaults.iconButtonColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                        contentColor   = MaterialTheme.colorScheme.onSurfaceVariant,
-                    ),
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.EmojiEmotions,
-                        contentDescription = "Stickers",
-                        modifier = Modifier.size(22.dp),
+                        modifier = Modifier.size(24.dp),
                     )
                 }
                 // §15.1: ONE rounded container holding the reply/edit banner (when active)
-                // on top and the text field below. The corner radius continuously flattens
-                // as the container grows: a full capsule at one line, easing to 16dp.
+                // on top and the emoji button + text field below. The corner radius
+                // continuously flattens as the container grows: a full capsule at one
+                // line, easing to 16dp.
                 var inputHeightPx by remember { mutableIntStateOf(0) }
                 val singleLine = 56.dp   // M3 text-field single-line height → 28dp capsule radius
                 val cornerTarget = run {
@@ -308,22 +295,36 @@ fun ComposerBar(
                             onCancel = onCancelReply,
                         )
                     }
-                    TextField(
-                        value = draft,
-                        onValueChange = onChange,
-                        modifier = Modifier.fillMaxWidth().focusRequester(focusRequester),
-                        placeholder = { Text(stringResource(R.string.composer_message), color = MaterialTheme.colorScheme.onSurfaceVariant) },
-                        maxLines = 6,
-                        colors = TextFieldDefaults.colors(
-                            focusedContainerColor      = Color.Transparent,
-                            unfocusedContainerColor    = Color.Transparent,
-                            focusedIndicatorColor      = Color.Transparent,
-                            unfocusedIndicatorColor    = Color.Transparent,
-                            disabledIndicatorColor     = Color.Transparent,
-                            focusedTextColor           = MaterialTheme.colorScheme.onSurface,
-                            unfocusedTextColor         = MaterialTheme.colorScheme.onSurface,
-                        ),
-                    )
+                    // Emoji lives INSIDE the input pill, pinned to its bottom edge.
+                    Row(verticalAlignment = Alignment.Bottom) {
+                        IconButton(
+                            onClick = onStickers,
+                            modifier = Modifier.size(width = 40.dp, height = 56.dp),
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.EmojiEmotions,
+                                contentDescription = "Stickers",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(22.dp),
+                            )
+                        }
+                        TextField(
+                            value = draft,
+                            onValueChange = onChange,
+                            modifier = Modifier.weight(1f).focusRequester(focusRequester),
+                            placeholder = { Text(stringResource(R.string.composer_message), color = MaterialTheme.colorScheme.onSurfaceVariant) },
+                            maxLines = 6,
+                            colors = TextFieldDefaults.colors(
+                                focusedContainerColor      = Color.Transparent,
+                                unfocusedContainerColor    = Color.Transparent,
+                                focusedIndicatorColor      = Color.Transparent,
+                                unfocusedIndicatorColor    = Color.Transparent,
+                                disabledIndicatorColor     = Color.Transparent,
+                                focusedTextColor           = MaterialTheme.colorScheme.onSurface,
+                                unfocusedTextColor         = MaterialTheme.colorScheme.onSurface,
+                            ),
+                        )
+                    }
                 }
             }
             RecordPhase.HELD -> {

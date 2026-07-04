@@ -192,6 +192,13 @@ class VideoNoteSession(private val context: Context) {
                     val ok = !event.hasError() && !canceled && f.length() > 0L
                     if (!ok) f.delete()
                     finishNow(if (ok) f else null)
+                    // Deferred camera teardown: unbinding before the muxer finishes
+                    // truncates the mp4 (missing moov atom) — only release the
+                    // provider once the recording has fully finalized.
+                    if (released) {
+                        runCatching { provider?.unbindAll() }
+                        provider = null
+                    }
                 }
                 else -> Unit
             }
@@ -221,9 +228,15 @@ class VideoNoteSession(private val context: Context) {
     /** Tear down the camera when the overlay leaves composition. */
     fun release() {
         released = true
-        runCatching { recording?.stop() }
-        runCatching { provider?.unbindAll() }
-        provider = null
+        val active = recording
+        if (active != null) {
+            // Let the Finalize event unbind — an immediate unbindAll would kill
+            // the muxer mid-write and corrupt the file.
+            runCatching { active.stop() }
+        } else {
+            runCatching { provider?.unbindAll() }
+            provider = null
+        }
     }
 
     private fun finishNow(result: File?) {

@@ -174,7 +174,13 @@ fun VoiceAttachmentView(
                     else MaterialTheme.colorScheme.onSurfaceVariant
 
     Surface(color = containerColor, shape = RoundedCornerShape(18.dp)) {
-        Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+        // Hug the content: without the intrinsic-width cap the fillMaxWidth time row
+        // below stretches the bubble across the whole screen.
+        Column(
+            modifier = Modifier
+                .width(androidx.compose.foundation.layout.IntrinsicSize.Max)
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+        ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 IconButton(
                     onClick = { player.toggle(att.id, att.url) },
