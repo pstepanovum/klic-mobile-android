@@ -16,7 +16,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -170,7 +169,6 @@ fun GroupInfoScreen(
                     // §14.3: SHARED group theme — admin-only edit surface.
                     ChatInfoSub.THEME -> Column(
                         Modifier
-                            .widthIn(max = 680.dp)
                             .fillMaxWidth()
                             .verticalScroll(rememberScrollState())
                             .padding(20.dp),
@@ -180,7 +178,6 @@ fun GroupInfoScreen(
                     // §14.3: encryption info page (lock row).
                     ChatInfoSub.ENCRYPTION -> Column(
                         Modifier
-                            .widthIn(max = 680.dp)
                             .fillMaxWidth()
                             .verticalScroll(rememberScrollState()),
                     ) {
@@ -247,7 +244,6 @@ private fun GroupInfoMain(
 
     Column(
         Modifier
-            .widthIn(max = 680.dp)
             .fillMaxWidth()
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 20.dp),
@@ -712,7 +708,7 @@ private fun GroupMessageSearch(
         else loaded.filter { !it.isDeleted && it.body.contains(query, ignoreCase = true) }
     }
 
-    Column(Modifier.widthIn(max = 680.dp).fillMaxSize()) {
+    Column(Modifier.fillMaxSize()) {
         KlicSearchBar(
             value = query,
             onValueChange = { query = it },
