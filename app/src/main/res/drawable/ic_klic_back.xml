@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Klic back (chevron) — the owner's 9×17 stroke artwork centered on a 24×24 canvas
+     so square icon buttons never distort it. 1.5 stroke, round cap; tinted at usage. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <group
+        android:translateX="7.5"
+        android:translateY="3.5">
+        <path
+            android:pathData="M7.67639,0.75L0.803758,8.11354C0.732039,8.19038 0.732039,8.30962 0.803758,8.38646L7.67639,15.75"
+            android:strokeColor="#282930"
+            android:strokeWidth="1.5"
+            android:strokeLineCap="round" />
+    </group>
+</vector>

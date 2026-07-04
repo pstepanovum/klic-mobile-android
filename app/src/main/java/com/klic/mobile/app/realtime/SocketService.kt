@@ -35,9 +35,13 @@ class SocketService {
     val deletedMessages = MutableSharedFlow<DeletedUpdate>(extraBufferCapacity = 16)
     /** conversationId — this user was removed from the group; drop it locally (§9.3). */
     val removedConversations = MutableSharedFlow<String>(extraBufferCapacity = 8)
+    /** §14.3: full conversation payloads re-sent live (title/avatar/theme/admin changes). */
+    val conversationUpdates = MutableSharedFlow<com.klic.mobile.app.data.Conversation>(extraBufferCapacity = 8)
 
     private val mainHandler = Handler(Looper.getMainLooper())
     private val typingTokens = mutableMapOf<String, Any>()
+    /** §14.3: fan-out payloads may carry fields this client doesn't model yet. */
+    private val lenientJson = Json { ignoreUnknownKeys = true }
 
     data class Presence(val online: Boolean, val lastSeenMs: Long? = null)
     data class Receipt(val conversationId: String, val userId: String, val atMs: Long)
@@ -150,6 +154,15 @@ class SocketService {
                 val conversationId = json.optString("conversationId").takeIf { it.isNotBlank() } ?: return@let
                 val messageId = json.optString("messageId").takeIf { it.isNotBlank() } ?: return@let
                 deletedMessages.tryEmit(DeletedUpdate(conversationId, messageId))
+            }
+        }
+        socket.on("conversation:updated") { args ->
+            (args.firstOrNull() as? JSONObject)?.let { json ->
+                runCatching {
+                    val convo = lenientJson
+                        .decodeFromString(com.klic.mobile.app.data.Conversation.serializer(), json.toString())
+                    conversationUpdates.tryEmit(convo)
+                }
             }
         }
         socket.on("conversation:removed") { args ->

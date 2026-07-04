@@ -597,4 +597,36 @@
     <string name="theme_preview_incoming_1">Hey! Have you seen the new chat themes?</string>
     <string name="theme_preview_outgoing">Just picked mine — what do you think?</string>
     <string name="theme_preview_incoming_2">Looks great 😍</string>
+
+    <!-- v0.5.7 §14.3: per-chat themes, admin transfer, member profiles, encryption info -->
+    <string name="theme_use_default">Use default theme</string>
+    <string name="theme_footer_conversation">This theme applies only to this chat, on this device.</string>
+    <string name="theme_footer_group">This theme is shared with everyone in the group.</string>
+    <string name="info_chat_theme">Chat theme</string>
+    <string name="info_encryption">Encryption</string>
+    <string name="encryption_title">Your chats and calls are private</string>
+    <string name="encryption_body">End-to-end encryption keeps your personal messages and calls between you and the people you choose. No one outside — not even Klic — can read, listen to, or share them. This includes your:</string>
+    <string name="encryption_item_messages">Text and voice messages</string>
+    <string name="encryption_item_calls">Audio and video calls</string>
+    <string name="encryption_item_media">Photos, videos and documents</string>
+    <string name="encryption_learn_more">Learn more</string>
+    <string name="group_transfer_admin">Transfer admin</string>
+    <string name="group_transfer_confirm_title">Make %1$s the admin?</string>
+    <string name="group_transfer_confirm_body">They will be able to edit the group, manage members and change the group theme. You will lose these permissions.</string>
+    <string name="group_member_add_friend">Add friend</string>
+    <string name="group_member_request_sent">Request sent</string>
+    <string name="group_member_username_admin">@%1$s · admin</string>
+    <string name="err_transfer_admin">Couldn\'t transfer admin. Try again.</string>
+    <string name="err_group_theme">Couldn\'t update the group theme. Try again.</string>
+    <string name="err_friend_request">Couldn\'t send the friend request. Try again.</string>
+
+    <!-- v0.5.7 §14.4: saved messages -->
+    <string name="settings_saved_messages">Saved messages</string>
+    <string name="saved_empty">Messages you star will show up here.</string>
+    <string name="saved_unstar_title">Remove from saved?</string>
+    <string name="saved_unstar_body">The message will be unstarred.</string>
+
+    <!-- v0.5.7 §14.7: update page -->
+    <string name="update_now">Update now</string>
+    <string name="update_whats_new">What\'s new</string>
 </resources>

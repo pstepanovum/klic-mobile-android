@@ -32,7 +32,6 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Crop
 import androidx.compose.material.icons.filled.Draw
 import androidx.compose.material.icons.filled.HighQuality
@@ -152,7 +151,7 @@ fun MediaEditorDialog(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 IconButton(onClick = onDismiss) {
-                    Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.common_cancel), tint = Color.White)
+                    Icon(painter = androidx.compose.ui.res.painterResource(com.klic.mobile.app.ui.theme.KlicIcons.close), contentDescription = stringResource(R.string.common_cancel), tint = Color.White, modifier = Modifier.size(22.dp))
                 }
                 Spacer(Modifier.weight(1f))
                 if (isImage) {

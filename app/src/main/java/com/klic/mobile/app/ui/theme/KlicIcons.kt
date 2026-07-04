@@ -16,8 +16,10 @@ object KlicIcons {
     val user     = R.drawable.ic_line_user
     val addUser  = R.drawable.ic_line_user_plus
     val settings = R.drawable.ic_line_setting
-    val close    = R.drawable.ic_bold_close
-    val back     = R.drawable.ic_bold_arrow_left
+    // §14.1: the owner's exact nav artwork — stroke follows the Icon tint
+    // (onSurface/onBackground; white in dark theme).
+    val close    = R.drawable.ic_klic_close
+    val back     = R.drawable.ic_klic_back
     val copy     = R.drawable.ic_line_copy
     val check    = R.drawable.ic_line_check
     // Shared "klic check" mark — message delivery ticks (single/double).

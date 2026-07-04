@@ -458,6 +458,22 @@ class KlicRepository(
         if (!res.isSuccessful) error("Member removal failed (${res.code()})")
     }
 
+    /** §14.3: POST /conversations/:id/transfer-admin {userId} — current admin only. */
+    suspend fun transferAdmin(conversationId: String, userId: String) {
+        val res = api.transferAdmin(conversationId, mapOf("userId" to userId))
+        if (!res.isSuccessful) error("Admin transfer failed (${res.code()})")
+    }
+
+    /** §14.3: PATCH /conversations/:id {theme} — admin-only shared group theme
+     *  (null clears it back to default for every member). */
+    suspend fun updateConversationTheme(conversationId: String, theme: ConversationTheme?): Conversation =
+        api.updateConversation(
+            conversationId,
+            JsonObject(mapOf("theme" to (theme?.let {
+                json.encodeToJsonElement(ConversationTheme.serializer(), it)
+            } ?: JsonNull))),
+        )
+
     /**
      * Upload a new group cover and attach it — POST avatar-upload, PUT bytes, PATCH key.
      * §10.1: every step is diagnosed and failures are rethrown with the failing step

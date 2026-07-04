@@ -18,7 +18,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Reply
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Star
@@ -162,7 +161,63 @@ private fun previewText(m: Message): String = when {
     else -> stringResource(R.string.preview_message)
 }
 
-// MARK: - Reaction pills (under a bubble)
+// MARK: - Reaction chips (INSIDE the bubble, §14.5)
+
+/**
+ * §14.5: reaction chips rendered at the bubble's bottom edge, within its background.
+ * Subtle contrasting chip fills keep them readable on own-color bubbles ([onPrimary]),
+ * neutral peer bubbles, and directly over media ([onMedia], scrim-backed). The user's
+ * own reaction gets a slightly stronger fill. Tap behavior (toggle) is unchanged.
+ */
+@Composable
+fun ReactionChipsInline(
+    reactions: List<Reaction>,
+    onTap: (String) -> Unit,
+    modifier: Modifier = Modifier,
+    onPrimary: Boolean = false,
+    onMedia: Boolean = false,
+) {
+    if (reactions.isEmpty()) return
+    Row(modifier = modifier, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        reactions.forEach { r ->
+            val chipColor = when {
+                onMedia && r.mine -> Color.Black.copy(alpha = 0.62f)
+                onMedia -> Color.Black.copy(alpha = 0.42f)
+                onPrimary && r.mine -> Color.White.copy(alpha = 0.38f)
+                onPrimary -> Color.White.copy(alpha = 0.20f)
+                r.mine -> MaterialTheme.colorScheme.primary.copy(alpha = 0.20f)
+                else -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
+            }
+            val countColor = when {
+                onMedia -> Color.White
+                onPrimary -> Color.White
+                r.mine -> MaterialTheme.colorScheme.primary
+                else -> MaterialTheme.colorScheme.onSurfaceVariant
+            }
+            Surface(
+                shape = RoundedCornerShape(50),
+                color = chipColor,
+                modifier = Modifier.clickable { onTap(r.emoji) },
+            ) {
+                Row(
+                    Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(r.emoji, fontSize = 12.sp)
+                    if (r.count > 1) {
+                        Text(
+                            " ${r.count}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = countColor,
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Reaction pills (under a bubble — stickers/bubble-less renders only)
 
 @Composable
 fun ReactionPillsRow(reactions: List<Reaction>, onTap: (String) -> Unit) {
@@ -219,7 +274,12 @@ fun ReplyComposerBar(authorName: String, preview: String, onCancel: () -> Unit) 
             Text(preview, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
         }
         IconButton(onClick = onCancel) {
-            Icon(Icons.Filled.Close, contentDescription = "Cancel reply", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            Icon(
+                painter = androidx.compose.ui.res.painterResource(com.klic.mobile.app.ui.theme.KlicIcons.close),
+                contentDescription = "Cancel reply",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(20.dp),
+            )
         }
     }
 }
@@ -299,7 +359,12 @@ fun ImageViewerOverlay(url: String, onDismiss: () -> Unit) {
             onClick = onDismiss,
             modifier = Modifier.align(Alignment.TopEnd).statusBarsPadding().padding(8.dp),
         ) {
-            Icon(Icons.Filled.Close, contentDescription = "Close", tint = Color.White.copy(alpha = 0.9f), modifier = Modifier.size(28.dp))
+            Icon(
+                painter = androidx.compose.ui.res.painterResource(com.klic.mobile.app.ui.theme.KlicIcons.close),
+                contentDescription = "Close",
+                tint = Color.White.copy(alpha = 0.9f),
+                modifier = Modifier.size(26.dp),
+            )
         }
     }
 }

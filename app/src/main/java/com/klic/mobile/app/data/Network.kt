@@ -217,6 +217,13 @@ interface KlicApi {
         @Path("userId") userId: String,
     ): Response<ResponseBody>
 
+    // §14.3 (WP-S8): current admin hands the group to another member.
+    @POST("conversations/{id}/transfer-admin")
+    suspend fun transferAdmin(
+        @Path("id") id: String,
+        @Body body: Map<String, String>,
+    ): Response<ResponseBody>
+
     // ── v0.5.3 (§10.4): blocks, passkeys, contacts, account lifecycle ──
 
     @GET("blocks")

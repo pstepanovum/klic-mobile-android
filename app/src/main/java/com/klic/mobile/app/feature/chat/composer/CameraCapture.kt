@@ -40,7 +40,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.FlipCameraAndroid
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -320,7 +319,7 @@ fun KlicCameraCapture(
                         containerColor = Color.Black.copy(alpha = 0.4f),
                         contentColor = Color.White,
                     ),
-                ) { Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.common_close)) }
+                ) { Icon(painter = androidx.compose.ui.res.painterResource(com.klic.mobile.app.ui.theme.KlicIcons.close), contentDescription = stringResource(R.string.common_close), modifier = Modifier.size(22.dp)) }
                 Spacer(Modifier.weight(1f))
                 if (recording != null) {
                     Row(

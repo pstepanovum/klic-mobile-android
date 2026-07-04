@@ -46,8 +46,8 @@ import java.time.temporal.ChronoUnit
 import androidx.compose.ui.res.stringResource
 import com.klic.mobile.app.R
 
-/** Sub-pages reachable from a chat info screen (§8.4). */
-enum class ChatInfoSub { MEDIA, STARRED, STORAGE }
+/** Sub-pages reachable from a chat info screen (§8.4, §14.3). */
+enum class ChatInfoSub { MEDIA, STARRED, STORAGE, THEME, ENCRYPTION }
 
 /** "Always" mute sentinel (§8.2). */
 internal const val MUTE_ALWAYS_ISO = "9999-12-31T00:00:00.000Z"
@@ -134,6 +134,8 @@ internal fun InfoRowItem(
 @Composable
 fun ChatInfoSectionsCard(
     conversationId: String,
+    /** §14.3: shows the "Chat theme" row (DMs always; groups admin-only). */
+    showThemeRow: Boolean = true,
     onOpen: (ChatInfoSub) -> Unit,
 ) {
     val settings by SettingsStore.snapshot.collectAsState()
@@ -152,6 +154,22 @@ fun ChatInfoSectionsCard(
             icon = painterResource(KlicIcons.star),
             title = stringResource(R.string.info_starred),
             onClick = { onOpen(ChatInfoSub.STARRED) },
+        )
+        if (showThemeRow) {
+            InfoDivider()
+            // §14.3: per-DM local theme / shared group theme (admin).
+            InfoRowItem(
+                icon = painterResource(R.drawable.ic_line_gallery),
+                title = stringResource(R.string.info_chat_theme),
+                onClick = { onOpen(ChatInfoSub.THEME) },
+            )
+        }
+        InfoDivider()
+        // §14.3: encryption info page (lock icon) — DM and group info.
+        InfoRowItem(
+            icon = painterResource(R.drawable.ic_line_lock),
+            title = stringResource(R.string.info_encryption),
+            onClick = { onOpen(ChatInfoSub.ENCRYPTION) },
         )
         InfoDivider()
         InfoRowItem(

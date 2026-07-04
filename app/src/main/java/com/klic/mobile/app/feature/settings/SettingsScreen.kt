@@ -15,7 +15,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -78,10 +77,17 @@ private sealed class SettingsRoute {
     object RecentCalls : SettingsRoute()
     // v0.5.5
     object ChatTheme : SettingsRoute()
+    // v0.5.7 (§14.4)
+    object SavedMessages : SettingsRoute()
 }
 
 @Composable
-fun SettingsScreen(vm: KlicViewModel, onEditProfile: () -> Unit = {}) {
+fun SettingsScreen(
+    vm: KlicViewModel,
+    onEditProfile: () -> Unit = {},
+    /** §14.4: a saved-messages row was tapped — open its conversation at the message. */
+    onOpenMessage: (conversationId: String, messageId: String) -> Unit = { _, _ -> },
+) {
     val user by vm.currentUser.collectAsState()
     val themeMode by vm.themeMode.collectAsState()
     val context = LocalContext.current
@@ -116,7 +122,6 @@ fun SettingsScreen(vm: KlicViewModel, onEditProfile: () -> Unit = {}) {
         AnimatedContent(targetState = route, label = "settings_route") { currentRoute ->
             Column(
                 Modifier
-                    .widthIn(max = 680.dp)
                     .fillMaxWidth()
                     .verticalScroll(rememberScrollState())
                     .padding(20.dp),
@@ -208,6 +213,13 @@ fun SettingsScreen(vm: KlicViewModel, onEditProfile: () -> Unit = {}) {
                                 icon = painterResource(KlicIcons.phone),
                                 title = stringResource(R.string.settings_recent_calls),
                                 onClick = { route = SettingsRoute.RecentCalls },
+                            )
+                            HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
+                            // §14.4: everything the user starred, across all chats.
+                            SettingsRow(
+                                icon = painterResource(KlicIcons.star),
+                                title = stringResource(R.string.settings_saved_messages),
+                                onClick = { route = SettingsRoute.SavedMessages },
                             )
                         }
 
@@ -549,6 +561,14 @@ fun SettingsScreen(vm: KlicViewModel, onEditProfile: () -> Unit = {}) {
                             onBack = { route = SettingsRoute.Appearance },
                         )
                         ChatThemeContent()
+                    }
+
+                    SettingsRoute.SavedMessages -> {
+                        SubScreenHeader(
+                            title = stringResource(R.string.settings_saved_messages),
+                            onBack = { route = SettingsRoute.Main },
+                        )
+                        SavedMessagesContent(vm, onOpenMessage)
                     }
                 }
             }
