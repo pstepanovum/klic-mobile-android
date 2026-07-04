@@ -30,8 +30,9 @@ import com.klic.mobile.app.ui.theme.KlicIcons
 
 /**
  * §14.3: the "Encryption" information page reachable from the lock row on DM and
- * group info — Klic-styled explanation of end-to-end privacy plus a "Learn more"
- * link to the site. Static, localized copy; no toggles.
+ * group info — Klic-styled explanation of how chats and calls are protected in
+ * transit and at rest, plus a "Learn more" link to the site. Static, localized
+ * copy; no toggles.
  */
 @Composable
 fun EncryptionInfoPage() {

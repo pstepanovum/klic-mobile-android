@@ -626,11 +626,11 @@
     <string name="theme_footer_group">This theme is shared with everyone in the group.</string>
     <string name="info_chat_theme">Chat theme</string>
     <string name="info_encryption">Encryption</string>
-    <string name="encryption_title">Your chats and calls are private</string>
-    <string name="encryption_body">End-to-end encryption keeps your personal messages and calls between you and the people you choose. No one outside — not even Klic — can read, listen to, or share them. This includes your:</string>
-    <string name="encryption_item_messages">Text and voice messages</string>
-    <string name="encryption_item_calls">Audio and video calls</string>
-    <string name="encryption_item_media">Photos, videos and documents</string>
+    <string name="encryption_title">Your chats and calls are protected</string>
+    <string name="encryption_body">Your messages, calls and media are encrypted in transit and stored encrypted on Klic\'s servers. Klic runs and secures these servers to keep your data safe. This protection covers your:</string>
+    <string name="encryption_item_messages">Text and voice messages — protected in transit and at rest</string>
+    <string name="encryption_item_calls">Audio and video calls — protected in transit</string>
+    <string name="encryption_item_media">Photos, videos and documents — protected in transit and at rest</string>
     <string name="encryption_learn_more">Learn more</string>
     <string name="group_transfer_admin">Transfer admin</string>
     <string name="group_transfer_confirm_title">Make %1$s the admin?</string>

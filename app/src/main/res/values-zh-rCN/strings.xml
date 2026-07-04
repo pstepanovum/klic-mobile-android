@@ -535,11 +535,11 @@
     <string name="theme_footer_group">此主题将与群组中的所有人共享。</string>
     <string name="info_chat_theme">聊天主题</string>
     <string name="info_encryption">加密</string>
-    <string name="encryption_title">您的聊天和通话均受隐私保护</string>
-    <string name="encryption_body">端到端加密可确保您的个人消息和通话仅限您与所选联系人之间进行。外部人员（甚至是 Klic）都无法阅读、听取或分享。这包括您的：</string>
-    <string name="encryption_item_messages">文字和语音消息</string>
-    <string name="encryption_item_calls">语音和视频通话</string>
-    <string name="encryption_item_media">照片、视频和文档</string>
+    <string name="encryption_title">您的聊天和通话受到保护</string>
+    <string name="encryption_body">您的消息、通话和媒体在传输过程中经过加密，并以加密形式存储在 Klic 的服务器上。Klic 运营并保护这些服务器，以确保您的数据安全。此保护涵盖您的：</string>
+    <string name="encryption_item_messages">文字和语音消息 — 传输和存储时均受保护</string>
+    <string name="encryption_item_calls">语音和视频通话 — 传输时受保护</string>
+    <string name="encryption_item_media">照片、视频和文档 — 传输和存储时均受保护</string>
     <string name="encryption_learn_more">了解更多</string>
     <string name="group_transfer_admin">转让管理员权限</string>
     <string name="group_transfer_confirm_title">将 %1$s 设为管理员？</string>

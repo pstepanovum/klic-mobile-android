@@ -536,10 +536,10 @@
     <string name="info_chat_theme">Тема чата</string>
     <string name="info_encryption">Шифрование</string>
     <string name="encryption_title">Ваши чаты и звонки защищены</string>
-    <string name="encryption_body">Сквозное шифрование защищает ваши личные сообщения и звонки. Никто посторонний — даже Klic — не может их прочитать, прослушать или переслать. Это касается ваших:</string>
-    <string name="encryption_item_messages">Текстовых и голосовых сообщений</string>
-    <string name="encryption_item_calls">Аудио- и видеозвонков</string>
-    <string name="encryption_item_media">Фотографий, видео и документов</string>
+    <string name="encryption_body">Ваши сообщения, звонки и медиафайлы шифруются при передаче и хранятся в зашифрованном виде на серверах Klic. Klic обслуживает и защищает эти серверы, чтобы сохранить ваши данные. Эта защита распространяется на ваши:</string>
+    <string name="encryption_item_messages">Текстовые и голосовые сообщения — защищены при передаче и хранении</string>
+    <string name="encryption_item_calls">Аудио- и видеозвонки — защищены при передаче</string>
+    <string name="encryption_item_media">Фотографии, видео и документы — защищены при передаче и хранении</string>
     <string name="encryption_learn_more">Подробнее</string>
     <string name="group_transfer_admin">Передать права администратора</string>
     <string name="group_transfer_confirm_title">Сделать %1$s администратором?</string>
