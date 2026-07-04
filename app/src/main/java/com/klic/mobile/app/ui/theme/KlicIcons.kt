@@ -81,15 +81,18 @@ object KlicIcons {
     val chart    = R.drawable.ic_line_chart
     // Owner chain-link artwork — Links privacy row + chat-info Links tab.
     val link     = R.drawable.ic_klic_link
-    // Tab bar — owner-supplied artwork (selection is conveyed by tint + pill,
-    // so the active state reuses the same asset).
+    // Tab bar — owner-supplied artwork: line icons at rest, solid when active.
     val tabChat     = R.drawable.ic_klic_tab_chat
     val tabUser     = R.drawable.ic_klic_tab_user
     val tabCall     = R.drawable.ic_klic_tab_call
     val tabSettings = R.drawable.ic_klic_tab_settings
+    val tabChatSolid     = R.drawable.ic_klic_tab_chat_solid
+    val tabUserSolid     = R.drawable.ic_klic_tab_user_solid
+    val tabCallSolid     = R.drawable.ic_klic_tab_call_solid
+    val tabSettingsSolid = R.drawable.ic_klic_tab_settings_solid
     val messageChat     = R.drawable.ic_klic_tab_chat
-    val messageChatBold = R.drawable.ic_klic_tab_chat
-    val userBold        = R.drawable.ic_klic_tab_user
-    val phoneBold       = R.drawable.ic_klic_tab_call
-    val settingsBold    = R.drawable.ic_klic_tab_settings
+    val messageChatBold = R.drawable.ic_klic_tab_chat_solid
+    val userBold        = R.drawable.ic_klic_tab_user_solid
+    val phoneBold       = R.drawable.ic_klic_tab_call_solid
+    val settingsBold    = R.drawable.ic_klic_tab_settings_solid
 }
