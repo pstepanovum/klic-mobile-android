@@ -556,4 +556,16 @@
     <string name="saved_unstar_body">Сообщение больше не будет отмечено звёздочкой.</string>
     <string name="update_now">Обновить сейчас</string>
     <string name="update_whats_new">Что нового</string>
+    <string name="convo_mark_read">Отметить как прочитанное</string>
+    <string name="convo_mute">Без звука</string>
+    <string name="convo_delete_chat">Удалить чат</string>
+    <string name="convo_delete_confirm">Удалить этот чат? Это действие нельзя отменить.</string>
+    <string name="err_delete_chat">Не удалось удалить чат.</string>
+    <string name="profile_remove_friend">Удалить из друзей</string>
+    <string name="profile_remove_friend_confirm">Удалить %1$s из друзей?</string>
+    <string name="err_remove_friend">Не удалось удалить друга. Попробуйте ещё раз.</string>
+    <string name="block_also_delete_chat">Также удалить чат</string>
+    <string name="chat_blocked_banner">Вы заблокировали %1$s</string>
+    <string name="chat_unblock">Разблокировать</string>
+    <string name="err_send_message">Не удалось отправить.</string>
 </resources>

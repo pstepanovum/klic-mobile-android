@@ -137,6 +137,8 @@ class KlicViewModel(
                             isAdmin = updated.createdById != null && updated.createdById == meId,
                             lastMessage = updated.lastMessage ?: existing.lastMessage,
                             unreadCount = existing.unreadCount,
+                            // §16.5: the fan-out isn't personalized — keep the viewer's pin.
+                            chatPinnedAt = updated.chatPinnedAt ?: existing.chatPinnedAt,
                         )
                     } else existing
                 }
@@ -341,7 +343,7 @@ class KlicViewModel(
 
     fun loadConversations() = viewModelScope.launch {
         runCatching { repo.conversations() }.onSuccess { list ->
-            conversations.value = list
+            conversations.value = applyChatPinOverrides(list)
             // Cache which conversations are groups so the killed-app push path can pick
             // the right global toggle (message vs group notifications, §8.5).
             SettingsStore.setGroupConversationIds(
@@ -553,6 +555,9 @@ class KlicViewModel(
         replyingTo.value = null
         runCatching { repo.send(conversationId, body, replyId) }
             .onSuccess { upsertMessage(it); bumpSent(conversationId) }
+            // §16.6: rejected sends (e.g. 403 when the peer blocked this account)
+            // surface a quiet "Couldn't send" toast instead of vanishing silently.
+            .onFailure { error.value = str(com.klic.mobile.app.R.string.err_send_message) }
     }
 
     fun sendSticker(conversationId: String, stickerId: String) = viewModelScope.launch {
@@ -1003,6 +1008,75 @@ class KlicViewModel(
     /** Emit a read receipt for the open conversation. */
     fun markRead(conversationId: String) {
         socket.emit("message:read", buildJsonObject { put("conversationId", conversationId) })
+    }
+
+    // ── v0.5.9 (§16.5): chat-list long-press actions ──────────────────────────
+
+    // Session-local chat-pin overrides so pin/unpin reorders the list (and survives
+    // list refreshes) before the server persists ConversationPrefs.pinnedAt; a
+    // server-provided chatPinnedAt is replaced by the override while one exists.
+    private val chatPinOverrides = mutableMapOf<String, String?>()
+
+    private fun applyChatPinOverrides(list: List<Conversation>): List<Conversation> =
+        list.map { c ->
+            if (chatPinOverrides.containsKey(c.id)) c.copy(chatPinnedAt = chatPinOverrides[c.id]) else c
+        }
+
+    /** §16.5 "Mark as Read": the read receipt + an immediate local badge clear. */
+    fun markConversationRead(conversationId: String) {
+        markRead(conversationId)
+        conversations.value = conversations.value.map {
+            if (it.id == conversationId) it.copy(unreadCount = 0) else it
+        }
+    }
+
+    /** §16.5 Pin/Unpin: optimistic reorder; the server stamp is adopted when it lands. */
+    fun setChatPinned(conversationId: String, pinned: Boolean) = viewModelScope.launch {
+        chatPinOverrides[conversationId] = if (pinned) Instant.now().toString() else null
+        conversations.value = applyChatPinOverrides(conversations.value)
+        // Pre-WP-S9 servers ignore/reject {pinned} — the local pin stands for the session.
+        runCatching { repo.setChatPinned(conversationId, pinned) }
+            .onSuccess { prefs ->
+                if (pinned && prefs.pinnedAt != null) {
+                    chatPinOverrides[conversationId] = prefs.pinnedAt
+                    conversations.value = applyChatPinOverrides(conversations.value)
+                }
+            }
+    }
+
+    /** §16.5 Delete: DELETE /conversations/:id, dropped locally on success. */
+    fun deleteConversation(conversationId: String) = viewModelScope.launch {
+        runCatching { repo.deleteConversation(conversationId) }
+            .onSuccess {
+                conversations.value = conversations.value.filterNot { it.id == conversationId }
+                messageCache.remove(conversationId)
+                if (openConversationId == conversationId) {
+                    openConversationId = null
+                    messages.value = emptyList()
+                    chatActiveCall.value = null
+                    replyingTo.value = null
+                }
+            }
+            .onFailure {
+                error.value = repo.serverMessage(it)
+                    ?: str(com.klic.mobile.app.R.string.err_delete_chat)
+            }
+    }
+
+    // ── v0.5.9 (§16.6): remove friend ─────────────────────────────────────────
+
+    /** DELETE /friends/:userId — the chat stays; friends (and isFriend gating) refresh. */
+    fun removeFriend(userId: String, onDone: () -> Unit = {}) = viewModelScope.launch {
+        runCatching { repo.removeFriend(userId) }
+            .onSuccess {
+                loadFriends()
+                loadConversations()
+                onDone()
+            }
+            .onFailure {
+                error.value = repo.serverMessage(it)
+                    ?: str(com.klic.mobile.app.R.string.err_remove_friend)
+            }
     }
 
     // ── v0.5.1 (§8.2/§8.4/§8.5): stars, prefs, attachments, jump-to-message ──

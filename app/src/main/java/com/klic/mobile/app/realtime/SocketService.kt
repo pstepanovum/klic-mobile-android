@@ -196,6 +196,14 @@ class SocketService {
                 }
             }
         }
+        // §16.5: the whole conversation was deleted server-side — same local drop.
+        socket.on("conversation:deleted") { args ->
+            (args.firstOrNull() as? JSONObject)?.let { json ->
+                json.optString("conversationId").takeIf { it.isNotBlank() }?.let {
+                    removedConversations.tryEmit(it)
+                }
+            }
+        }
         socket.on("call:invite") { args ->
             (args.firstOrNull() as? JSONObject)?.let { json ->
                 val from = json.optJSONObject("from")

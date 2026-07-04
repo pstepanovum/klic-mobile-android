@@ -651,4 +651,20 @@
     <!-- v0.5.7 §14.7: update page -->
     <string name="update_now">Update now</string>
     <string name="update_whats_new">What\'s new</string>
+
+    <!-- v0.5.9 §16.5: chat-list long-press menu -->
+    <string name="convo_mark_read">Mark as Read</string>
+    <string name="convo_mute">Mute</string>
+    <string name="convo_delete_chat">Delete chat</string>
+    <string name="convo_delete_confirm">Delete this chat? This can\'t be undone.</string>
+    <string name="err_delete_chat">Couldn\'t delete the chat.</string>
+
+    <!-- v0.5.9 §16.6: remove friend + block polish -->
+    <string name="profile_remove_friend">Remove Friend</string>
+    <string name="profile_remove_friend_confirm">Remove %1$s from your friends?</string>
+    <string name="err_remove_friend">Couldn\'t remove the friend. Try again.</string>
+    <string name="block_also_delete_chat">Also delete the chat</string>
+    <string name="chat_blocked_banner">You blocked %1$s</string>
+    <string name="chat_unblock">Unblock</string>
+    <string name="err_send_message">Couldn\'t send.</string>
 </resources>

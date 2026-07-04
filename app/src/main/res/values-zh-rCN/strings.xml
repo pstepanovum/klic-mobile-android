@@ -556,4 +556,16 @@
     <string name="saved_unstar_body">该消息将取消收藏。</string>
     <string name="update_now">立即更新</string>
     <string name="update_whats_new">更新内容</string>
+    <string name="convo_mark_read">标记为已读</string>
+    <string name="convo_mute">静音</string>
+    <string name="convo_delete_chat">删除聊天</string>
+    <string name="convo_delete_confirm">确定删除此聊天？此操作无法撤销。</string>
+    <string name="err_delete_chat">无法删除聊天。</string>
+    <string name="profile_remove_friend">删除好友</string>
+    <string name="profile_remove_friend_confirm">将 %1$s 从好友列表中删除？</string>
+    <string name="err_remove_friend">无法删除好友。请重试。</string>
+    <string name="block_also_delete_chat">同时删除聊天</string>
+    <string name="chat_blocked_banner">你已屏蔽 %1$s</string>
+    <string name="chat_unblock">解除屏蔽</string>
+    <string name="err_send_message">发送失败。</string>
 </resources>

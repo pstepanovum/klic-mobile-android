@@ -123,6 +123,10 @@ interface KlicApi {
     @POST("friends/requests/{id}/decline")
     suspend fun declineFriendRequest(@Path("id") id: String): Response<ResponseBody>
 
+    // §16.6 (WP-S9): unfriend — deletes an ACCEPTED friendship; 404 when none.
+    @DELETE("friends/{userId}")
+    suspend fun removeFriend(@Path("userId") userId: String): Response<ResponseBody>
+
     @POST("calls")
     suspend fun startCall(@Body body: StartCallRequest): CallSession
 
@@ -209,6 +213,10 @@ interface KlicApi {
         @Path("id") id: String,
         @Body body: AvatarUploadRequest,
     ): UploadTicket
+
+    // §16.5: delete conversation (server currently allows GROUP + admin only).
+    @DELETE("conversations/{id}")
+    suspend fun deleteConversation(@Path("id") id: String): Response<ResponseBody>
 
     // Admin-only member removal (§9.3, WP-S3) — 204 on success.
     @DELETE("conversations/{id}/members/{userId}")

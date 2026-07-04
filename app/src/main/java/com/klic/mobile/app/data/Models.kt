@@ -112,6 +112,8 @@ data class Conversation(
     val theme: ConversationTheme? = null,
     /** §16.3: pinned messages (compact previews), oldest→newest; absent on old servers. */
     val pinnedMessages: List<ReplyPreview> = emptyList(),
+    /** §16.5: per-viewer chat-list pin stamp (ConversationPrefs.pinnedAt); absent on old servers. */
+    val chatPinnedAt: String? = null,
 )
 
 /**
@@ -369,6 +371,8 @@ data class ConversationPrefs(
     val messagesMutedUntil: String? = null,
     val muteMentions: Boolean = false,
     val callsMutedUntil: String? = null,
+    /** §16.5: chat-list pin stamp; round-tripped by PUT {pinned}. Absent on old servers. */
+    val pinnedAt: String? = null,
 )
 
 /** One row of GET /conversations/:id/attachments — attachment + message context. */

@@ -197,6 +197,12 @@ class KlicRepository(
     suspend fun sendFriendRequest(userId: String) { api.sendFriendRequest(mapOf("userId" to userId)) }
     suspend fun acceptFriendRequest(id: String) { api.acceptFriendRequest(id) }
     suspend fun declineFriendRequest(id: String) { api.declineFriendRequest(id) }
+
+    /** §16.6: DELETE /friends/:userId — throws HttpException so serverMessage() works. */
+    suspend fun removeFriend(userId: String) {
+        val res = api.removeFriend(userId)
+        if (!res.isSuccessful) throw retrofit2.HttpException(res)
+    }
     suspend fun openConversation(userId: String): Conversation =
         api.createConversation(CreateConversationRequest(userId = userId))
 
@@ -437,6 +443,19 @@ class KlicRepository(
             put("callsMutedUntil", callsMutedUntil?.let { JsonPrimitive(it) } ?: JsonNull)
         }
     }))
+
+    /** §16.5: PUT the chat-list pin flag onto the per-conversation prefs. */
+    suspend fun setChatPinned(conversationId: String, pinned: Boolean): ConversationPrefs =
+        api.updateConversationPrefs(
+            conversationId,
+            JsonObject(mapOf("pinned" to JsonPrimitive(pinned))),
+        )
+
+    /** §16.5: DELETE /conversations/:id — throws HttpException so serverMessage() works. */
+    suspend fun deleteConversation(conversationId: String) {
+        val res = api.deleteConversation(conversationId)
+        if (!res.isSuccessful) throw retrofit2.HttpException(res)
+    }
 
     suspend fun starMessage(messageId: String) { api.starMessage(messageId) }
     suspend fun unstarMessage(messageId: String) { api.unstarMessage(messageId) }

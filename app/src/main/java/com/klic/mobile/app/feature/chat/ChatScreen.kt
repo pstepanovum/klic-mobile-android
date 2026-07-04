@@ -435,7 +435,13 @@ fun ChatScreen(
     LaunchedEffect(conversation.id) {
         vm.openChat(conversation.id)
         vm.markRead(conversation.id)
+        // §16.6: blocked-by-me state gates the composer (blocks list is cheap + cached).
+        if (isDirect) vm.loadBlocks()
     }
+
+    // §16.6: when the DM peer is blocked BY ME the composer swaps for a banner.
+    val blockedUsers by vm.blockedUsers.collectAsState()
+    val peerBlockedByMe = isDirect && peer != null && blockedUsers.any { it.user.id == peer.id }
 
     // §9.7: re-verify the "Ongoing call" banner whenever the app returns to the
     // foreground with this chat open — GET active-call drops it on 404/none.
@@ -846,6 +852,14 @@ fun ChatScreen(
                     }
                 }
             }
+            if (peerBlockedByMe) {
+                // §16.6: "You blocked <name>" + Unblock restores the composer in place
+                // (unblockUser updates blockedUsers optimistically).
+                BlockedComposerBanner(
+                    name = peer?.displayName ?: title,
+                    onUnblock = { peer?.id?.let { vm.unblockUser(it) } },
+                )
+            } else {
             ComposerBar(
                 draft    = draft,
                 // §15.1: reply preview renders inside the composer's input container.
@@ -924,6 +938,7 @@ fun ChatScreen(
                 onRecordCancel = { cancelRecording() },
                 onRecordSend = { finishAndSendRecording() },
             )
+            } // if (peerBlockedByMe) else
         }
         } // Box
     }
@@ -1158,6 +1173,32 @@ fun ChatScreen(
     }
     } // Box
     } // ChatBubbleTheme (§12.3)
+}
+
+/** §16.6: replaces the composer while the DM peer is blocked by this account. */
+@Composable
+private fun BlockedComposerBanner(name: String, onUnblock: () -> Unit) {
+    Surface(color = MaterialTheme.colorScheme.surface) {
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 10.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Text(
+                stringResource(R.string.chat_blocked_banner, name),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            TextButton(onClick = onUnblock) {
+                Text(
+                    stringResource(R.string.chat_unblock),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            }
+        }
+    }
 }
 
 /** Banner shown while this conversation has an ongoing call the user hasn't joined. */
