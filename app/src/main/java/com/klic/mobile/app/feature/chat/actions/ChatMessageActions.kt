@@ -1,5 +1,6 @@
 package com.klic.mobile.app.feature.chat.actions
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -10,6 +11,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -18,6 +20,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -25,6 +29,7 @@ import androidx.compose.material.icons.automirrored.filled.Reply
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
@@ -56,6 +61,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.klic.mobile.app.ui.components.rememberStableImageRequest
+import com.klic.mobile.app.data.Attachment
 import com.klic.mobile.app.data.Message
 import com.klic.mobile.app.data.Reaction
 import com.klic.mobile.app.data.ReplyPreview
@@ -87,6 +93,11 @@ fun MessageActionsOverlay(
 ) {
     val mine = remember(message.reactions) { message.reactions.filter { it.mine }.map { it.emoji }.toSet() }
     val hasBody = message.body.isNotBlank()
+    // §19.4: a message carrying multiple images/videos gets a swipeable, paged preview
+    // in the action sheet; single-image / non-image messages keep the compact pill.
+    val previewMedia = remember(message.id) {
+        message.attachments.filter { it.kind == "IMAGE" || it.kind == "VIDEO" }
+    }
 
     Box(
         Modifier
@@ -115,18 +126,22 @@ fun MessageActionsOverlay(
                 }
             }
 
-            // Compact preview of the message
-            Surface(
-                shape = RoundedCornerShape(18.dp),
-                color = if (isMine) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
-            ) {
-                Text(
-                    previewText(message),
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = if (isMine) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
-                    maxLines = 6,
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-                )
+            // Preview of the message — paged media for multi-image, else a compact pill.
+            if (previewMedia.size > 1) {
+                MediaPreviewPager(previewMedia, isMine)
+            } else {
+                Surface(
+                    shape = RoundedCornerShape(18.dp),
+                    color = if (isMine) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
+                ) {
+                    Text(
+                        previewText(message),
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = if (isMine) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
+                        maxLines = 6,
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                    )
+                }
             }
 
             // Actions card
@@ -155,6 +170,82 @@ fun MessageActionsOverlay(
                         ) { onReport() }
                     }
                     ActionRow(stringResource(R.string.common_delete), Icons.Filled.Delete, destructive = true) { onDelete() }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * §19.4: swipeable, paged preview of a multi-image/video message inside the action
+ * sheet. Left/right swipes page through the message's media (paging is owned by the
+ * pager, so it never dismisses the overlay), with a dot indicator. Videos show a
+ * static first-frame thumbnail + play badge; the action buttons below stay live.
+ */
+@Composable
+private fun MediaPreviewPager(atts: List<Attachment>, isMine: Boolean) {
+    val pagerState = rememberPagerState(initialPage = 0) { atts.size }
+    Surface(
+        shape = RoundedCornerShape(18.dp),
+        color = if (isMine) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
+    ) {
+        Box(Modifier.width(240.dp).padding(4.dp)) {
+            HorizontalPager(
+                state = pagerState,
+                modifier = Modifier.fillMaxWidth(),
+                pageSpacing = 6.dp,
+            ) { page ->
+                val att = atts[page]
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .aspectRatio(1f)
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(Color(0xFF1A1A1A)),
+                ) {
+                    if (att.kind == "VIDEO") {
+                        val thumb by com.klic.mobile.app.feature.chat.media.rememberVideoThumbnail(att)
+                        thumb?.let {
+                            Image(
+                                bitmap = it.asImageBitmap(),
+                                contentDescription = null,
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier.matchParentSize(),
+                            )
+                        }
+                        Icon(
+                            imageVector = Icons.Filled.PlayArrow,
+                            contentDescription = null,
+                            tint = Color.White.copy(alpha = 0.9f),
+                            modifier = Modifier
+                                .size(44.dp)
+                                .align(Alignment.Center)
+                                .background(Color.Black.copy(alpha = 0.35f), CircleShape)
+                                .padding(6.dp),
+                        )
+                    } else {
+                        AsyncImage(
+                            model = rememberStableImageRequest(att.url),
+                            contentDescription = null,
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.fillMaxSize(),
+                        )
+                    }
+                }
+            }
+            // Page indicator dots over the media's bottom edge.
+            Row(
+                Modifier.align(Alignment.BottomCenter).padding(bottom = 10.dp),
+                horizontalArrangement = Arrangement.spacedBy(5.dp),
+            ) {
+                repeat(atts.size) { i ->
+                    val active = i == pagerState.currentPage
+                    Box(
+                        Modifier
+                            .size(if (active) 7.dp else 6.dp)
+                            .clip(CircleShape)
+                            .background(if (active) Color.White else Color.White.copy(alpha = 0.45f)),
+                    )
                 }
             }
         }
