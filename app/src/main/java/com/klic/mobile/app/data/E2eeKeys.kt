@@ -124,6 +124,19 @@ class E2eeKeyManager(private val context: Context, private val api: KlicApi) {
     suspend fun localDeviceId(): Int? = context.e2eeDataStore.data.first()[deviceIdKey]
 
     /**
+     * This install's stable identifier. Shared with the published key bundle so the
+     * push-device registration (POST /me/devices) and the crypto identity key the same
+     * install. Created lazily and persisted on first read (survives before key
+     * generation runs). Race-safe: concurrent callers keep the first value written.
+     */
+    suspend fun installId(): String {
+        context.e2eeDataStore.data.first()[installIdKey]?.let { return it }
+        val generated = UUID.randomUUID().toString()
+        context.e2eeDataStore.edit { p -> if (p[installIdKey] == null) p[installIdKey] = generated }
+        return context.e2eeDataStore.data.first()[installIdKey]!!
+    }
+
+    /**
      * The libsignal store for session operations. Callers MUST hold [mutex].
      * Null until keys have been generated and published.
      */
@@ -161,7 +174,11 @@ class E2eeKeyManager(private val context: Context, private val api: KlicApi) {
                     // Pre-session key layout (e.g. the last-resort id collision fixed
                     // in schema 2): no sessions exist yet, so a clean regenerate is safe.
                     Log.i(TAG, "key schema ${prefs[schemaKey] ?: 0} -> $SCHEMA: regenerating")
-                    context.e2eeDataStore.edit { it.clear() }
+                    val preservedInstallId = prefs[installIdKey]
+                    context.e2eeDataStore.edit { p ->
+                        p.clear()
+                        if (preservedInstallId != null) p[installIdKey] = preservedInstallId
+                    }
                     cachedStore = null
                     generateAndPublish()
                 }
@@ -176,7 +193,9 @@ class E2eeKeyManager(private val context: Context, private val api: KlicApi) {
     private suspend fun generateAndPublish() {
         val identity = IdentityKeyPair.generate()
         val registrationId = SecureRandom().nextInt(16380) + 1
-        val installId = UUID.randomUUID().toString()
+        // Reuse the stable installId if one already exists (e.g. created by an earlier
+        // device registration) so the crypto bundle and push-device row key the same install.
+        val installId = context.e2eeDataStore.data.first()[installIdKey] ?: UUID.randomUUID().toString()
         val now = System.currentTimeMillis()
 
         val signedRecord = signedPreKey(identity, 1, now)

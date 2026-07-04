@@ -37,6 +37,12 @@ class KlicRepository(
     /** E2EE bridge — set by the container right after construction. */
     var e2ee: E2eeMessaging? = null
 
+    /**
+     * Supplies this install's stable id (shared with the crypto bundle) so every
+     * device registration keys the same server row. Set by the container. (§18.3)
+     */
+    var installIdProvider: (suspend () -> String)? = null
+
     // Authenticated as long as we hold a refresh token — the access token may be
     // expired but is renewable, so a stale access token must not look like a sign-out.
     val isAuthenticated: Boolean get() = tokenStore.hasSession
@@ -176,7 +182,13 @@ class KlicRepository(
     suspend fun userProfile(id: String): UserProfile = api.userProfile(id)
 
     suspend fun registerDevice(pushToken: String) {
-        runCatching { api.registerDevice(mapOf("platform" to "ANDROID", "pushToken" to pushToken)) }
+        runCatching {
+            val body = mutableMapOf("platform" to "ANDROID", "pushToken" to pushToken)
+            // §18.3: send the stable installId so the server keys device rows reliably and
+            // never loses a token under concurrent registrations. Harmless if unavailable.
+            installIdProvider?.let { body["installId"] = it() }
+            api.registerDevice(body)
+        }
     }
 
     suspend fun mobileDiagnostic(event: String, callId: String? = null, detail: String? = null) {
