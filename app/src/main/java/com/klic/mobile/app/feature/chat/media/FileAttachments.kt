@@ -26,7 +26,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.CircularProgressIndicator
@@ -206,6 +205,9 @@ fun PdfFileBubbleView(
     status: String? = null,
     conversationId: String? = null,
     starred: Boolean = false,
+    /** §14.5: reactions render INSIDE the bubble, at its bottom edge. */
+    reactions: List<com.klic.mobile.app.data.Reaction> = emptyList(),
+    onReactionTap: (String) -> Unit = {},
 ) {
     val context = LocalContext.current
     val thumb by produceState<Bitmap?>(initialValue = null, att.id) {
@@ -213,7 +215,7 @@ fun PdfFileBubbleView(
     }
     val bmp = thumb
     if (bmp == null) {
-        FileAttachmentView(att, isMine, time, status, conversationId, starred)
+        FileAttachmentView(att, isMine, time, status, conversationId, starred, reactions, onReactionTap)
         return
     }
     val containerColor = if (isMine) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
@@ -286,6 +288,13 @@ fun PdfFileBubbleView(
                     }
                 }
             }
+            // §14.5: reaction chips inside the PDF bubble.
+            com.klic.mobile.app.feature.chat.actions.ReactionChipsInline(
+                reactions = reactions,
+                onTap = onReactionTap,
+                onPrimary = isMine,
+                modifier = Modifier.padding(start = 8.dp, end = 8.dp, bottom = 6.dp),
+            )
         }
     }
 }
@@ -318,6 +327,9 @@ fun FileAttachmentView(
     status: String? = null,
     conversationId: String? = null,
     starred: Boolean = false,
+    /** §14.5: reactions render INSIDE the bubble, at its bottom edge. */
+    reactions: List<com.klic.mobile.app.data.Reaction> = emptyList(),
+    onReactionTap: (String) -> Unit = {},
 ) {
     val containerColor = if (isMine) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
     val nameColor = if (isMine) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
@@ -379,6 +391,13 @@ fun FileAttachmentView(
                     }
                 }
             }
+            // §14.5: reaction chips inside the file bubble.
+            com.klic.mobile.app.feature.chat.actions.ReactionChipsInline(
+                reactions = reactions,
+                onTap = onReactionTap,
+                onPrimary = isMine,
+                modifier = Modifier.padding(top = 4.dp),
+            )
         }
     }
 }
@@ -483,10 +502,10 @@ fun PdfViewerOverlay(file: File, onDismiss: () -> Unit) {
             modifier = Modifier.align(Alignment.TopEnd).statusBarsPadding().padding(8.dp),
         ) {
             Icon(
-                Icons.Filled.Close,
+                painter = painterResource(com.klic.mobile.app.ui.theme.KlicIcons.close),
                 contentDescription = "Close",
                 tint = Color.White.copy(alpha = 0.9f),
-                modifier = Modifier.size(28.dp),
+                modifier = Modifier.size(26.dp),
             )
         }
     }

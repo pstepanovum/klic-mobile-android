@@ -38,6 +38,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalContext
@@ -62,6 +63,7 @@ import com.klic.mobile.app.data.GallerySaver
 import com.klic.mobile.app.data.Message
 import com.klic.mobile.app.data.SettingsStore
 import com.klic.mobile.app.feature.chat.actions.DeletedBubble
+import com.klic.mobile.app.feature.chat.actions.ReactionChipsInline
 import com.klic.mobile.app.feature.chat.actions.ReactionPillsRow
 import com.klic.mobile.app.feature.chat.actions.ReplyQuote
 import com.klic.mobile.app.feature.chat.media.FileAttachmentView
@@ -160,6 +162,8 @@ internal fun MessageBubble(
                         time = time,
                         status = status,
                         starred = message.starred,
+                        reactions = message.reactions,
+                        onReactionTap = onReactionTap,
                     )
                 }
 
@@ -170,6 +174,13 @@ internal fun MessageBubble(
                         message.replyTo?.let { ReplyQuote(it, replyAuthorName) }
                         Box(Modifier.clip(RoundedCornerShape(16.dp))) {
                             BentoMediaGrid(mediaAtts, tileRadius = 12.dp, onMediaClick = onMediaClick, onLongPress = onLongPress)
+                            // §14.5: reactions live INSIDE the media edge, scrim-backed.
+                            ReactionChipsInline(
+                                reactions = message.reactions,
+                                onTap = onReactionTap,
+                                onMedia = true,
+                                modifier = Modifier.align(Alignment.BottomStart).padding(8.dp),
+                            )
                             MediaTimePill(
                                 time = time,
                                 status = status,
@@ -221,6 +232,13 @@ internal fun MessageBubble(
                                     }
                                 }
                             }
+                            // §14.5: reactions inside the card's bottom edge.
+                            ReactionChipsInline(
+                                reactions = message.reactions,
+                                onTap = onReactionTap,
+                                onPrimary = isMine,
+                                modifier = Modifier.padding(start = 6.dp, end = 6.dp, bottom = 6.dp),
+                            )
                         }
                     }
                 }
@@ -237,11 +255,36 @@ internal fun MessageBubble(
                             .background(Color(0xFF1A1A1A))
                             .combinedClickable(onClick = { onMediaClick(soleVideoAtt) }, onLongClick = onLongPress),
                     ) {
+                        // §14.2: real first-frame thumbnail behind the play badge.
+                        val thumb by com.klic.mobile.app.feature.chat.media.rememberVideoThumbnail(
+                            soleVideoAtt, message.conversationId,
+                        )
+                        thumb?.let {
+                            androidx.compose.foundation.Image(
+                                bitmap = it.asImageBitmap(),
+                                contentDescription = "Video",
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier.matchParentSize(),
+                            )
+                        }
                         Icon(
                             imageVector = Icons.Filled.PlayArrow,
                             contentDescription = "Play video",
-                            tint = Color.White.copy(alpha = 0.85f),
-                            modifier = Modifier.size(48.dp).align(Alignment.Center),
+                            tint = Color.White.copy(alpha = 0.9f),
+                            modifier = Modifier
+                                .size(48.dp)
+                                .align(Alignment.Center)
+                                .background(Color.Black.copy(alpha = 0.35f), CircleShape)
+                                .padding(6.dp),
+                        )
+                        // §14.5: reactions on the media's bottom edge, above the pills.
+                        ReactionChipsInline(
+                            reactions = message.reactions,
+                            onTap = onReactionTap,
+                            onMedia = true,
+                            modifier = Modifier
+                                .align(Alignment.BottomStart)
+                                .padding(start = 8.dp, bottom = 34.dp),
                         )
                         // Duration pill — bottom-left.
                         if (soleVideoAtt.durationMs != null) {
@@ -280,6 +323,8 @@ internal fun MessageBubble(
                                 status = status,
                                 conversationId = message.conversationId,
                                 starred = message.starred,
+                                reactions = message.reactions,
+                                onReactionTap = onReactionTap,
                             )
                         } else {
                             FileAttachmentView(
@@ -289,6 +334,8 @@ internal fun MessageBubble(
                                 status = status,
                                 conversationId = message.conversationId,
                                 starred = message.starred,
+                                reactions = message.reactions,
+                                onReactionTap = onReactionTap,
                             )
                         }
                     }
@@ -303,6 +350,8 @@ internal fun MessageBubble(
                     status = status,
                     starred = message.starred,
                     onLongPress = onLongPress,
+                    reactions = message.reactions,
+                    onReactionTap = onReactionTap,
                 )
 
             else ->
@@ -351,13 +400,15 @@ internal fun MessageBubble(
                                 }
                             }
                         }
+                        // §14.5: reactions at the bubble's bottom edge, inside it.
+                        ReactionChipsInline(
+                            reactions = message.reactions,
+                            onTap = onReactionTap,
+                            onPrimary = isMine,
+                            modifier = Modifier.padding(top = 5.dp),
+                        )
                     }
                 }
-        }
-
-        if (message.reactions.isNotEmpty()) {
-            Spacer(Modifier.height(2.dp))
-            ReactionPillsRow(message.reactions, onReactionTap)
         }
     }
 }
@@ -402,13 +453,26 @@ private fun BentoMediaGrid(
                 ),
         ) {
             if (isVideo) {
-                // §13.17: video tile — dark placeholder with a play badge + duration.
+                // §13.17/§14.2: video tile — first-frame thumbnail + play badge + duration.
                 Box(Modifier.fillMaxSize().background(Color(0xFF1A1A1A))) {
+                    val thumb by com.klic.mobile.app.feature.chat.media.rememberVideoThumbnail(att)
+                    thumb?.let {
+                        androidx.compose.foundation.Image(
+                            bitmap = it.asImageBitmap(),
+                            contentDescription = "Video",
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.matchParentSize(),
+                        )
+                    }
                     Icon(
                         imageVector = Icons.Filled.PlayArrow,
                         contentDescription = "Play video",
-                        tint = Color.White.copy(alpha = 0.85f),
-                        modifier = Modifier.size(34.dp).align(Alignment.Center),
+                        tint = Color.White.copy(alpha = 0.9f),
+                        modifier = Modifier
+                            .size(34.dp)
+                            .align(Alignment.Center)
+                            .background(Color.Black.copy(alpha = 0.35f), CircleShape)
+                            .padding(4.dp),
                     )
                     if (att.durationMs != null && overflow <= 0) {
                         MediaTimePill(
@@ -587,6 +651,8 @@ private fun BigEmojiBubble(
     status: String?,
     starred: Boolean,
     onLongPress: () -> Unit,
+    reactions: List<com.klic.mobile.app.data.Reaction> = emptyList(),
+    onReactionTap: (String) -> Unit = {},
 ) {
     val fontSize = when (emojiCount) {
         1 -> 46.sp
@@ -611,6 +677,12 @@ private fun BigEmojiBubble(
             Text(time, style = MaterialTheme.typography.labelSmall, color = timeColor)
             if (status != null) MessageTicks(status = status)
         }
+        // §14.5 parity: emoji-only messages have no bubble — chips sit just below.
+        ReactionChipsInline(
+            reactions = reactions,
+            onTap = onReactionTap,
+            modifier = Modifier.padding(top = 3.dp),
+        )
     }
 }
 

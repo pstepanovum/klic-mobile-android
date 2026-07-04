@@ -154,6 +154,9 @@ fun VoiceAttachmentView(
     time: String = "",
     status: String? = null,
     starred: Boolean = false,
+    /** §14.5: reactions render INSIDE the bubble, at its bottom edge. */
+    reactions: List<com.klic.mobile.app.data.Reaction> = emptyList(),
+    onReactionTap: (String) -> Unit = {},
 ) {
     val player = AudioPlaybackManager
     val playing = player.playingId == att.id
@@ -223,6 +226,13 @@ fun VoiceAttachmentView(
                     }
                 }
             }
+            // §14.5: reaction chips inside the voice bubble.
+            com.klic.mobile.app.feature.chat.actions.ReactionChipsInline(
+                reactions = reactions,
+                onTap = onReactionTap,
+                onPrimary = isMine,
+                modifier = Modifier.padding(top = 4.dp),
+            )
         }
     }
 }
