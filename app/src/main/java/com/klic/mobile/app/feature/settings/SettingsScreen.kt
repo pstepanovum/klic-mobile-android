@@ -170,7 +170,7 @@ fun SettingsScreen(
                                 .padding(horizontal = 18.dp),
                         ) {
                             SettingsRow(
-                                icon = painterResource(KlicIcons.user),
+                                icon = painterResource(KlicIcons.userLine),
                                 title = stringResource(R.string.settings_my_profile),
                                 onClick = onEditProfile,
                             )
@@ -179,45 +179,45 @@ fun SettingsScreen(
                             EmailRow(vm)
                             HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
                             SettingsRow(
-                                icon = painterResource(R.drawable.ic_line_sun),
+                                icon = painterResource(KlicIcons.appearance),
                                 title = stringResource(R.string.settings_appearance),
                                 onClick = { route = SettingsRoute.Appearance },
                             )
                             HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
                             // §13.6: the Chat theme entry lives ONLY under Appearance.
                             SettingsRow(
-                                icon = painterResource(R.drawable.ic_line_notification),
+                                icon = painterResource(KlicIcons.bell),
                                 title = stringResource(R.string.settings_notifications),
                                 onClick = { route = SettingsRoute.Notifications },
                             )
                             HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
                             SettingsRow(
-                                icon = painterResource(R.drawable.ic_line_chart),
+                                icon = painterResource(KlicIcons.data),
                                 title = stringResource(R.string.settings_data_storage),
                                 onClick = { route = SettingsRoute.DataStorage },
                             )
                             HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
                             SettingsRow(
-                                icon = painterResource(R.drawable.ic_line_sun),
+                                icon = painterResource(KlicIcons.language),
                                 title = stringResource(R.string.settings_language),
                                 onClick = { route = SettingsRoute.Language },
                             )
                             HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
                             SettingsRow(
-                                icon = painterResource(KlicIcons.gallery),
+                                icon = painterResource(KlicIcons.qr),
                                 title = stringResource(R.string.settings_qr_code),
                                 onClick = { route = SettingsRoute.QrCode },
                             )
                             HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
                             SettingsRow(
-                                icon = painterResource(KlicIcons.phone),
+                                icon = painterResource(KlicIcons.tabCall),
                                 title = stringResource(R.string.settings_recent_calls),
                                 onClick = { route = SettingsRoute.RecentCalls },
                             )
                             HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
                             // §14.4: everything the user starred, across all chats.
                             SettingsRow(
-                                icon = painterResource(KlicIcons.star),
+                                icon = painterResource(KlicIcons.starLine),
                                 title = stringResource(R.string.settings_saved_messages),
                                 onClick = { route = SettingsRoute.SavedMessages },
                             )
@@ -233,7 +233,7 @@ fun SettingsScreen(
                                 .padding(horizontal = 18.dp),
                         ) {
                             SettingsRow(
-                                icon = painterResource(R.drawable.ic_bold_arrow_bottom),
+                                icon = painterResource(KlicIcons.update),
                                 title = stringResource(R.string.settings_updates),
                                 onClick = { route = SettingsRoute.Updates },
                             )
@@ -256,7 +256,7 @@ fun SettingsScreen(
                             HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
                             // §12.1: target-less report — "something in the app is broken".
                             SettingsRow(
-                                icon = painterResource(R.drawable.ic_line_report),
+                                icon = painterResource(KlicIcons.report),
                                 title = stringResource(R.string.settings_report_problem),
                                 onClick = { showProblemReport = true },
                             )
@@ -306,10 +306,6 @@ fun SettingsScreen(
 
                         Spacer(Modifier.height(20.dp))
 
-                        KlicLottieView(
-                            name = "07",
-                            modifier = Modifier.fillMaxWidth().height(140.dp),
-                        )
                         Text(
                             stringResource(R.string.settings_version_format, versionName),
                             style = MaterialTheme.typography.labelSmall,
@@ -330,7 +326,7 @@ fun SettingsScreen(
                                 .padding(horizontal = 18.dp),
                         ) {
                             SettingsRow(
-                                icon = painterResource(R.drawable.ic_line_gallery),
+                                icon = painterResource(KlicIcons.theme),
                                 title = stringResource(R.string.settings_chat_themes),
                                 onClick = { route = SettingsRoute.ChatTheme },
                             )
@@ -351,7 +347,7 @@ fun SettingsScreen(
                                 .padding(horizontal = 18.dp),
                         ) {
                             SettingsRow(
-                                icon = painterResource(R.drawable.ic_line_moon),
+                                icon = painterResource(KlicIcons.moon),
                                 title = stringResource(R.string.settings_auto_night),
                                 onClick = { route = SettingsRoute.AutoNightMode },
                                 trailing = {
@@ -426,11 +422,9 @@ fun SettingsScreen(
                                 .padding(18.dp),
                             horizontalAlignment = Alignment.CenterHorizontally,
                         ) {
-                            Icon(
-                                painter = painterResource(KlicIcons.add),
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(56.dp),
+                            KlicLottieView(
+                                name = "07",
+                                modifier = Modifier.fillMaxWidth().height(140.dp),
                             )
                             Spacer(Modifier.height(12.dp))
                             Text(
@@ -614,7 +608,7 @@ private fun EmailRow(vm: KlicViewModel) {
             contentAlignment = Alignment.Center,
         ) {
             Icon(
-                painter = painterResource(R.drawable.ic_line_message),
+                painter = painterResource(KlicIcons.email),
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.size(18.dp),

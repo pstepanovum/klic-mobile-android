@@ -59,6 +59,14 @@ class KlicViewModel(
     val typing = socket.typing       // conversationId -> last typing epoch millis
     /** The message currently being replied to (drives the composer's reply bar). */
     val replyingTo = MutableStateFlow<Message?>(null)
+    /** §16.4: the own message currently being edited (drives the composer's edit banner). */
+    val editing = MutableStateFlow<Message?>(null)
+    /** §16.3: compact previews of the open conversation's pins, oldest→newest. */
+    val pinnedMessages = MutableStateFlow<List<com.klic.mobile.app.data.ReplyPreview>>(emptyList())
+    /** §16.3: convId → newest pin id when the bar was hidden locally (no unpin right). */
+    val pinBarHiddenAt = MutableStateFlow<Map<String, String>>(emptyMap())
+    /** §16.2: composer capture mode (mic ↔ round video) — persists for the app session. */
+    val captureMode = MutableStateFlow(com.klic.mobile.app.feature.chat.composer.CaptureMode.AUDIO)
     // Locally hidden messages ("delete for me") — session-scoped, filtered from the list.
     private val hiddenIds = mutableSetOf<String>()
     private var lastTypingSent = 0L
@@ -129,6 +137,8 @@ class KlicViewModel(
                             isAdmin = updated.createdById != null && updated.createdById == meId,
                             lastMessage = updated.lastMessage ?: existing.lastMessage,
                             unreadCount = existing.unreadCount,
+                            // §16.5: the fan-out isn't personalized — keep the viewer's pin.
+                            chatPinnedAt = updated.chatPinnedAt ?: existing.chatPinnedAt,
                         )
                     } else existing
                 }
@@ -160,6 +170,26 @@ class KlicViewModel(
         viewModelScope.launch {
             socket.deletedMessages.collect { u ->
                 if (u.conversationId == openConversationId) markDeletedLocally(u.messageId)
+            }
+        }
+        viewModelScope.launch {
+            // §16.4: edits fan out the full refreshed payload — swap in place, no jump.
+            socket.updatedMessages.collect { applyUpdatedMessage(it) }
+        }
+        viewModelScope.launch {
+            // §16.3: realtime pin/unpin (the mechanism this client uses — no refetch on
+            // conversation:updated). Pins of messages outside the loaded window fall
+            // back to re-reading the conversations payload's compact pinned list.
+            socket.pinUpdates.collect { u ->
+                if (u.conversationId != openConversationId) return@collect
+                if (!u.pinned) {
+                    setPinnedLocally(u.messageId, pinned = false)
+                } else if (messages.value.any { it.id == u.messageId }) {
+                    setPinnedLocally(u.messageId, pinned = true)
+                } else {
+                    loadConversations().join()
+                    seedPinnedFromState()
+                }
             }
         }
         viewModelScope.launch {
@@ -313,7 +343,7 @@ class KlicViewModel(
 
     fun loadConversations() = viewModelScope.launch {
         runCatching { repo.conversations() }.onSuccess { list ->
-            conversations.value = list
+            conversations.value = applyChatPinOverrides(list)
             // Cache which conversations are groups so the killed-app push path can pick
             // the right global toggle (message vs group notifications, §8.5).
             SettingsStore.setGroupConversationIds(
@@ -483,6 +513,8 @@ class KlicViewModel(
     fun openChat(conversationId: String) = viewModelScope.launch {
         openConversationId = conversationId
         replyingTo.value = null
+        editing.value = null
+        pinnedMessages.value = emptyList()
         isLoadingOlderMessages.value = false
         chatActiveCall.value = null
         refreshActiveCall(conversationId)
@@ -492,12 +524,14 @@ class KlicViewModel(
         val cached = messageCache[conversationId]
         messages.value = cached?.filterNot { m -> m.id in hiddenIds } ?: emptyList()
         hasMoreMessages.value = (cached?.size ?: 0) >= 50
+        seedPinnedFromState()
         runCatching { repo.messages(conversationId) }
             .onSuccess { msgs ->
                 // A different chat may have been opened while this fetch was in flight.
                 if (openConversationId != conversationId) return@onSuccess
                 messages.value = msgs.reversed().filterNot { m -> m.id in hiddenIds }
                 hasMoreMessages.value = msgs.size >= 50
+                seedPinnedFromState()
             }
     }
 
@@ -521,6 +555,9 @@ class KlicViewModel(
         replyingTo.value = null
         runCatching { repo.send(conversationId, body, replyId) }
             .onSuccess { upsertMessage(it); bumpSent(conversationId) }
+            // §16.6: rejected sends (e.g. 403 when the peer blocked this account)
+            // surface a quiet "Couldn't send" toast instead of vanishing silently.
+            .onFailure { error.value = str(com.klic.mobile.app.R.string.err_send_message) }
     }
 
     fun sendSticker(conversationId: String, stickerId: String) = viewModelScope.launch {
@@ -568,6 +605,129 @@ class KlicViewModel(
             if (it.id == messageId) it.copy(deletedAt = now, reactions = emptyList(), attachments = emptyList())
             else it
         }
+        // §16.3: a deleted pin leaves the pinned bar.
+        pinnedMessages.value = pinnedMessages.value.filterNot { it.id == messageId }
+    }
+
+    // ── v0.5.9 (§16.3): pins ──────────────────────────────────────────────────
+
+    /** Pin a message; groups optionally fan out the "«Name» pinned a message" SYSTEM line. */
+    fun pinMessage(conversationId: String, messageId: String, notify: Boolean) = viewModelScope.launch {
+        setPinnedLocally(messageId, pinned = true)
+        runCatching { repo.pinMessage(conversationId, messageId, notify) }
+            .onFailure {
+                setPinnedLocally(messageId, pinned = false)
+                error.value = repo.serverMessage(it)
+                    ?: str(com.klic.mobile.app.R.string.err_pin_message)
+            }
+    }
+
+    fun unpinMessage(conversationId: String, messageId: String) = viewModelScope.launch {
+        val removed = pinnedMessages.value.firstOrNull { it.id == messageId }
+        setPinnedLocally(messageId, pinned = false)
+        runCatching { repo.unpinMessage(conversationId, messageId) }
+            .onFailure {
+                removed?.let { r ->
+                    if (pinnedMessages.value.none { it.id == r.id }) {
+                        pinnedMessages.value = pinnedMessages.value + r
+                    }
+                }
+                error.value = repo.serverMessage(it)
+                    ?: str(com.klic.mobile.app.R.string.err_unpin_message)
+            }
+    }
+
+    /** × on the pinned bar without unpin rights: hide until a NEWER pin arrives. */
+    fun hidePinBar(conversationId: String) {
+        val newest = pinnedMessages.value.lastOrNull()?.id ?: return
+        pinBarHiddenAt.value = pinBarHiddenAt.value + (conversationId to newest)
+    }
+
+    private fun setPinnedLocally(messageId: String, pinned: Boolean) {
+        val now = Instant.now().toString()
+        messages.value = messages.value.map {
+            if (it.id == messageId) it.copy(pinnedAt = if (pinned) now else null) else it
+        }
+        if (pinned) {
+            val m = messages.value.firstOrNull { it.id == messageId } ?: return
+            if (pinnedMessages.value.none { it.id == messageId }) {
+                pinnedMessages.value = pinnedMessages.value + compactPreviewOf(m)
+            }
+        } else {
+            pinnedMessages.value = pinnedMessages.value.filterNot { it.id == messageId }
+        }
+    }
+
+    /** Rebuild the pinned list: server compact list ∪ pins visible in the loaded window. */
+    private fun seedPinnedFromState() {
+        val convId = openConversationId ?: return
+        val server = conversations.value.firstOrNull { it.id == convId }?.pinnedMessages ?: emptyList()
+        val derived = messages.value
+            .filter { it.pinnedAt != null && !it.isDeleted }
+            .sortedBy { it.pinnedAt }
+            .map(::compactPreviewOf)
+        pinnedMessages.value = server + derived.filterNot { d -> server.any { it.id == d.id } }
+    }
+
+    private fun compactPreviewOf(m: Message): com.klic.mobile.app.data.ReplyPreview =
+        com.klic.mobile.app.data.ReplyPreview(
+            id = m.id,
+            senderId = m.senderId,
+            kind = m.kind,
+            preview = m.body,
+            attachment = m.attachments.firstOrNull()?.let {
+                com.klic.mobile.app.data.ReplyAttachment(
+                    id = it.id, kind = it.kind, url = it.url, contentType = it.contentType,
+                    width = it.width, height = it.height, durationMs = it.durationMs,
+                    fileName = it.fileName,
+                )
+            },
+        )
+
+    // ── v0.5.9 (§16.4): message editing ───────────────────────────────────────
+
+    fun setEditing(message: Message?) { editing.value = message }
+
+    /** PATCH the body — optimistic swap, reverted when the server rejects the edit. */
+    fun editMessage(conversationId: String, messageId: String, body: String) = viewModelScope.launch {
+        val before = messages.value.firstOrNull { it.id == messageId } ?: return@launch
+        if (before.body == body) return@launch
+        val optimistic = before.copy(body = body, editedAt = Instant.now().toString())
+        applyUpdatedMessage(optimistic)
+        runCatching { repo.editMessage(conversationId, messageId, body) }
+            .onSuccess { fresh -> fresh?.let { applyUpdatedMessage(it) } }
+            .onFailure {
+                applyUpdatedMessage(before)
+                error.value = repo.serverMessage(it)
+                    ?: str(com.klic.mobile.app.R.string.err_edit_message)
+            }
+    }
+
+    /** §16.4: swap an updated message in place (no append → no scroll jump). */
+    private fun applyUpdatedMessage(msg: Message) {
+        if (msg.conversationId == openConversationId) {
+            messages.value = messages.value.map { if (it.id == msg.id) msg else it }
+            // Pinned-bar snippets track edits of pinned parents.
+            pinnedMessages.value = pinnedMessages.value.map {
+                if (it.id == msg.id) it.copy(preview = msg.body) else it
+            }
+        }
+        // Conversation-list preview refreshes when the edited message is the latest.
+        conversations.value = conversations.value.map { c ->
+            if (c.id == msg.conversationId && c.lastMessage?.id == msg.id) {
+                c.copy(lastMessage = msg)
+            } else c
+        }
+    }
+
+    /** §16.2: mic ↔ round-video capture-mode toggle (session-scoped). */
+    fun toggleCaptureMode() {
+        captureMode.value =
+            if (captureMode.value == com.klic.mobile.app.feature.chat.composer.CaptureMode.AUDIO) {
+                com.klic.mobile.app.feature.chat.composer.CaptureMode.VIDEO
+            } else {
+                com.klic.mobile.app.feature.chat.composer.CaptureMode.AUDIO
+            }
     }
 
     private fun upsertMessage(m: Message) {
@@ -668,7 +828,7 @@ class KlicViewModel(
             // §14.2: seed video thumbnails from the LOCAL source so the sender's bubble
             // shows a real first frame instantly (no remote fetch of the video).
             task.attachments.zip(msg.attachments).forEach { (input, uploaded) ->
-                if (uploaded.kind == "VIDEO" && input.localUri != null) {
+                if ((uploaded.kind == "VIDEO" || uploaded.kind == "VIDEO_NOTE") && input.localUri != null) {
                     viewModelScope.launch {
                         com.klic.mobile.app.feature.chat.media.VideoThumbnails
                             .seedFromLocal(container.appContext, uploaded.url, input.localUri)
@@ -848,6 +1008,75 @@ class KlicViewModel(
     /** Emit a read receipt for the open conversation. */
     fun markRead(conversationId: String) {
         socket.emit("message:read", buildJsonObject { put("conversationId", conversationId) })
+    }
+
+    // ── v0.5.9 (§16.5): chat-list long-press actions ──────────────────────────
+
+    // Session-local chat-pin overrides so pin/unpin reorders the list (and survives
+    // list refreshes) before the server persists ConversationPrefs.pinnedAt; a
+    // server-provided chatPinnedAt is replaced by the override while one exists.
+    private val chatPinOverrides = mutableMapOf<String, String?>()
+
+    private fun applyChatPinOverrides(list: List<Conversation>): List<Conversation> =
+        list.map { c ->
+            if (chatPinOverrides.containsKey(c.id)) c.copy(chatPinnedAt = chatPinOverrides[c.id]) else c
+        }
+
+    /** §16.5 "Mark as Read": the read receipt + an immediate local badge clear. */
+    fun markConversationRead(conversationId: String) {
+        markRead(conversationId)
+        conversations.value = conversations.value.map {
+            if (it.id == conversationId) it.copy(unreadCount = 0) else it
+        }
+    }
+
+    /** §16.5 Pin/Unpin: optimistic reorder; the server stamp is adopted when it lands. */
+    fun setChatPinned(conversationId: String, pinned: Boolean) = viewModelScope.launch {
+        chatPinOverrides[conversationId] = if (pinned) Instant.now().toString() else null
+        conversations.value = applyChatPinOverrides(conversations.value)
+        // Pre-WP-S9 servers ignore/reject {pinned} — the local pin stands for the session.
+        runCatching { repo.setChatPinned(conversationId, pinned) }
+            .onSuccess { prefs ->
+                if (pinned && prefs.pinnedAt != null) {
+                    chatPinOverrides[conversationId] = prefs.pinnedAt
+                    conversations.value = applyChatPinOverrides(conversations.value)
+                }
+            }
+    }
+
+    /** §16.5 Delete: DELETE /conversations/:id, dropped locally on success. */
+    fun deleteConversation(conversationId: String) = viewModelScope.launch {
+        runCatching { repo.deleteConversation(conversationId) }
+            .onSuccess {
+                conversations.value = conversations.value.filterNot { it.id == conversationId }
+                messageCache.remove(conversationId)
+                if (openConversationId == conversationId) {
+                    openConversationId = null
+                    messages.value = emptyList()
+                    chatActiveCall.value = null
+                    replyingTo.value = null
+                }
+            }
+            .onFailure {
+                error.value = repo.serverMessage(it)
+                    ?: str(com.klic.mobile.app.R.string.err_delete_chat)
+            }
+    }
+
+    // ── v0.5.9 (§16.6): remove friend ─────────────────────────────────────────
+
+    /** DELETE /friends/:userId — the chat stays; friends (and isFriend gating) refresh. */
+    fun removeFriend(userId: String, onDone: () -> Unit = {}) = viewModelScope.launch {
+        runCatching { repo.removeFriend(userId) }
+            .onSuccess {
+                loadFriends()
+                loadConversations()
+                onDone()
+            }
+            .onFailure {
+                error.value = repo.serverMessage(it)
+                    ?: str(com.klic.mobile.app.R.string.err_remove_friend)
+            }
     }
 
     // ── v0.5.1 (§8.2/§8.4/§8.5): stars, prefs, attachments, jump-to-message ──

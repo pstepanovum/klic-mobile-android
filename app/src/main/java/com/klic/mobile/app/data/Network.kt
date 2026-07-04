@@ -123,6 +123,10 @@ interface KlicApi {
     @POST("friends/requests/{id}/decline")
     suspend fun declineFriendRequest(@Path("id") id: String): Response<ResponseBody>
 
+    // §16.6 (WP-S9): unfriend — deletes an ACCEPTED friendship; 404 when none.
+    @DELETE("friends/{userId}")
+    suspend fun removeFriend(@Path("userId") userId: String): Response<ResponseBody>
+
     @POST("calls")
     suspend fun startCall(@Body body: StartCallRequest): CallSession
 
@@ -210,6 +214,10 @@ interface KlicApi {
         @Body body: AvatarUploadRequest,
     ): UploadTicket
 
+    // §16.5: delete conversation (server currently allows GROUP + admin only).
+    @DELETE("conversations/{id}")
+    suspend fun deleteConversation(@Path("id") id: String): Response<ResponseBody>
+
     // Admin-only member removal (§9.3, WP-S3) — 204 on success.
     @DELETE("conversations/{id}/members/{userId}")
     suspend fun removeConversationMember(
@@ -281,6 +289,30 @@ interface KlicApi {
 
     @DELETE("me/email")
     suspend fun removeEmail(): Response<ResponseBody>
+
+    // ── v0.5.9 (§16.3/§16.4): pins + message editing (WP-S9) ──
+
+    @POST("conversations/{id}/messages/{messageId}/pin")
+    suspend fun pinMessage(
+        @Path("id") id: String,
+        @Path("messageId") messageId: String,
+        @Body body: PinMessageRequest,
+    ): Response<ResponseBody>
+
+    @DELETE("conversations/{id}/messages/{messageId}/pin")
+    suspend fun unpinMessage(
+        @Path("id") id: String,
+        @Path("messageId") messageId: String,
+    ): Response<ResponseBody>
+
+    // Raw body: older servers don't know the route, and the shape of a success
+    // response may evolve — the socket's message:updated stays authoritative.
+    @PATCH("conversations/{id}/messages/{messageId}")
+    suspend fun editMessage(
+        @Path("id") id: String,
+        @Path("messageId") messageId: String,
+        @Body body: EditMessageRequest,
+    ): ResponseBody
 }
 
 /** Bare, synchronous refresh used by the Authenticator (no auth header, no authenticator → no recursion). */

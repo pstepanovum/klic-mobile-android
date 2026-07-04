@@ -197,6 +197,12 @@ class KlicRepository(
     suspend fun sendFriendRequest(userId: String) { api.sendFriendRequest(mapOf("userId" to userId)) }
     suspend fun acceptFriendRequest(id: String) { api.acceptFriendRequest(id) }
     suspend fun declineFriendRequest(id: String) { api.declineFriendRequest(id) }
+
+    /** §16.6: DELETE /friends/:userId — throws HttpException so serverMessage() works. */
+    suspend fun removeFriend(userId: String) {
+        val res = api.removeFriend(userId)
+        if (!res.isSuccessful) throw retrofit2.HttpException(res)
+    }
     suspend fun openConversation(userId: String): Conversation =
         api.createConversation(CreateConversationRequest(userId = userId))
 
@@ -438,6 +444,19 @@ class KlicRepository(
         }
     }))
 
+    /** §16.5: PUT the chat-list pin flag onto the per-conversation prefs. */
+    suspend fun setChatPinned(conversationId: String, pinned: Boolean): ConversationPrefs =
+        api.updateConversationPrefs(
+            conversationId,
+            JsonObject(mapOf("pinned" to JsonPrimitive(pinned))),
+        )
+
+    /** §16.5: DELETE /conversations/:id — throws HttpException so serverMessage() works. */
+    suspend fun deleteConversation(conversationId: String) {
+        val res = api.deleteConversation(conversationId)
+        if (!res.isSuccessful) throw retrofit2.HttpException(res)
+    }
+
     suspend fun starMessage(messageId: String) { api.starMessage(messageId) }
     suspend fun unstarMessage(messageId: String) { api.unstarMessage(messageId) }
 
@@ -613,6 +632,30 @@ class KlicRepository(
         val res = api.removeEmail()
         if (!res.isSuccessful) error("Email removal failed (${res.code()})")
         return refreshMe()
+    }
+
+    // ── v0.5.9 (§16.3/§16.4): pins + message editing ──────────────────────────
+
+    /** POST .../pin — DM: either side; group: admin only (server-enforced). */
+    suspend fun pinMessage(conversationId: String, messageId: String, notify: Boolean) {
+        val res = api.pinMessage(conversationId, messageId, PinMessageRequest(notify))
+        if (!res.isSuccessful) error("Pin failed (${res.code()})")
+    }
+
+    /** DELETE .../pin — idempotent server-side. */
+    suspend fun unpinMessage(conversationId: String, messageId: String) {
+        val res = api.unpinMessage(conversationId, messageId)
+        if (!res.isSuccessful) error("Unpin failed (${res.code()})")
+    }
+
+    /**
+     * PATCH the message body (§16.4). Returns the refreshed message when the server
+     * responds with a full payload, or null on a shapeless 2xx — either way the
+     * `message:updated` fan-out is the authoritative sync path.
+     */
+    suspend fun editMessage(conversationId: String, messageId: String, body: String): Message? {
+        val raw = api.editMessage(conversationId, messageId, EditMessageRequest(body)).string()
+        return runCatching { json.decodeFromString(Message.serializer(), raw) }.getOrNull()
     }
 
     private suspend fun persist(res: AuthResponse) {

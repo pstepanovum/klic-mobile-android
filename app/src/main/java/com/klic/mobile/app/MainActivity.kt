@@ -82,10 +82,10 @@ private data class Tab(
 )
 
 private val tabs = listOf(
-    Tab("home",     R.string.tab_chats,    KlicIcons.messageChat,    KlicIcons.messageChatBold),
-    Tab("friends",  R.string.tab_friends,  KlicIcons.user,           KlicIcons.userBold),
-    Tab("call",     R.string.tab_call,     KlicIcons.phone,          KlicIcons.phoneBold),
-    Tab("settings", R.string.tab_settings, KlicIcons.settings,       KlicIcons.settings),
+    Tab("home",     R.string.tab_chats,    KlicIcons.tabChat,     KlicIcons.tabChatSolid),
+    Tab("friends",  R.string.tab_friends,  KlicIcons.tabUser,     KlicIcons.tabUserSolid),
+    Tab("call",     R.string.tab_call,     KlicIcons.tabCall,     KlicIcons.tabCallSolid),
+    Tab("settings", R.string.tab_settings, KlicIcons.tabSettings, KlicIcons.tabSettingsSolid),
 )
 
 private val tabRoutes = tabs.map { it.route }.toSet()

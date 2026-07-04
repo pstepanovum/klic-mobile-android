@@ -80,9 +80,12 @@ fun ProfileScreen(
     val member = conversations.firstOrNull { it.id == conversationId }?.members?.firstOrNull()
     val presenceMap by vm.presence.collectAsState()
     val me by vm.currentUser.collectAsState()
+    // §16.6: friendship drives the Remove Friend ↔ Add friend fallback.
+    val friends by vm.friends.collectAsState()
     var profile by remember { mutableStateOf<UserProfile?>(null) }
     var sub by remember { mutableStateOf<ChatInfoSub?>(null) }
 
+    LaunchedEffect(Unit) { vm.loadFriends() }
     LaunchedEffect(member?.id) {
         member?.id?.let { id ->
             // §9.9: render the cached profile instantly, then refresh in the background.
@@ -223,14 +226,14 @@ fun ProfileScreen(
                         }
                         Spacer(Modifier.height(24.dp))
                         Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                            CallActionButton(KlicIcons.phone, stringResource(R.string.action_audio)) {
+                            CallActionButton(KlicIcons.callSolid, stringResource(R.string.action_audio)) {
                                 vm.startCall(conversationId, "AUDIO", member.displayName); onCall("AUDIO")
                             }
-                            CallActionButton(KlicIcons.video, stringResource(R.string.action_video)) {
+                            CallActionButton(KlicIcons.videoSolid, stringResource(R.string.action_video)) {
                                 vm.startCall(conversationId, "VIDEO", member.displayName); onCall("VIDEO")
                             }
                             if (onMessage != null) {
-                                CallActionButton(KlicIcons.message, stringResource(R.string.action_message)) { onMessage() }
+                                CallActionButton(KlicIcons.messageSolid, stringResource(R.string.action_message)) { onMessage() }
                             }
                         }
 
@@ -291,10 +294,50 @@ fun ProfileScreen(
                         // §10.4: block action with confirm — the blocked list lives in
                         // Settings → Privacy and Security → Blocked Users.
                         // §12.1: report action — the shared report sheet, user target.
+                        // §16.6: Remove Friend (friends) / Add friend (fallback state).
                         var showBlockConfirm by remember { mutableStateOf(false) }
                         var showReport by remember { mutableStateOf(false) }
+                        var showRemoveFriendConfirm by remember { mutableStateOf(false) }
+                        // §16.6: inline "Also delete the chat" option in the block confirm.
+                        var alsoDeleteChat by remember { mutableStateOf(false) }
+                        val isFriend = friends.any { it.id == member.id }
                         Spacer(Modifier.height(16.dp))
+                        if (!isFriend) {
+                            // Non-friend fallback: the "Add friend" state.
+                            InfoCard {
+                                Row(
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .clickable { vm.sendFriendRequestTo(member.id, member.displayName) }
+                                        .padding(vertical = 13.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Text(
+                                        stringResource(R.string.group_member_add_friend),
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        color = MaterialTheme.colorScheme.primary,
+                                    )
+                                }
+                            }
+                            Spacer(Modifier.height(16.dp))
+                        }
                         InfoCard {
+                            if (isFriend) {
+                                Row(
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .clickable { showRemoveFriendConfirm = true }
+                                        .padding(vertical = 13.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Text(
+                                        stringResource(R.string.profile_remove_friend),
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        color = MaterialTheme.colorScheme.error,
+                                    )
+                                }
+                                InfoDivider()
+                            }
                             Row(
                                 Modifier
                                     .fillMaxWidth()
@@ -312,7 +355,7 @@ fun ProfileScreen(
                             Row(
                                 Modifier
                                     .fillMaxWidth()
-                                    .clickable { showBlockConfirm = true }
+                                    .clickable { alsoDeleteChat = false; showBlockConfirm = true }
                                     .padding(vertical = 13.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
@@ -338,11 +381,37 @@ fun ProfileScreen(
                             AlertDialog(
                                 onDismissRequest = { showBlockConfirm = false },
                                 title = { Text(stringResource(R.string.profile_block_format, member.displayName)) },
-                                text = { Text(stringResource(R.string.profile_block_confirm)) },
+                                text = {
+                                    Column {
+                                        Text(stringResource(R.string.profile_block_confirm))
+                                        // §16.6: inline delete-chat option, OFF by default —
+                                        // runs the delete-conversation flow after the block.
+                                        Row(
+                                            Modifier
+                                                .fillMaxWidth()
+                                                .clickable { alsoDeleteChat = !alsoDeleteChat }
+                                                .padding(top = 12.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                        ) {
+                                            androidx.compose.material3.Checkbox(
+                                                checked = alsoDeleteChat,
+                                                onCheckedChange = { alsoDeleteChat = it },
+                                            )
+                                            Text(
+                                                stringResource(R.string.block_also_delete_chat),
+                                                style = MaterialTheme.typography.bodyMedium,
+                                            )
+                                        }
+                                    }
+                                },
                                 confirmButton = {
                                     TextButton(onClick = {
                                         showBlockConfirm = false
-                                        vm.blockUser(member.id, member.displayName) { onBack() }
+                                        val deleteChatToo = alsoDeleteChat
+                                        vm.blockUser(member.id, member.displayName) {
+                                            if (deleteChatToo) vm.deleteConversation(conversationId)
+                                            onBack()
+                                        }
                                     }) {
                                         Text(
                                             stringResource(R.string.profile_block),
@@ -352,6 +421,30 @@ fun ProfileScreen(
                                 },
                                 dismissButton = {
                                     TextButton(onClick = { showBlockConfirm = false }) {
+                                        Text(stringResource(R.string.common_cancel))
+                                    }
+                                },
+                            )
+                        }
+                        // §16.6: Remove Friend confirm — the chat itself stays.
+                        if (showRemoveFriendConfirm) {
+                            AlertDialog(
+                                onDismissRequest = { showRemoveFriendConfirm = false },
+                                title = { Text(stringResource(R.string.profile_remove_friend)) },
+                                text = { Text(stringResource(R.string.profile_remove_friend_confirm, member.displayName)) },
+                                confirmButton = {
+                                    TextButton(onClick = {
+                                        showRemoveFriendConfirm = false
+                                        vm.removeFriend(member.id)
+                                    }) {
+                                        Text(
+                                            stringResource(R.string.group_remove),
+                                            color = MaterialTheme.colorScheme.error,
+                                        )
+                                    }
+                                },
+                                dismissButton = {
+                                    TextButton(onClick = { showRemoveFriendConfirm = false }) {
                                         Text(stringResource(R.string.common_cancel))
                                     }
                                 },

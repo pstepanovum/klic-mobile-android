@@ -9,6 +9,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -25,6 +26,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -78,7 +80,18 @@ fun ConversationsScreen(vm: KlicViewModel, onOpenChat: (Conversation) -> Unit) {
     val presenceMap by vm.presence.collectAsState()
     var searchText by remember { mutableStateOf("") }
     var showNewMessageSheet by remember { mutableStateOf(false) }
+    // §16.5: long-press context menu + its follow-up sheets/dialogs.
+    var menuTarget by remember { mutableStateOf<Conversation?>(null) }
+    var menuPrefs by remember { mutableStateOf<com.klic.mobile.app.data.ConversationPrefs?>(null) }
+    var muteTarget by remember { mutableStateOf<Conversation?>(null) }
+    var deleteTarget by remember { mutableStateOf<Conversation?>(null) }
+    val scope = rememberCoroutineScope()
     LaunchedEffect(Unit) { vm.loadConversations() }
+    // The mute item reflects the freshest per-chat prefs (server or local cache).
+    LaunchedEffect(menuTarget?.id) {
+        menuPrefs = null
+        menuTarget?.let { menuPrefs = vm.fetchConversationPrefs(it.id) }
+    }
 
     val filtered = if (searchText.isEmpty()) conversations else conversations.filter { convo ->
         conversationTitle(convo).contains(searchText, ignoreCase = true) ||
@@ -87,6 +100,11 @@ fun ConversationsScreen(vm: KlicViewModel, onOpenChat: (Conversation) -> Unit) {
                 it.username.contains(searchText, ignoreCase = true)
         } ||
         (convo.lastMessage?.body?.contains(searchText, ignoreCase = true) == true)
+    }
+    // §16.5: pinned chats first (newest pin highest); the rest keep recency order.
+    val ordered = remember(filtered) {
+        val (pinned, rest) = filtered.partition { it.chatPinnedAt != null }
+        pinned.sortedByDescending { it.chatPinnedAt } + rest
     }
 
     Scaffold(
@@ -133,10 +151,15 @@ fun ConversationsScreen(vm: KlicViewModel, onOpenChat: (Conversation) -> Unit) {
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                 )
                 LazyColumn(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
-                    items(filtered) { convo ->
+                    items(ordered, key = { it.id }) { convo ->
                         val online = convo.type == "DIRECT" &&
                             presenceMap[convo.members.firstOrNull()?.id]?.online == true
-                        ConversationRow(convo, online) { onOpenChat(convo) }
+                        ConversationRow(
+                            conversation = convo,
+                            online = online,
+                            onClick = { onOpenChat(convo) },
+                            onLongPress = { menuTarget = convo },
+                        )
                     }
                 }
             }
@@ -153,16 +176,102 @@ fun ConversationsScreen(vm: KlicViewModel, onOpenChat: (Conversation) -> Unit) {
             },
         )
     }
+
+    // §16.5: long-press context menu (mark as read / pin / mute / delete).
+    menuTarget?.let { target ->
+        // Render against the freshest copy so the pin label tracks the toggle.
+        val live = conversations.firstOrNull { it.id == target.id } ?: target
+        ConversationActionsOverlay(
+            conversation = live,
+            title = conversationTitle(live),
+            isPinned = live.chatPinnedAt != null,
+            isMuted = com.klic.mobile.app.feature.chatinfo.isMuted(menuPrefs?.messagesMutedUntil),
+            onMarkRead = if (live.unreadCount > 0) {
+                { vm.markConversationRead(live.id) }
+            } else null,
+            onTogglePin = { vm.setChatPinned(live.id, pinned = live.chatPinnedAt == null) },
+            onMute = { muteTarget = live; menuTarget = null },
+            onUnmute = {
+                val current = menuPrefs ?: com.klic.mobile.app.data.ConversationPrefs()
+                scope.launch {
+                    vm.setConversationPrefs(
+                        live.id, current,
+                        setMessagesMuted = true, messagesMutedUntil = null,
+                    )
+                }
+                menuTarget = null
+            },
+            onDelete = { deleteTarget = live; menuTarget = null },
+            onDismiss = { menuTarget = null },
+        )
+    }
+
+    // §16.5: unmuted rows get the existing mute-duration options (8h / 1w / always).
+    muteTarget?.let { target ->
+        val current = menuPrefs ?: com.klic.mobile.app.data.ConversationPrefs()
+        com.klic.mobile.app.feature.chatinfo.MuteSelectionSheet(
+            title = stringResource(R.string.info_mute_messages),
+            muted = com.klic.mobile.app.feature.chatinfo.isMuted(current.messagesMutedUntil),
+            onPick = { untilIso ->
+                scope.launch {
+                    vm.setConversationPrefs(
+                        target.id, current,
+                        setMessagesMuted = true, messagesMutedUntil = untilIso,
+                    )
+                }
+                muteTarget = null
+            },
+            onDismiss = { muteTarget = null },
+        )
+    }
+
+    // §16.5: delete keeps the existing delete-conversation semantics + confirm.
+    deleteTarget?.let { target ->
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { deleteTarget = null },
+            title = { Text(stringResource(R.string.convo_delete_chat)) },
+            text = { Text(stringResource(R.string.convo_delete_confirm)) },
+            confirmButton = {
+                androidx.compose.material3.TextButton(onClick = {
+                    vm.deleteConversation(target.id)
+                    deleteTarget = null
+                }) {
+                    Text(stringResource(R.string.common_delete), color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                androidx.compose.material3.TextButton(onClick = { deleteTarget = null }) {
+                    Text(stringResource(R.string.common_cancel))
+                }
+            },
+        )
+    }
 }
 
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
-private fun ConversationRow(conversation: Conversation, online: Boolean, onClick: () -> Unit) {
+private fun ConversationRow(
+    conversation: Conversation,
+    online: Boolean,
+    onClick: () -> Unit,
+    onLongPress: () -> Unit,
+) {
     val member = conversation.members.firstOrNull()
     val title = conversationTitle(conversation)
+    val haptics = androidx.compose.ui.platform.LocalHapticFeedback.current
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick),
+            .combinedClickable(
+                onClick = onClick,
+                // §16.5: long-press opens the chat context menu.
+                onLongClick = {
+                    haptics.performHapticFeedback(
+                        androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress,
+                    )
+                    onLongPress()
+                },
+            ),
     ) {
         androidx.compose.foundation.layout.Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 12.dp),
@@ -209,11 +318,20 @@ private fun ConversationRow(conversation: Conversation, online: Boolean, onClick
                 verticalArrangement = Arrangement.spacedBy(6.dp),
                 modifier = Modifier.padding(start = 8.dp).align(Alignment.Top),
             ) {
-                lastMessageStamp(conversation.lastMessage)?.let { stamp ->
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(3.dp),
-                    ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(3.dp),
+                ) {
+                    // §16.5: small pin indicator on pinned rows.
+                    if (conversation.chatPinnedAt != null) {
+                        Icon(
+                            imageVector = Icons.Filled.PushPin,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(13.dp),
+                        )
+                    }
+                    lastMessageStamp(conversation.lastMessage)?.let { stamp ->
                         conversation.lastMessage?.status?.let { MessageTicks(status = it) }
                         Text(stamp, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
@@ -281,6 +399,7 @@ private fun lastMessagePreview(m: Message?): String = when {
     m.isSticker -> stringResource(R.string.preview_sticker)
     m.body.isNotBlank() -> m.body
     m.attachments.firstOrNull()?.kind == "IMAGE" -> stringResource(R.string.preview_photo)
+    m.attachments.firstOrNull()?.kind == "VIDEO_NOTE" -> stringResource(R.string.preview_video_message)
     m.attachments.firstOrNull()?.kind == "VIDEO" -> stringResource(R.string.preview_video)
     m.attachments.firstOrNull()?.kind == "VOICE" -> stringResource(R.string.preview_voice_message)
     m.attachments.isNotEmpty() -> stringResource(R.string.preview_file)
@@ -445,14 +564,14 @@ private fun NewMessageSheet(
                         }
                         item {
                             NewMsgActionRow(
-                                iconRes = KlicIcons.user,
+                                iconRes = KlicIcons.usersGroup,
                                 label = stringResource(R.string.convos_new_group),
                                 onClick = { screen = NewMsgScreen.NEW_GROUP_PICKER },
                             )
                         }
                         item {
                             NewMsgActionRow(
-                                iconRes = KlicIcons.addUser,
+                                iconRes = KlicIcons.userLine,
                                 label = stringResource(R.string.convos_new_contact),
                                 onClick = { screen = NewMsgScreen.NEW_CONTACT },
                             )

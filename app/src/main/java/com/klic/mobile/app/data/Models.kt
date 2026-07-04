@@ -110,6 +110,10 @@ data class Conversation(
     val isAdmin: Boolean = false,       // true when the current user created this group
     /** §14.3: shared group chat theme (admin-set, server-synced); null = none. */
     val theme: ConversationTheme? = null,
+    /** §16.3: pinned messages (compact previews), oldest→newest; absent on old servers. */
+    val pinnedMessages: List<ReplyPreview> = emptyList(),
+    /** §16.5: per-viewer chat-list pin stamp (ConversationPrefs.pinnedAt); absent on old servers. */
+    val chatPinnedAt: String? = null,
 )
 
 /**
@@ -168,7 +172,29 @@ data class ReplyPreview(
     val senderId: String,
     val kind: String,
     val preview: String,
+    /** §16.1: the parent's first attachment, for the quote-card thumbnail (WP-S9). */
+    val attachment: ReplyAttachment? = null,
+    /** §16.1: true when the parent was deleted for everyone → "Deleted message". */
+    val deleted: Boolean? = null,
 )
+
+/** §16.1: compact attachment inside a ReplyPreview — a subset of AttachmentPayload. */
+@Serializable
+data class ReplyAttachment(
+    val id: String? = null,
+    val kind: String,
+    val url: String,
+    val contentType: String = "",
+    val width: Int? = null,
+    val height: Int? = null,
+    val durationMs: Int? = null,
+    val fileName: String? = null,
+) {
+    fun asAttachment(): Attachment = Attachment(
+        id = id ?: url, kind = kind, url = url, contentType = contentType, byteSize = 0,
+        width = width, height = height, durationMs = durationMs, fileName = fileName,
+    )
+}
 
 @Serializable
 data class Message(
@@ -186,6 +212,10 @@ data class Message(
     val replyTo: ReplyPreview? = null,
     val reactions: List<Reaction> = emptyList(),
     val deletedAt: String? = null,
+    /** §16.4: set when the sender edited the body — drives the "edited" meta label. */
+    val editedAt: String? = null,
+    /** §16.3: set while this message is pinned in its conversation. */
+    val pinnedAt: String? = null,
     /** True when the requesting user starred this message (§8.2). */
     val starred: Boolean = false,
     // CIPHERTEXT messages (E2EE): sender's protocol device + the envelopes
@@ -341,6 +371,8 @@ data class ConversationPrefs(
     val messagesMutedUntil: String? = null,
     val muteMentions: Boolean = false,
     val callsMutedUntil: String? = null,
+    /** §16.5: chat-list pin stamp; round-tripped by PUT {pinned}. Absent on old servers. */
+    val pinnedAt: String? = null,
 )
 
 /** One row of GET /conversations/:id/attachments — attachment + message context. */
@@ -422,3 +454,13 @@ data class CreateReportResponse(val id: String)
 /** POST /me/email/google — the Google ID token proving ownership of the email. */
 @Serializable
 data class GoogleEmailRequest(val idToken: String)
+
+// ── v0.5.9 (§16.3/§16.4): pins + message editing ──────────────────────────────
+
+/** POST /conversations/:id/messages/:messageId/pin — notify fans out a SYSTEM line. */
+@Serializable
+data class PinMessageRequest(val notify: Boolean)
+
+/** PATCH /conversations/:id/messages/:messageId — sender-only body edit (≤48h). */
+@Serializable
+data class EditMessageRequest(val body: String)

@@ -9,17 +9,23 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Reply
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material.icons.outlined.Block
@@ -36,13 +42,16 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
@@ -70,6 +79,11 @@ fun MessageActionsOverlay(
     onDismiss: () -> Unit,
     /** §12.1: "Report message" — only offered on other people's messages. */
     onReport: (() -> Unit)? = null,
+    /** §16.3: "Pin"/"Unpin" — null when the user lacks pin rights here. */
+    onPin: (() -> Unit)? = null,
+    isPinned: Boolean = false,
+    /** §16.4: "Edit" — only on OWN editable messages within the 48h window. */
+    onEdit: (() -> Unit)? = null,
 ) {
     val mine = remember(message.reactions) { message.reactions.filter { it.mine }.map { it.emoji }.toSet() }
     val hasBody = message.body.isNotBlank()
@@ -119,6 +133,15 @@ fun MessageActionsOverlay(
             Surface(shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.surface, shadowElevation = 8.dp) {
                 Column(Modifier.width(240.dp)) {
                     ActionRow(stringResource(R.string.viewer_reply), Icons.AutoMirrored.Filled.Reply) { onReply(); onDismiss() }
+                    if (onEdit != null) {
+                        ActionRow(stringResource(R.string.actions_edit), Icons.Filled.Edit) { onEdit(); onDismiss() }
+                    }
+                    if (onPin != null) {
+                        ActionRow(
+                            if (isPinned) stringResource(R.string.actions_unpin) else stringResource(R.string.actions_pin),
+                            Icons.Filled.PushPin,
+                        ) { onPin() }
+                    }
                     if (hasBody) ActionRow(stringResource(R.string.actions_copy), Icons.Filled.ContentCopy) { onCopy(); onDismiss() }
                     ActionRow(
                         if (message.starred) stringResource(R.string.viewer_unstar) else stringResource(R.string.viewer_star),
@@ -156,6 +179,7 @@ private fun previewText(m: Message): String = when {
     m.isSticker -> stringResource(R.string.preview_sticker)
     m.attachments.firstOrNull()?.kind == "IMAGE" -> stringResource(R.string.preview_photo)
     m.attachments.firstOrNull()?.kind == "VOICE" -> stringResource(R.string.preview_voice_message)
+    m.attachments.firstOrNull()?.kind == "VIDEO_NOTE" -> stringResource(R.string.preview_video_message)
     m.attachments.firstOrNull()?.kind == "VIDEO" -> stringResource(R.string.preview_video)
     m.attachments.isNotEmpty() -> stringResource(R.string.preview_file)
     else -> stringResource(R.string.preview_message)
@@ -243,21 +267,139 @@ fun ReactionPillsRow(reactions: List<Reaction>, onTap: (String) -> Unit) {
     }
 }
 
-// MARK: - Reply views
+// MARK: - Reply views (§16.1)
 
+/**
+ * §16.1: the label shown for a reply/pin snippet when the parent carries no text —
+ * "Photo", "Video", "GIF", "Voice message", "Video message", "Sticker" or the file name.
+ */
 @Composable
-fun ReplyQuote(reply: ReplyPreview, authorName: String, onPrimary: Boolean = false) {
+fun replySnippetText(reply: ReplyPreview): String {
+    if (reply.deleted == true) return stringResource(R.string.reply_deleted_message)
+    if (reply.preview.isNotBlank()) return reply.preview
+    val att = reply.attachment
+    return when {
+        reply.kind == "STICKER" -> stringResource(R.string.preview_sticker)
+        att?.kind == "IMAGE" && att.contentType.contains("gif", ignoreCase = true) ->
+            stringResource(R.string.preview_gif)
+        att?.kind == "IMAGE" || reply.kind == "IMAGE" -> stringResource(R.string.preview_photo)
+        att?.kind == "VIDEO_NOTE" || reply.kind == "VIDEO_NOTE" ->
+            stringResource(R.string.preview_video_message)
+        att?.kind == "VIDEO" || reply.kind == "VIDEO" -> stringResource(R.string.preview_video)
+        att?.kind == "VOICE" || reply.kind == "VOICE" -> stringResource(R.string.preview_voice_message)
+        att?.kind == "FILE" || reply.kind == "FILE" ->
+            att?.fileName ?: stringResource(R.string.preview_file)
+        else -> stringResource(R.string.preview_message)
+    }
+}
+
+/** True when the reply's parent has visual media worth a thumbnail (§16.1). */
+private fun hasVisualThumb(reply: ReplyPreview): Boolean {
+    if (reply.deleted == true) return false
+    val att = reply.attachment ?: return false
+    return when (att.kind) {
+        "IMAGE", "VIDEO", "VIDEO_NOTE" -> true
+        "FILE" -> att.contentType.startsWith("image/")
+        else -> false
+    }
+}
+
+/**
+ * §16.1: quote card at the TOP, INSIDE the message bubble — 3dp rounded accent bar,
+ * background = accent at ~10% alpha, optional 38dp thumbnail (circular for round
+ * video notes), sender name in the accent color and a one-line snippet. Tapping the
+ * card scrolls to the original message ([onClick]).
+ */
+@Composable
+fun ReplyCard(
+    reply: ReplyPreview,
+    authorName: String,
+    onPrimary: Boolean = false,
+    onClick: (() -> Unit)? = null,
+    modifier: Modifier = Modifier,
+) {
     val accent = if (onPrimary) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.primary
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Box(Modifier.size(width = 3.dp, height = 30.dp).background(accent, RoundedCornerShape(2.dp)))
-        Column(Modifier.padding(start = 8.dp)) {
-            Text(authorName, style = MaterialTheme.typography.labelSmall, color = accent)
+    val snippetColor = if (onPrimary) MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.85f)
+                       else MaterialTheme.colorScheme.onSurfaceVariant
+    val deleted = reply.deleted == true
+    Row(
+        modifier
+            .clip(RoundedCornerShape(10.dp))
+            .background(accent.copy(alpha = 0.10f))
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
+            .height(IntrinsicSize.Min),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        // Accent bar — full card height, rounded.
+        Box(
+            Modifier
+                .fillMaxHeight()
+                .width(3.dp)
+                .background(accent, RoundedCornerShape(2.dp)),
+        )
+        if (hasVisualThumb(reply)) {
+            val att = reply.attachment!!
+            // Round video notes keep their circular identity in the thumb.
+            val thumbShape = if (att.kind == "VIDEO_NOTE") CircleShape else RoundedCornerShape(4.dp)
+            Box(
+                Modifier
+                    .padding(start = 7.dp, top = 5.dp, bottom = 5.dp)
+                    .size(38.dp)
+                    .clip(thumbShape)
+                    .background(Color.Black.copy(alpha = 0.15f)),
+            ) {
+                if (att.kind == "VIDEO" || att.kind == "VIDEO_NOTE") {
+                    val thumb by com.klic.mobile.app.feature.chat.media.rememberVideoThumbnail(att.asAttachment())
+                    thumb?.let {
+                        androidx.compose.foundation.Image(
+                            bitmap = it.asImageBitmap(),
+                            contentDescription = null,
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.matchParentSize(),
+                        )
+                    }
+                } else {
+                    AsyncImage(
+                        model = rememberStableImageRequest(att.url),
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.matchParentSize(),
+                    )
+                }
+            }
+        }
+        Column(Modifier.padding(start = 8.dp, top = 5.dp, bottom = 5.dp, end = 10.dp)) {
             Text(
-                reply.preview,
-                style = MaterialTheme.typography.labelSmall,
-                color = if (onPrimary) MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.85f) else MaterialTheme.colorScheme.onSurfaceVariant,
+                authorName,
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = accent,
                 maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                // Plain (non-image) files get a small doc glyph beside the name.
+                if (!deleted && reply.attachment?.kind == "FILE" &&
+                    reply.attachment.contentType.startsWith("image/").not()
+                ) {
+                    Icon(
+                        painter = androidx.compose.ui.res.painterResource(
+                            com.klic.mobile.app.ui.theme.KlicIcons.document,
+                        ),
+                        contentDescription = null,
+                        tint = snippetColor,
+                        modifier = Modifier.size(12.dp).padding(end = 2.dp),
+                    )
+                }
+                Text(
+                    replySnippetText(reply),
+                    style = MaterialTheme.typography.labelSmall,
+                    fontStyle = if (deleted) FontStyle.Italic else FontStyle.Normal,
+                    color = snippetColor,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
         }
     }
 }

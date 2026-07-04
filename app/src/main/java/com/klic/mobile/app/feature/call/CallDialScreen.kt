@@ -126,8 +126,8 @@ private fun FriendCallRow(friend: User, onAudioCall: () -> Unit, onVideoCall: ()
             Text("@${friend.username}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            CallIconButton(KlicIcons.phone, "Audio call", MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.onPrimary, onAudioCall)
-            CallIconButton(KlicIcons.video, "Video call", MaterialTheme.colorScheme.surfaceVariant, MaterialTheme.colorScheme.onSurface, onVideoCall)
+            CallIconButton(KlicIcons.callSolid, "Audio call", MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.onPrimary, onAudioCall)
+            CallIconButton(KlicIcons.videoSolid, "Video call", MaterialTheme.colorScheme.surfaceVariant, MaterialTheme.colorScheme.onSurface, onVideoCall)
         }
     }
 }
@@ -206,7 +206,7 @@ private fun RecentCallRow(call: RecentCall, onCallBack: () -> Unit) {
             }
         }
         CallIconButton(
-            if (call.isVideo) KlicIcons.video else KlicIcons.phone,
+            if (call.isVideo) KlicIcons.videoSolid else KlicIcons.callSolid,
             "Call back",
             MaterialTheme.colorScheme.primary,
             MaterialTheme.colorScheme.onPrimary,
