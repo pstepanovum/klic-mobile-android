@@ -50,6 +50,25 @@ object KlicIcons {
     val ringtone = R.drawable.ic_klic_ringtone
     val media    = R.drawable.ic_klic_media
     val storage  = R.drawable.ic_klic_storage
+    // Owner artwork: save-to-photos tray, encryption-page rows, auto-night moon.
+    val download  = R.drawable.ic_klic_download
+    val photo     = R.drawable.ic_klic_photo
+    val moon      = R.drawable.ic_klic_moon
+    // Same phone artwork as the call tab, exposed under a row-friendly name.
+    val phoneLine = R.drawable.ic_klic_tab_call
+    // Privacy & Security rows: last-seen bulb, walking-figure status,
+    // blocked-user cross, fingerprint passcode frame, passkey, links globe.
+    val lastSeen  = R.drawable.ic_klic_last_seen
+    val status    = R.drawable.ic_klic_status
+    val userBlock = R.drawable.ic_klic_user_block
+    val passcode  = R.drawable.ic_klic_passcode
+    val passkey   = R.drawable.ic_klic_passkey
+    val globe     = R.drawable.ic_klic_globe
+    // Data rows: cookie, remove-synced-contacts, drafts slash-circle, trash.
+    val cookie      = R.drawable.ic_klic_cookie
+    val userRemove  = R.drawable.ic_klic_user_remove
+    val slashCircle = R.drawable.ic_klic_slash_circle
+    val trash       = R.drawable.ic_klic_trash
     // Profile/Call action artwork (filled).
     val callSolid    = R.drawable.ic_klic_call_solid
     val videoSolid   = R.drawable.ic_klic_video_solid
@@ -60,7 +79,8 @@ object KlicIcons {
     val folder   = R.drawable.ic_line_folder
     val notification = R.drawable.ic_line_notification
     val chart    = R.drawable.ic_line_chart
-    val link     = R.drawable.ic_line_export
+    // Owner chain-link artwork — Links privacy row + chat-info Links tab.
+    val link     = R.drawable.ic_klic_link
     // Tab bar — owner-supplied artwork (selection is conveyed by tint + pill,
     // so the active state reuses the same asset).
     val tabChat     = R.drawable.ic_klic_tab_chat

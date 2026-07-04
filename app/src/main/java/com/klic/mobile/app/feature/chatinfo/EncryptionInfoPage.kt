@@ -26,6 +26,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.klic.mobile.app.R
+import com.klic.mobile.app.ui.theme.KlicIcons
 
 /**
  * §14.3: the "Encryption" information page reachable from the lock row on DM and
@@ -70,11 +71,11 @@ fun EncryptionInfoPage() {
         Spacer(Modifier.height(20.dp))
         InfoCard {
             Column(Modifier.padding(vertical = 6.dp)) {
-                EncryptionItemRow(R.drawable.ic_line_message, stringResource(R.string.encryption_item_messages))
+                EncryptionItemRow(KlicIcons.email, stringResource(R.string.encryption_item_messages))
                 InfoDivider()
-                EncryptionItemRow(R.drawable.ic_line_phone, stringResource(R.string.encryption_item_calls))
+                EncryptionItemRow(KlicIcons.phoneLine, stringResource(R.string.encryption_item_calls))
                 InfoDivider()
-                EncryptionItemRow(R.drawable.ic_line_gallery, stringResource(R.string.encryption_item_media))
+                EncryptionItemRow(KlicIcons.photo, stringResource(R.string.encryption_item_media))
             }
         }
         Spacer(Modifier.height(18.dp))

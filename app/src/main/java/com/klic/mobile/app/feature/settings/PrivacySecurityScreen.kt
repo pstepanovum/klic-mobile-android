@@ -96,21 +96,21 @@ fun PrivacySecurityContent(vm: KlicViewModel, onOpenSub: (PrivacySecuritySub) ->
     SectionLabel(stringResource(R.string.privacy_privacy_section))
     SettingsCard {
         PrivacyRow(
-            icon = R.drawable.ic_line_moon,
+            icon = KlicIcons.lastSeen,
             title = stringResource(R.string.privacy_last_seen_online),
             value = visibilityLabel(visibilityOf("lastSeenVisibility")),
             onClick = { visibilityField = "lastSeenVisibility" },
         )
         RowDivider()
         PrivacyRow(
-            icon = KlicIcons.user,
+            icon = KlicIcons.userLine,
             title = stringResource(R.string.privacy_about_row),
             value = visibilityLabel(visibilityOf("aboutVisibility")),
             onClick = { visibilityField = "aboutVisibility" },
         )
         RowDivider()
         PrivacyRow(
-            icon = R.drawable.ic_line_gallery,
+            icon = KlicIcons.photo,
             title = stringResource(R.string.privacy_profile_picture),
             value = visibilityLabel(visibilityOf("avatarVisibility")),
             onClick = { visibilityField = "avatarVisibility" },
@@ -124,14 +124,14 @@ fun PrivacySecurityContent(vm: KlicViewModel, onOpenSub: (PrivacySecuritySub) ->
         )
         RowDivider()
         PrivacyRow(
-            icon = KlicIcons.message,
+            icon = KlicIcons.usersGroup,
             title = stringResource(R.string.privacy_groups_row),
             value = visibilityLabel(visibilityOf("groupsVisibility")),
             onClick = { visibilityField = "groupsVisibility" },
         )
         RowDivider()
         PrivacyRow(
-            icon = KlicIcons.chart,
+            icon = KlicIcons.status,
             title = stringResource(R.string.privacy_status_row),
             value = visibilityLabel(visibilityOf("statusVisibility")),
             onClick = { visibilityField = "statusVisibility" },
@@ -159,20 +159,20 @@ fun PrivacySecurityContent(vm: KlicViewModel, onOpenSub: (PrivacySecuritySub) ->
     // Card 1: Blocked / App lock / Passkeys
     SettingsCard {
         PrivacyRow(
-            icon = KlicIcons.close,
+            icon = KlicIcons.userBlock,
             title = stringResource(R.string.privacy_blocked_users),
             onClick = { onOpenSub(PrivacySecuritySub.BLOCKED) },
         )
         RowDivider()
         PrivacyRow(
-            icon = R.drawable.ic_line_lock,
+            icon = KlicIcons.passcode,
             title = stringResource(R.string.privacy_passcode_biometrics),
             value = if (lockEnabled) stringResource(R.string.common_on) else stringResource(R.string.common_off),
             onClick = { onOpenSub(PrivacySecuritySub.APP_LOCK) },
         )
         RowDivider()
         PrivacyRow(
-            icon = R.drawable.ic_line_lock,
+            icon = KlicIcons.passkey,
             title = stringResource(R.string.privacy_passkeys),
             onClick = { onOpenSub(PrivacySecuritySub.PASSKEYS) },
         )
@@ -184,7 +184,7 @@ fun PrivacySecurityContent(vm: KlicViewModel, onOpenSub: (PrivacySecuritySub) ->
     SectionLabel(stringResource(R.string.privacy_links_section))
     SettingsCard {
         PrivacyRow(
-            icon = R.drawable.ic_line_gallery,
+            icon = KlicIcons.globe,
             title = stringResource(R.string.privacy_open_links_in),
             value = when (settings.linkOpenMode) {
                 SettingsStore.LINKS_CHROME -> stringResource(R.string.privacy_links_chrome)
@@ -202,7 +202,7 @@ fun PrivacySecurityContent(vm: KlicViewModel, onOpenSub: (PrivacySecuritySub) ->
         )
         RowDivider()
         PrivacyRow(
-            icon = KlicIcons.close,
+            icon = KlicIcons.cookie,
             title = stringResource(R.string.privacy_clear_cookies),
             onClick = { showClearCookies = true },
         )
@@ -239,7 +239,7 @@ fun PrivacySecurityContent(vm: KlicViewModel, onOpenSub: (PrivacySecuritySub) ->
         )
         RowDivider()
         PrivacyRow(
-            icon = KlicIcons.close,
+            icon = KlicIcons.userRemove,
             title = stringResource(R.string.privacy_delete_synced_contacts),
             onClick = { vm.deleteSyncedContacts() },
         )
@@ -252,7 +252,7 @@ fun PrivacySecurityContent(vm: KlicViewModel, onOpenSub: (PrivacySecuritySub) ->
         )
         RowDivider()
         PrivacyRow(
-            icon = KlicIcons.close,
+            icon = KlicIcons.slashCircle,
             title = stringResource(R.string.privacy_delete_all_drafts),
             onClick = { showDeleteDrafts = true },
         )
@@ -264,7 +264,7 @@ fun PrivacySecurityContent(vm: KlicViewModel, onOpenSub: (PrivacySecuritySub) ->
     SectionLabel(stringResource(R.string.privacy_account_section))
     SettingsCard {
         PrivacyRow(
-            icon = R.drawable.ic_line_moon,
+            icon = KlicIcons.trash,
             title = stringResource(R.string.privacy_delete_if_away),
             value = awayMonths?.let { stringResource(R.string.privacy_months_format, it) }
                 ?: stringResource(R.string.common_off),

@@ -577,10 +577,18 @@ fun ChatScreen(
                 actions = {
                     // Groups too: POST /calls rings every conversation member.
                     IconButton(onClick = { vm.startCall(conversation.id, "AUDIO", title); onCall("AUDIO") }) {
-                        Icon(Icons.Filled.Call, contentDescription = "Voice call", modifier = Modifier.size(22.dp))
+                        Icon(
+                            painter = androidx.compose.ui.res.painterResource(com.klic.mobile.app.ui.theme.KlicIcons.callSolid),
+                            contentDescription = "Voice call",
+                            modifier = Modifier.size(22.dp),
+                        )
                     }
                     IconButton(onClick = { vm.startCall(conversation.id, "VIDEO", title); onCall("VIDEO") }) {
-                        Icon(Icons.Filled.Videocam, contentDescription = "Video call", modifier = Modifier.size(24.dp))
+                        Icon(
+                            painter = androidx.compose.ui.res.painterResource(com.klic.mobile.app.ui.theme.KlicIcons.videoSolid),
+                            contentDescription = "Video call",
+                            modifier = Modifier.size(24.dp),
+                        )
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),

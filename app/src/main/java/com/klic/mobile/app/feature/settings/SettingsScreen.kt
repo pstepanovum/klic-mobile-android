@@ -351,7 +351,7 @@ fun SettingsScreen(
                                 .padding(horizontal = 18.dp),
                         ) {
                             SettingsRow(
-                                icon = painterResource(R.drawable.ic_line_moon),
+                                icon = painterResource(KlicIcons.moon),
                                 title = stringResource(R.string.settings_auto_night),
                                 onClick = { route = SettingsRoute.AutoNightMode },
                                 trailing = {

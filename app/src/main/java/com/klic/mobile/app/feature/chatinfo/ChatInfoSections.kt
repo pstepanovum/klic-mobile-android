@@ -179,7 +179,7 @@ fun ChatInfoSectionsCard(
         )
         InfoDivider()
         InfoRowItem(
-            icon = painterResource(KlicIcons.document),
+            icon = painterResource(KlicIcons.download),
             title = stringResource(R.string.info_save_to_photos),
             value = when (saveMode) {
                 SettingsStore.SAVE_ALWAYS -> stringResource(R.string.info_always)
