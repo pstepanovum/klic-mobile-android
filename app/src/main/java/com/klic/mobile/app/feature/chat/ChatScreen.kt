@@ -118,6 +118,7 @@ import com.klic.mobile.app.feature.chat.media.loadMediaDraft
 import com.klic.mobile.app.feature.chat.media.loadVideoDraft
 import com.klic.mobile.app.feature.chat.messagelist.DateSeparator
 import com.klic.mobile.app.feature.chat.messagelist.MessageBubble
+import com.klic.mobile.app.feature.chat.messagelist.messageContentType
 import com.klic.mobile.app.feature.chat.messagelist.messagePreview
 import com.klic.mobile.app.feature.chat.messagelist.presenceSubtitle
 import com.klic.mobile.app.feature.chat.messagelist.sameDay
@@ -141,6 +142,10 @@ fun ChatScreen(
     onOpenProfile: () -> Unit = {},
 ) {
     val messages by vm.messages.collectAsState()
+    // §19.1: id → message index built once per list change, so the per-row reply-card
+    // enrichment below is an O(1) lookup instead of an O(n) scan on every row that
+    // carries a quote (previously O(n²) across the visible window while scrolling).
+    val messagesById = remember(messages) { messages.associateBy { it.id } }
     val me by vm.currentUser.collectAsState()
     val presenceMap by vm.presence.collectAsState()
     // §10.4: composer drafts persist per conversation (restored here, saved on leave).
@@ -763,7 +768,15 @@ fun ChatScreen(
                     .pointerInput(Unit) { detectTapGestures { focusManager.clearFocus() } },
                 verticalArrangement = Arrangement.spacedBy(2.dp),
             ) {
-                items(messages.indices.toList()) { idx ->
+                items(
+                    count = messages.size,
+                    // §19.1: stable identity keyed on the message id. Without it the list
+                    // is keyed by position, so prepending older history or mutating one
+                    // message (reaction/edit/status) forces every visible row to recompose
+                    // and lose its sub-composition; with it only the changed row updates.
+                    key = { idx -> messages[idx].id },
+                    contentType = { idx -> messageContentType(messages[idx]) },
+                ) { idx ->
                     val raw = messages[idx]
                     // §11.6: read receipts OFF → blue ticks hide in DMs both ways
                     // (own messages cap at "delivered"; the server stops peer events).
@@ -798,7 +811,7 @@ fun ChatScreen(
                         if (r.attachment != null || r.deleted == true) {
                             msg
                         } else {
-                            val parent = messages.firstOrNull { it.id == r.id }
+                            val parent = messagesById[r.id]
                             val parentAtt = parent?.attachments?.firstOrNull()
                             when {
                                 parent == null -> msg
