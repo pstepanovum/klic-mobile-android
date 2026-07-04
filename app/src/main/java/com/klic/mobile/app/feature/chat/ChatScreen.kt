@@ -172,6 +172,8 @@ fun ChatScreen(
     val clipboard = LocalClipboardManager.current
     var menuTarget by remember { mutableStateOf<Message?>(null) }
     var deleteTarget by remember { mutableStateOf<Message?>(null) }
+    // §12.1: message picked for reporting from the long-press menu.
+    var reportMessageTarget by remember { mutableStateOf<Message?>(null) }
     var viewerTarget by remember { mutableStateOf<Pair<Message, Attachment>?>(null) }
     // §10.9 pre-send editor target (staged draft id).
     var editorTarget by remember { mutableStateOf<PendingMediaDraft?>(null) }
@@ -326,9 +328,17 @@ fun ChatScreen(
         vm.pendingJumpMessageId.value = null
     }
 
+    // §12.3: chat theme — bubble color becomes `primary` inside, and the scaffold body
+    // turns transparent over the background → gradient → pattern layer stack.
+    val chatTheme by com.klic.mobile.app.data.ChatThemeStore.snapshot.collectAsState()
+    com.klic.mobile.app.ui.components.ChatBubbleTheme(chatTheme) {
     Box(Modifier.fillMaxSize()) {
+    com.klic.mobile.app.ui.components.ChatThemeLayers(
+        theme = chatTheme,
+        modifier = Modifier.matchParentSize(),
+    )
     Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
+        containerColor = androidx.compose.ui.graphics.Color.Transparent,
         topBar = {
             TopAppBar(
                 title = {
@@ -675,7 +685,7 @@ fun ChatScreen(
         }
     }
 
-    // Long-press action menu (reactions + reply/copy/delete).
+    // Long-press action menu (reactions + reply/copy/report/delete).
     menuTarget?.let { target ->
         MessageActionsOverlay(
             message = target,
@@ -686,6 +696,22 @@ fun ChatScreen(
             onStar = { vm.toggleStar(target) },
             onDelete = { deleteTarget = target },
             onDismiss = { menuTarget = null },
+            onReport = { reportMessageTarget = target; menuTarget = null },
+        )
+    }
+
+    // §12.1: report sheet for a message — sender info powers one-tap block.
+    reportMessageTarget?.let { target ->
+        val sender = conversation.members.firstOrNull { it.id == target.senderId }
+        com.klic.mobile.app.feature.report.ReportSheet(
+            vm = vm,
+            target = com.klic.mobile.app.feature.report.ReportTarget.Message(
+                messageId = target.id,
+                senderId = target.senderId,
+                senderDisplayName = sender?.displayName,
+                senderUsername = sender?.username,
+            ),
+            onDismiss = { reportMessageTarget = null },
         )
     }
 
@@ -745,6 +771,7 @@ fun ChatScreen(
         FileDetailSheet(att = att, file = file, onDismiss = { fileDetail = null })
     }
     } // Box
+    } // ChatBubbleTheme (§12.3)
 }
 
 /** Banner shown while this conversation has an ongoing call the user hasn't joined. */

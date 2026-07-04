@@ -3,7 +3,7 @@ package com.klic.mobile.app.feature.auth
 import android.graphics.PorterDuff
 import android.graphics.PorterDuffColorFilter
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -22,6 +22,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -42,7 +43,9 @@ import androidx.compose.ui.res.stringResource
 fun WelcomeScreen(onGetStarted: () -> Unit) {
     val composition by rememberLottieComposition(LottieCompositionSpec.Asset("animations/12.json"))
     val progress by animateLottieCompositionAsState(composition, iterations = LottieConstants.IterateForever)
-    val isDark = isSystemInDarkTheme()
+    // Follow the APP theme (Auto-Night Mode), not the system theme — they can differ,
+    // and the line-art must be tinted white exactly when the app renders dark.
+    val isDark = MaterialTheme.colorScheme.background.luminance() < 0.5f
 
     val whiteFilter = remember { PorterDuffColorFilter(android.graphics.Color.WHITE, PorterDuff.Mode.SRC_ATOP) }
     val colorFilterProp = rememberLottieDynamicProperty(
@@ -52,7 +55,14 @@ fun WelcomeScreen(onGetStarted: () -> Unit) {
     )
     val dynamicProperties = rememberLottieDynamicProperties(colorFilterProp)
 
-    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
+    // Paint the theme background — the window background is a fixed dark color, so
+    // without this the light theme drew dark text/line-art on a dark window.
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background),
+        contentAlignment = Alignment.TopCenter,
+    ) {
     Column(
         modifier = Modifier
             .fillMaxHeight()

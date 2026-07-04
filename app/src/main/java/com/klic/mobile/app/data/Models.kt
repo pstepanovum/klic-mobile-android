@@ -26,6 +26,9 @@ data class User(
     val statusVisibility: String? = null,
     val silenceUnknownCallers: Boolean? = null,
     val readReceipts: Boolean? = null,
+    // ── v0.5.5 (§12.2): verified email via Google ──
+    val email: String? = null,
+    val emailVerified: Boolean? = null,
 )
 
 /** A friend's profile (GET /users/:id). lastSeenAt/online are null when hidden by privacy. */
@@ -378,3 +381,25 @@ data class Passkey(
 /** POST /me/contacts — SHA-256 hex hashes of normalized emails + phone numbers. */
 @Serializable
 data class ContactHashesRequest(val hashes: List<String>)
+
+// ── v0.5.5 (§12.1/§12.2): reports + email verification ──
+
+/**
+ * POST /reports — exactly one of [targetUserId]/[messageId], or neither (a target-less
+ * report = app/system problem report). Category ∈ the server's ReportCategory enum.
+ */
+@Serializable
+data class CreateReportRequest(
+    val category: String,
+    val targetUserId: String? = null,
+    val messageId: String? = null,
+    val details: String? = null,
+)
+
+/** 201 response of POST /reports. */
+@Serializable
+data class CreateReportResponse(val id: String)
+
+/** POST /me/email/google — the Google ID token proving ownership of the email. */
+@Serializable
+data class GoogleEmailRequest(val idToken: String)

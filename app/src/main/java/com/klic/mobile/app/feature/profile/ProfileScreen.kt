@@ -261,9 +261,25 @@ fun ProfileScreen(
 
                         // §10.4: block action with confirm — the blocked list lives in
                         // Settings → Privacy and Security → Blocked Users.
+                        // §12.1: report action — the shared report sheet, user target.
                         var showBlockConfirm by remember { mutableStateOf(false) }
+                        var showReport by remember { mutableStateOf(false) }
                         Spacer(Modifier.height(16.dp))
                         InfoCard {
+                            Row(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .clickable { showReport = true }
+                                    .padding(vertical = 13.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text(
+                                    stringResource(R.string.report_user_row, member.displayName),
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    color = MaterialTheme.colorScheme.error,
+                                )
+                            }
+                            InfoDivider()
                             Row(
                                 Modifier
                                     .fillMaxWidth()
@@ -277,6 +293,17 @@ fun ProfileScreen(
                                     color = MaterialTheme.colorScheme.error,
                                 )
                             }
+                        }
+                        if (showReport) {
+                            com.klic.mobile.app.feature.report.ReportSheet(
+                                vm = vm,
+                                target = com.klic.mobile.app.feature.report.ReportTarget.User(
+                                    userId = member.id,
+                                    displayName = member.displayName,
+                                    username = member.username,
+                                ),
+                                onDismiss = { showReport = false },
+                            )
                         }
                         if (showBlockConfirm) {
                             AlertDialog(

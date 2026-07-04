@@ -39,6 +39,8 @@ class KlicApplication : Application(), ImageLoaderFactory {
         // OkHttp stack (via DataUsage.interceptor) read them.
         SettingsStore.init(this, container.applicationScope)
         DataUsage.init(this, container.applicationScope)
+        // Chat theme (§12.3) — local-only; the chat screen reads it on every frame.
+        com.klic.mobile.app.data.ChatThemeStore.init(this, container.applicationScope)
         com.klic.mobile.app.data.AppLockStore.init(this)
         CallNotifications.createChannels(this)
         trackForeground()
@@ -111,6 +113,8 @@ class AppContainer(app: Application) {
     val repository = KlicRepository(api, tokenStore)
     /** Passkey add/sign-in flows (§10.4). */
     val passkeyManager = com.klic.mobile.app.data.PasskeyManager(repository)
+    /** Email add/verify via Google (§12.2). */
+    val googleEmailManager = com.klic.mobile.app.data.GoogleEmailManager(repository)
     val e2eeKeys = E2eeKeyManager(appContext, api)
     val e2eeMessaging = E2eeMessaging(
         e2eeKeys,

@@ -1173,6 +1173,58 @@ class KlicViewModel(
             .onFailure { error.value = str(com.klic.mobile.app.R.string.err_delete_contacts) }
     }
 
+    // ── v0.5.5 (§12.1): safety reports ────────────────────────────────────────
+
+    /**
+     * POST /reports (user, message, or target-less app problem). Returns null on
+     * success, or a user-facing error message (server text when available, e.g. the
+     * daily report cap).
+     */
+    suspend fun submitReport(
+        category: String,
+        targetUserId: String? = null,
+        messageId: String? = null,
+        details: String? = null,
+    ): String? = runCatching {
+        repo.submitReport(category, targetUserId, messageId, details)
+    }.fold(
+        onSuccess = { null },
+        onFailure = { repo.serverMessage(it) ?: str(com.klic.mobile.app.R.string.report_failed) },
+    )
+
+    // ── v0.5.5 (§12.2): email add/verify via Google ───────────────────────────
+
+    /** True while the Google picker/link roundtrip is in flight (email row spinner). */
+    val emailBusy = MutableStateFlow(false)
+
+    /** Refresh the self user from GET /me (email/emailVerified now included). */
+    fun refreshMe() = viewModelScope.launch {
+        runCatching { repo.refreshMe() }.onSuccess { currentUser.value = it }
+    }
+
+    /** "Add email": Google account picker → POST /me/email/google → refreshed user. */
+    fun linkGoogleEmail(activityContext: android.content.Context) = viewModelScope.launch {
+        if (emailBusy.value) return@launch
+        emailBusy.value = true
+        runCatching { container.googleEmailManager.link(activityContext) }
+            .onSuccess { currentUser.value = it }
+            .onFailure { e ->
+                // A user-cancelled picker is not an error worth toasting.
+                val cancelled = (e as? com.klic.mobile.app.data.GoogleEmailException)?.cancelled == true
+                if (!cancelled) {
+                    error.value = e.message ?: str(com.klic.mobile.app.R.string.email_link_failed)
+                }
+            }
+        emailBusy.value = false
+    }
+
+    /** Remove the linked email (DELETE /me/email) after the confirm dialog. */
+    fun removeEmail() = viewModelScope.launch {
+        runCatching { repo.removeEmail() }
+            .onSuccess { currentUser.value = it }
+            .onFailure { error.value = str(com.klic.mobile.app.R.string.email_remove_failed) }
+    }
+
     // ── v0.5.3 (§10.4): drafts + frequent contacts ────────────────────────────
 
     /** Persist the composer draft for a conversation (cleared when blank). */

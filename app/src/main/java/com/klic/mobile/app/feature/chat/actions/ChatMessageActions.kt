@@ -24,6 +24,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material.icons.outlined.Block
+import androidx.compose.material.icons.outlined.Flag
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -68,6 +69,8 @@ fun MessageActionsOverlay(
     onStar: () -> Unit = {},
     onDelete: () -> Unit,
     onDismiss: () -> Unit,
+    /** §12.1: "Report message" — only offered on other people's messages. */
+    onReport: (() -> Unit)? = null,
 ) {
     val mine = remember(message.reactions) { message.reactions.filter { it.mine }.map { it.emoji }.toSet() }
     val hasBody = message.body.isNotBlank()
@@ -122,6 +125,13 @@ fun MessageActionsOverlay(
                         if (message.starred) stringResource(R.string.viewer_unstar) else stringResource(R.string.viewer_star),
                         if (message.starred) Icons.Filled.Star else Icons.Filled.StarBorder,
                     ) { onStar(); onDismiss() }
+                    if (!isMine && onReport != null) {
+                        ActionRow(
+                            stringResource(R.string.report_message_action),
+                            Icons.Outlined.Flag,
+                            destructive = true,
+                        ) { onReport() }
+                    }
                     ActionRow(stringResource(R.string.common_delete), Icons.Filled.Delete, destructive = true) { onDelete() }
                 }
             }
