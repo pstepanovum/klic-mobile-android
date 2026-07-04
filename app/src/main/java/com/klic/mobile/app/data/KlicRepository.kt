@@ -646,6 +646,35 @@ class KlicRepository(
         return refreshMe()
     }
 
+    // ── v0.6.0 (§18.2): account recovery ──────────────────────────────────────
+
+    /** POST /auth/change-password — 401 (wrong current) throws HttpException. */
+    suspend fun changePassword(currentPassword: String, newPassword: String) {
+        api.changePassword(ChangePasswordRequest(currentPassword, newPassword))
+    }
+
+    /** POST /me/email — set an unverified recovery email; 409 throws HttpException.
+     *  [password] is the current plaintext so the Firebase shadow gets a matching
+     *  password (needed for reset sync-back). Returns the updated self-user. */
+    suspend fun setRecoveryEmail(email: String, password: String?): User {
+        val user = api.setRecoveryEmail(SetEmailRequest(email, password))
+        currentUser = user
+        return user
+    }
+
+    /** GET /me/email/status — Firebase-backed verification state. */
+    suspend fun emailStatus(): EmailStatusResponse = api.emailStatus()
+
+    // ── v0.6.0 (§18.4): message search ────────────────────────────────────────
+
+    /** GET /search/messages — matches across every conversation the caller is in. */
+    suspend fun searchMessages(q: String, cursor: String? = null): MessageSearchResponse =
+        api.searchMessages(q = q, cursor = cursor)
+
+    /** GET /conversations/:id/messages/search — scoped ids+timestamps for in-chat jump. */
+    suspend fun searchConversationMessages(conversationId: String, q: String, cursor: String? = null): ConversationSearchResponse =
+        api.searchConversationMessages(conversationId, q, cursor = cursor)
+
     // ── v0.5.9 (§16.3/§16.4): pins + message editing ──────────────────────────
 
     /** POST .../pin — DM: either side; group: admin only (server-enforced). */

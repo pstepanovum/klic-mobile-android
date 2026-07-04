@@ -72,6 +72,9 @@ private sealed class SettingsRoute {
     object PrivacyBlocked : SettingsRoute()
     object PrivacyAppLock : SettingsRoute()
     object PrivacyPasskeys : SettingsRoute()
+    // v0.6.0 (§18.2)
+    object PrivacyChangePassword : SettingsRoute()
+    object PrivacyRecoveryEmail : SettingsRoute()
     object Language : SettingsRoute()
     object QrCode : SettingsRoute()
     object RecentCalls : SettingsRoute()
@@ -110,7 +113,9 @@ fun SettingsScreen(
             SettingsRoute.ChatTheme -> SettingsRoute.Appearance
             SettingsRoute.PrivacyBlocked,
             SettingsRoute.PrivacyAppLock,
-            SettingsRoute.PrivacyPasskeys -> SettingsRoute.Privacy
+            SettingsRoute.PrivacyPasskeys,
+            SettingsRoute.PrivacyChangePassword,
+            SettingsRoute.PrivacyRecoveryEmail -> SettingsRoute.Privacy
             else -> SettingsRoute.Main
         }
     }
@@ -496,6 +501,8 @@ fun SettingsScreen(
                                 PrivacySecuritySub.BLOCKED -> SettingsRoute.PrivacyBlocked
                                 PrivacySecuritySub.APP_LOCK -> SettingsRoute.PrivacyAppLock
                                 PrivacySecuritySub.PASSKEYS -> SettingsRoute.PrivacyPasskeys
+                                PrivacySecuritySub.CHANGE_PASSWORD -> SettingsRoute.PrivacyChangePassword
+                                PrivacySecuritySub.RECOVERY_EMAIL -> SettingsRoute.PrivacyRecoveryEmail
                             }
                         }
                     }
@@ -522,6 +529,22 @@ fun SettingsScreen(
                             onBack = { route = SettingsRoute.Privacy },
                         )
                         PasskeysContent(vm)
+                    }
+
+                    SettingsRoute.PrivacyChangePassword -> {
+                        SubScreenHeader(
+                            title = stringResource(R.string.privacy_change_password),
+                            onBack = { route = SettingsRoute.Privacy },
+                        )
+                        ChangePasswordContent(vm)
+                    }
+
+                    SettingsRoute.PrivacyRecoveryEmail -> {
+                        SubScreenHeader(
+                            title = stringResource(R.string.privacy_recovery_email),
+                            onBack = { route = SettingsRoute.Privacy },
+                        )
+                        RecoveryEmailContent(vm)
                     }
 
                     SettingsRoute.Language -> {

@@ -80,6 +80,9 @@ fun ConversationsScreen(vm: KlicViewModel, onOpenChat: (Conversation) -> Unit) {
     val presenceMap by vm.presence.collectAsState()
     var searchText by remember { mutableStateOf("") }
     var showNewMessageSheet by remember { mutableStateOf(false) }
+    // §18.4: server-side message search (grouped by conversation), debounced.
+    var messageResults by remember { mutableStateOf<List<com.klic.mobile.app.data.MessageSearchResult>>(emptyList()) }
+    var searchingMessages by remember { mutableStateOf(false) }
     // §16.5: long-press context menu + its follow-up sheets/dialogs.
     var menuTarget by remember { mutableStateOf<Conversation?>(null) }
     var menuPrefs by remember { mutableStateOf<com.klic.mobile.app.data.ConversationPrefs?>(null) }
@@ -105,6 +108,25 @@ fun ConversationsScreen(vm: KlicViewModel, onOpenChat: (Conversation) -> Unit) {
     val ordered = remember(filtered) {
         val (pinned, rest) = filtered.partition { it.chatPinnedAt != null }
         pinned.sortedByDescending { it.chatPinnedAt } + rest
+    }
+
+    // §18.4: debounce the query, then hit GET /search/messages. Blank query clears.
+    val trimmedQuery = searchText.trim()
+    LaunchedEffect(trimmedQuery) {
+        if (trimmedQuery.isBlank()) {
+            messageResults = emptyList()
+            searchingMessages = false
+            return@LaunchedEffect
+        }
+        searchingMessages = true
+        kotlinx.coroutines.delay(300)
+        val res = vm.searchMessagesGlobal(trimmedQuery)
+        messageResults = res ?: emptyList()
+        searchingMessages = false
+    }
+    // Preserve server order but group consecutive hits by conversation.
+    val groupedResults = remember(messageResults) {
+        messageResults.groupBy { it.conversationId }.entries.toList()
     }
 
     Scaffold(
@@ -161,6 +183,70 @@ fun ConversationsScreen(vm: KlicViewModel, onOpenChat: (Conversation) -> Unit) {
                             onLongPress = { menuTarget = convo },
                         )
                     }
+
+                    // §18.4: message-search results grouped by conversation.
+                    if (trimmedQuery.isNotBlank()) {
+                        item(key = "msg_search_header") {
+                            Text(
+                                stringResource(R.string.search_messages_section),
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(top = 14.dp, bottom = 4.dp),
+                            )
+                        }
+                        if (searchingMessages && messageResults.isEmpty()) {
+                            item(key = "msg_search_loading") {
+                                Box(Modifier.fillMaxWidth().padding(20.dp), contentAlignment = Alignment.Center) {
+                                    androidx.compose.material3.CircularProgressIndicator(
+                                        modifier = Modifier.size(22.dp), strokeWidth = 2.dp,
+                                    )
+                                }
+                            }
+                        } else if (messageResults.isEmpty()) {
+                            item(key = "msg_search_empty") {
+                                Text(
+                                    stringResource(R.string.search_no_messages),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(vertical = 12.dp),
+                                )
+                            }
+                        } else {
+                            groupedResults.forEach { (conversationId, hits) ->
+                                val head = hits.first()
+                                item(key = "grp_$conversationId") {
+                                    Row(
+                                        Modifier.fillMaxWidth().padding(top = 10.dp, bottom = 4.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                    ) {
+                                        AvatarView(
+                                            url = head.conversationAvatarUrl,
+                                            name = head.conversationTitle ?: "",
+                                            size = 28.dp,
+                                        )
+                                        Text(
+                                            head.conversationTitle ?: stringResource(R.string.search_conversation_fallback),
+                                            style = MaterialTheme.typography.titleSmall,
+                                            color = MaterialTheme.colorScheme.onSurface,
+                                            modifier = Modifier.padding(start = 10.dp),
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                        )
+                                    }
+                                }
+                                items(hits, key = { it.messageId }) { hit ->
+                                    MessageSearchRow(hit) {
+                                        val convo = conversations.firstOrNull { it.id == hit.conversationId }
+                                        if (convo != null) {
+                                            vm.requestJumpTo(hit.messageId)
+                                            onOpenChat(convo)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    item(key = "list_bottom_spacer") { Spacer(Modifier.height(24.dp)) }
                 }
             }
         }
@@ -362,6 +448,56 @@ private fun ConversationRow(
         )
     }
 }
+
+/** §18.4: a single message hit row (sender · snippet · date). */
+@Composable
+private fun MessageSearchRow(hit: com.klic.mobile.app.data.MessageSearchResult, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(start = 38.dp, top = 8.dp, bottom = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            hit.senderName?.let {
+                Text(
+                    it,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            Text(
+                stripHighlight(hit.snippet).ifBlank { stringResource(R.string.search_result_no_preview) },
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        searchResultStamp(hit.createdAt)?.let { stamp ->
+            Text(
+                stamp,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(start = 8.dp),
+            )
+        }
+    }
+}
+
+/** Server snippets wrap matches in <b>…</b>; strip the tags for plain rendering. */
+private fun stripHighlight(snippet: String?): String =
+    snippet.orEmpty().replace("<b>", "").replace("</b>", "").trim()
+
+private fun searchResultStamp(iso: String): String? = runCatching {
+    val zoned = java.time.Instant.parse(iso).atZone(java.time.ZoneId.systemDefault())
+    val today = java.time.LocalDate.now()
+    val pattern = if (zoned.year == today.year) "MM/dd" else "MM/dd/yy"
+    java.time.format.DateTimeFormatter.ofPattern(pattern).format(zoned)
+}.getOrNull()
 
 private fun conversationTitle(conversation: Conversation): String =
     when {

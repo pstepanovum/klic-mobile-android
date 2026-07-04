@@ -667,4 +667,48 @@
     <string name="chat_blocked_banner">You blocked %1$s</string>
     <string name="chat_unblock">Unblock</string>
     <string name="err_send_message">Couldn\'t send.</string>
+
+    <!-- v0.6.0 §18.2: account recovery -->
+    <string name="common_remove">Remove</string>
+    <string name="auth_forgot_password">Forgot password?</string>
+    <string name="forgot_password_title">Reset your password</string>
+    <string name="forgot_password_subtitle">Enter your recovery email and we\'ll send you a link to reset your password.</string>
+    <string name="forgot_password_sent">If that email is on file, we\'ve sent a link to reset your password. Check your inbox.</string>
+    <string name="forgot_password_send">Send reset link</string>
+    <string name="forgot_password_back_to_login">Back to login</string>
+    <string name="privacy_recovery_section">Account recovery</string>
+    <string name="privacy_change_password">Change password</string>
+    <string name="privacy_recovery_email">Recovery email</string>
+    <string name="recovery_email_none">Add</string>
+    <string name="change_password_current">Current password</string>
+    <string name="change_password_new">New password</string>
+    <string name="change_password_confirm">Confirm new password</string>
+    <string name="change_password_mismatch">The new passwords don\'t match.</string>
+    <string name="change_password_save">Change password</string>
+    <string name="change_password_success">Password changed.</string>
+    <string name="change_password_failed">Couldn\'t change your password. Try again.</string>
+    <string name="recovery_email_prompt">Add a recovery email so you can reset your password if you ever get locked out.</string>
+    <string name="recovery_email_placeholder">Email address</string>
+    <string name="recovery_email_password">Current password</string>
+    <string name="recovery_email_password_hint">We need your current password to set up recovery for this email.</string>
+    <string name="recovery_email_add">Add recovery email</string>
+    <string name="recovery_email_sent">Check your inbox to verify this email.</string>
+    <string name="recovery_email_failed">Couldn\'t add that email. Try again.</string>
+    <string name="recovery_email_verified">Verified</string>
+    <string name="recovery_email_pending">Pending verification — check your inbox.</string>
+    <string name="recovery_email_verified_badge">Verified</string>
+    <string name="recovery_email_remove">Remove recovery email</string>
+    <string name="recovery_email_remove_title">Remove recovery email?</string>
+    <string name="recovery_email_remove_body">You won\'t be able to reset your password until you add a new one.</string>
+
+    <!-- v0.6.0 §18.4: message search -->
+    <string name="search_messages_section">Messages</string>
+    <string name="search_no_messages">No messages found.</string>
+    <string name="search_conversation_fallback">Conversation</string>
+    <string name="search_result_no_preview">(no preview)</string>
+    <string name="search_in_chat">Search in chat</string>
+    <string name="search_in_chat_placeholder">Search messages</string>
+    <string name="search_no_results_short">No results</string>
+    <string name="search_prev_match">Previous match</string>
+    <string name="search_next_match">Next match</string>
 </resources>

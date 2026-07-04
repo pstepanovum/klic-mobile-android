@@ -1551,6 +1551,75 @@ class KlicViewModel(
             .onFailure { error.value = str(com.klic.mobile.app.R.string.email_remove_failed) }
     }
 
+    // ── v0.6.0 (§18.2): account recovery ──────────────────────────────────────
+
+    /** True while a Firebase reset email is in flight. */
+    val recoveryBusy = MutableStateFlow(false)
+
+    /**
+     * Forgot-password: send the Firebase-hosted reset email for [email]. The UI shows a
+     * uniform "check your email" message regardless of outcome (no account enumeration),
+     * so [onSent] fires on both success and failure.
+     */
+    fun sendPasswordReset(email: String, onSent: () -> Unit) {
+        if (recoveryBusy.value) return
+        recoveryBusy.value = true
+        com.google.firebase.auth.FirebaseAuth.getInstance()
+            .sendPasswordResetEmail(email.trim())
+            .addOnCompleteListener {
+                recoveryBusy.value = false
+                onSent()
+            }
+    }
+
+    /** POST /auth/change-password. [onResult] gets null on success, else an error message. */
+    fun changePassword(current: String, new: String, onResult: (String?) -> Unit) = viewModelScope.launch {
+        runCatching { repo.changePassword(current, new) }
+            .onSuccess { onResult(null) }
+            .onFailure { onResult(repo.serverMessage(it) ?: str(com.klic.mobile.app.R.string.change_password_failed)) }
+    }
+
+    /** Firebase-backed recovery-email state ({email, emailVerified}); null until loaded. */
+    val emailStatus = MutableStateFlow<com.klic.mobile.app.data.EmailStatusResponse?>(null)
+
+    fun refreshEmailStatus() = viewModelScope.launch {
+        runCatching { repo.emailStatus() }.onSuccess { emailStatus.value = it }
+    }
+
+    /**
+     * POST /me/email — set an unverified recovery email; the server upserts the Firebase
+     * shadow (with [password] so a later reset syncs back) and triggers verification.
+     */
+    fun setRecoveryEmail(email: String, password: String, onResult: (String?) -> Unit) = viewModelScope.launch {
+        runCatching { repo.setRecoveryEmail(email.trim(), password) }
+            .onSuccess { currentUser.value = it; refreshEmailStatus(); onResult(null) }
+            .onFailure { onResult(repo.serverMessage(it) ?: str(com.klic.mobile.app.R.string.recovery_email_failed)) }
+    }
+
+    // ── v0.6.0 (§18.4): message search ────────────────────────────────────────
+
+    /** GET /search/messages — matches across all of the caller's conversations. */
+    suspend fun searchMessagesGlobal(q: String): List<com.klic.mobile.app.data.MessageSearchResult>? =
+        runCatching { repo.searchMessages(q).results }.getOrNull()
+
+    /**
+     * GET /conversations/:id/messages/search — collect all matching ids+timestamps
+     * (following the cursor, bounded) so in-chat prev/next covers the whole history.
+     */
+    suspend fun searchInConversation(conversationId: String, q: String): List<com.klic.mobile.app.data.ConversationSearchHit>? =
+        runCatching {
+            val all = mutableListOf<com.klic.mobile.app.data.ConversationSearchHit>()
+            var cursor: String? = null
+            var page = 0
+            do {
+                val res = repo.searchConversationMessages(conversationId, q, cursor)
+                all += res.results
+                cursor = res.nextCursor
+                page++
+            } while (cursor != null && page < 10)
+            all
+        }.getOrNull()
+
     // ── v0.5.3 (§10.4): drafts + frequent contacts ────────────────────────────
 
     /** Persist the composer draft for a conversation (cleared when blank). */

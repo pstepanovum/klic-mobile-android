@@ -42,7 +42,7 @@ import com.klic.mobile.app.ui.theme.TikTokSansExpanded
  * previous combined AuthScreen; this is a visual restructure to mirror the iOS LoginView.
  */
 @Composable
-fun LoginScreen(vm: KlicViewModel, onCreateAccount: () -> Unit) {
+fun LoginScreen(vm: KlicViewModel, onCreateAccount: () -> Unit, onForgotPassword: () -> Unit) {
     val isDark = MaterialTheme.colorScheme.background.luminance() < 0.5f
     val error by vm.error.collectAsState()
     val focusManager = LocalFocusManager.current
@@ -136,6 +136,25 @@ fun LoginScreen(vm: KlicViewModel, onCreateAccount: () -> Unit) {
                 vm.error.value = null
                 vm.login(username, password)
             }
+
+            Text(
+                stringResource(R.string.auth_forgot_password),
+                fontFamily = TikTokSans,
+                fontWeight = FontWeight.Medium,
+                fontSize = 14.sp,
+                color = AuthStyle.smallText,
+                textDecoration = TextDecoration.Underline,
+                modifier = Modifier
+                    .padding(top = 16.dp)
+                    .clickable(
+                        indication = null,
+                        interactionSource = remember { MutableInteractionSource() },
+                        onClick = {
+                            vm.error.value = null
+                            onForgotPassword()
+                        },
+                    ),
+            )
 
             Row(
                 modifier = Modifier

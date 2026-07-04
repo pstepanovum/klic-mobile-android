@@ -12,6 +12,15 @@ fun stringBuildConfig(name: String, defaultValue: String): String {
     return "\"$value\""
 }
 
+// The Firebase BOM (34.15.0) pins firebase-auth to 24.1.0, whose Kotlin 2.3 metadata
+// can't be read by this project's Kotlin 2.0 compiler. Hold auth at 23.2.0 (the newest
+// build against Kotlin 2.0) — messaging and the rest still track the BOM.
+configurations.all {
+    resolutionStrategy {
+        force("com.google.firebase:firebase-auth:23.2.0")
+    }
+}
+
 android {
     namespace = "com.klic.mobile.app"
     compileSdk = 35
@@ -93,6 +102,8 @@ dependencies {
     // Push (FCM) — wakes the app to ring incoming calls when backgrounded/killed
     implementation(platform(libs.firebase.bom))
     implementation(libs.firebase.messaging)
+    // Auth — hosted password reset + email verification for account recovery (§18.2)
+    implementation(libs.firebase.auth)
 
     // Animations
     implementation(libs.lottie.compose)

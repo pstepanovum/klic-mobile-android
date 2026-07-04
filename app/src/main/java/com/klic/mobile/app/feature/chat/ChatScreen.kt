@@ -26,9 +26,12 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
@@ -381,6 +384,42 @@ fun ChatScreen(
         }
     }
 
+    // ── §18.4: in-chat message search ─────────────────────────────────────────
+    var searchActive by remember { mutableStateOf(false) }
+    var searchQuery by remember { mutableStateOf("") }
+    var searchHits by remember { mutableStateOf<List<com.klic.mobile.app.data.ConversationSearchHit>>(emptyList()) }
+    var currentMatch by remember { mutableStateOf(-1) }
+    var searchLoading by remember { mutableStateOf(false) }
+
+    // Debounced scoped search; jumps to the first (most-recent) match on new results.
+    LaunchedEffect(searchQuery, searchActive) {
+        val q = searchQuery.trim()
+        if (!searchActive || q.isBlank()) {
+            searchHits = emptyList(); currentMatch = -1; searchLoading = false
+            return@LaunchedEffect
+        }
+        searchLoading = true
+        delay(300)
+        val hits = vm.searchInConversation(conversation.id, q) ?: emptyList()
+        searchHits = hits
+        searchLoading = false
+        if (hits.isNotEmpty()) {
+            currentMatch = 0
+            jumpToMessage(hits[0].messageId)
+        } else {
+            currentMatch = -1
+        }
+    }
+
+    fun gotoMatch(delta: Int) {
+        if (searchHits.isEmpty()) return
+        val next = (currentMatch + delta).coerceIn(0, searchHits.size - 1)
+        if (next != currentMatch || currentMatch < 0) {
+            currentMatch = next
+            jumpToMessage(searchHits[next].messageId)
+        }
+    }
+
     // ── §16.3: pins ───────────────────────────────────────────────────────────
     val pinnedMessages by vm.pinnedMessages.collectAsState()
     val pinBarHiddenAt by vm.pinBarHiddenAt.collectAsState()
@@ -549,6 +588,74 @@ fun ChatScreen(
     Scaffold(
         containerColor = androidx.compose.ui.graphics.Color.Transparent,
         topBar = {
+            // §18.4: back exits search mode first, then leaves the chat.
+            BackHandler(enabled = searchActive) { searchActive = false; searchQuery = "" }
+            if (searchActive) {
+                TopAppBar(
+                    title = {
+                        BasicTextField(
+                            value = searchQuery,
+                            onValueChange = { searchQuery = it },
+                            singleLine = true,
+                            textStyle = MaterialTheme.typography.bodyLarge.copy(
+                                color = MaterialTheme.colorScheme.onSurface,
+                            ),
+                            cursorBrush = androidx.compose.ui.graphics.SolidColor(MaterialTheme.colorScheme.primary),
+                            modifier = Modifier.fillMaxWidth(),
+                            decorationBox = { inner ->
+                                if (searchQuery.isEmpty()) {
+                                    Text(
+                                        stringResource(R.string.search_in_chat_placeholder),
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                                inner()
+                            },
+                        )
+                    },
+                    navigationIcon = {
+                        IconButton(onClick = { searchActive = false; searchQuery = "" }) {
+                            Icon(
+                                painter = androidx.compose.ui.res.painterResource(com.klic.mobile.app.ui.theme.KlicIcons.close),
+                                contentDescription = stringResource(R.string.common_cancel),
+                                modifier = Modifier.size(22.dp),
+                            )
+                        }
+                    },
+                    actions = {
+                        // Match counter (current/total) + prev/next navigation.
+                        val counter = when {
+                            searchLoading -> ""
+                            searchHits.isEmpty() && searchQuery.isNotBlank() -> stringResource(R.string.search_no_results_short)
+                            searchHits.isNotEmpty() -> "${currentMatch + 1}/${searchHits.size}"
+                            else -> ""
+                        }
+                        if (searchLoading) {
+                            CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                        } else if (counter.isNotEmpty()) {
+                            Text(
+                                counter,
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        IconButton(
+                            onClick = { gotoMatch(+1) },
+                            enabled = searchHits.isNotEmpty() && currentMatch < searchHits.size - 1,
+                        ) {
+                            Icon(Icons.Filled.KeyboardArrowUp, contentDescription = stringResource(R.string.search_prev_match))
+                        }
+                        IconButton(
+                            onClick = { gotoMatch(-1) },
+                            enabled = searchHits.isNotEmpty() && currentMatch > 0,
+                        ) {
+                            Icon(Icons.Filled.KeyboardArrowDown, contentDescription = stringResource(R.string.search_next_match))
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
+                )
+            } else {
             TopAppBar(
                 title = {
                     Row(
@@ -581,6 +688,14 @@ fun ChatScreen(
                     }
                 },
                 actions = {
+                    // §18.4: in-chat search.
+                    IconButton(onClick = { searchActive = true }) {
+                        Icon(
+                            painter = androidx.compose.ui.res.painterResource(com.klic.mobile.app.ui.theme.KlicIcons.search),
+                            contentDescription = stringResource(R.string.search_in_chat),
+                            modifier = Modifier.size(22.dp),
+                        )
+                    }
                     // Groups too: POST /calls rings every conversation member.
                     IconButton(onClick = { vm.startCall(conversation.id, "AUDIO", title); onCall("AUDIO") }) {
                         Icon(
@@ -599,6 +714,7 @@ fun ChatScreen(
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
             )
+            }
         },
     ) { padding ->
         Box(
