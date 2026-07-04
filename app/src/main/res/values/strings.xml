@@ -443,6 +443,28 @@
     <string name="chat_typing">typing…</string>
     <string name="chat_yourself">yourself</string>
 
+    <!-- v0.5.9 (§16): reply cards, round video messages, pins, message editing -->
+    <string name="preview_video_message">Video message</string>
+    <string name="preview_gif">GIF</string>
+    <string name="reply_deleted_message">Deleted message</string>
+    <string name="composer_hold_audio_hint">Hold to record audio. Tap to switch to video.</string>
+    <string name="composer_hold_video_hint">Hold to record video. Tap to switch to audio.</string>
+    <string name="record_slide_to_cancel">Slide to cancel</string>
+    <string name="actions_pin">Pin</string>
+    <string name="actions_unpin">Unpin</string>
+    <string name="pin_notify_all">Pin and notify all members</string>
+    <string name="pin_only">Only Pin</string>
+    <string name="pin_confirm_dm">Pin this message at the top of the chat?</string>
+    <string name="unpin_confirm">Unpin this message?</string>
+    <string name="pinned_message_title">Pinned Message</string>
+    <string name="actions_edit">Edit</string>
+    <string name="edit_message_title">Edit Message</string>
+    <string name="edited_label">edited</string>
+    <string name="err_pin_message">Couldn\'t pin the message.</string>
+    <string name="err_unpin_message">Couldn\'t unpin the message.</string>
+    <string name="err_edit_message">Couldn\'t edit the message.</string>
+    <string name="err_video_note">Couldn\'t record the video message.</string>
+
     <!-- Presence / dates -->
     <string name="presence_online">Online</string>
     <string name="presence_last_seen_at">last seen %1$s</string>

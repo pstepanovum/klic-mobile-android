@@ -37,6 +37,10 @@ class SocketService {
     val removedConversations = MutableSharedFlow<String>(extraBufferCapacity = 8)
     /** §14.3: full conversation payloads re-sent live (title/avatar/theme/admin changes). */
     val conversationUpdates = MutableSharedFlow<com.klic.mobile.app.data.Conversation>(extraBufferCapacity = 8)
+    /** §16.4: full refreshed message payloads after an edit — applied in place. */
+    val updatedMessages = MutableSharedFlow<Message>(extraBufferCapacity = 16)
+    /** §16.3: live pin/unpin events for the pinned bar. */
+    val pinUpdates = MutableSharedFlow<PinUpdate>(extraBufferCapacity = 16)
 
     private val mainHandler = Handler(Looper.getMainLooper())
     private val typingTokens = mutableMapOf<String, Any>()
@@ -47,6 +51,13 @@ class SocketService {
     data class Receipt(val conversationId: String, val userId: String, val atMs: Long)
     data class ReactionUpdate(val conversationId: String, val messageId: String, val reactions: List<Reaction>)
     data class DeletedUpdate(val conversationId: String, val messageId: String)
+    /** §16.3: `message:pinned` / `message:unpinned` payload. */
+    data class PinUpdate(
+        val conversationId: String,
+        val messageId: String,
+        val pinnedBy: String?,
+        val pinned: Boolean,
+    )
 
     data class CallInvite(
         val callId: String,
@@ -82,7 +93,8 @@ class SocketService {
         socket.on("message:new") { args ->
             (args.firstOrNull() as? JSONObject)?.let { json ->
                 runCatching {
-                    val msg = Json.decodeFromString(Message.serializer(), json.toString())
+                    // Lenient: newer servers may fan out fields this build doesn't model.
+                    val msg = lenientJson.decodeFromString(Message.serializer(), json.toString())
                     incomingMessages.tryEmit(msg)
                     // Acknowledge delivery for messages from others (drives the 2nd tick).
                     if (msg.senderId != myUserId) {
@@ -91,6 +103,18 @@ class SocketService {
                 }
             }
         }
+        // §16.4: an edit fans out the FULL refreshed payload — replace in place.
+        socket.on("message:updated") { args ->
+            (args.firstOrNull() as? JSONObject)?.let { json ->
+                runCatching {
+                    val msg = lenientJson.decodeFromString(Message.serializer(), json.toString())
+                    updatedMessages.tryEmit(msg)
+                }
+            }
+        }
+        // §16.3: pin/unpin fan-out — {conversationId, messageId, pinnedBy}.
+        socket.on("message:pinned") { args -> emitPinUpdate(args, pinned = true) }
+        socket.on("message:unpinned") { args -> emitPinUpdate(args, pinned = false) }
         socket.on("presence:update") { args ->
             (args.firstOrNull() as? JSONObject)?.let { json ->
                 val userId = json.optString("userId").takeIf { it.isNotBlank() } ?: return@let
@@ -226,6 +250,21 @@ class SocketService {
         JsonObject(pairs.associate { it.first to kotlinx.serialization.json.JsonPrimitive(it.second) })
 
     private fun parseMs(iso: String): Long? = runCatching { Instant.parse(iso).toEpochMilli() }.getOrNull()
+
+    private fun emitPinUpdate(args: Array<Any>, pinned: Boolean) {
+        (args.firstOrNull() as? JSONObject)?.let { json ->
+            val conversationId = json.optString("conversationId").takeIf { it.isNotBlank() } ?: return
+            val messageId = json.optString("messageId").takeIf { it.isNotBlank() } ?: return
+            pinUpdates.tryEmit(
+                PinUpdate(
+                    conversationId = conversationId,
+                    messageId = messageId,
+                    pinnedBy = json.optString("pinnedBy").takeIf { it.isNotBlank() },
+                    pinned = pinned,
+                )
+            )
+        }
+    }
 
     private fun emitCallEvent(args: Array<Any>, type: CallEvent.Type) {
         (args.firstOrNull() as? JSONObject)?.let { json ->

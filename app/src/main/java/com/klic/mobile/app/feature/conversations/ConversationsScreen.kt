@@ -281,6 +281,7 @@ private fun lastMessagePreview(m: Message?): String = when {
     m.isSticker -> stringResource(R.string.preview_sticker)
     m.body.isNotBlank() -> m.body
     m.attachments.firstOrNull()?.kind == "IMAGE" -> stringResource(R.string.preview_photo)
+    m.attachments.firstOrNull()?.kind == "VIDEO_NOTE" -> stringResource(R.string.preview_video_message)
     m.attachments.firstOrNull()?.kind == "VIDEO" -> stringResource(R.string.preview_video)
     m.attachments.firstOrNull()?.kind == "VOICE" -> stringResource(R.string.preview_voice_message)
     m.attachments.isNotEmpty() -> stringResource(R.string.preview_file)

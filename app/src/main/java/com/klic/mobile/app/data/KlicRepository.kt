@@ -615,6 +615,30 @@ class KlicRepository(
         return refreshMe()
     }
 
+    // ── v0.5.9 (§16.3/§16.4): pins + message editing ──────────────────────────
+
+    /** POST .../pin — DM: either side; group: admin only (server-enforced). */
+    suspend fun pinMessage(conversationId: String, messageId: String, notify: Boolean) {
+        val res = api.pinMessage(conversationId, messageId, PinMessageRequest(notify))
+        if (!res.isSuccessful) error("Pin failed (${res.code()})")
+    }
+
+    /** DELETE .../pin — idempotent server-side. */
+    suspend fun unpinMessage(conversationId: String, messageId: String) {
+        val res = api.unpinMessage(conversationId, messageId)
+        if (!res.isSuccessful) error("Unpin failed (${res.code()})")
+    }
+
+    /**
+     * PATCH the message body (§16.4). Returns the refreshed message when the server
+     * responds with a full payload, or null on a shapeless 2xx — either way the
+     * `message:updated` fan-out is the authoritative sync path.
+     */
+    suspend fun editMessage(conversationId: String, messageId: String, body: String): Message? {
+        val raw = api.editMessage(conversationId, messageId, EditMessageRequest(body)).string()
+        return runCatching { json.decodeFromString(Message.serializer(), raw) }.getOrNull()
+    }
+
     private suspend fun persist(res: AuthResponse) {
         tokenStore.save(res.accessToken, res.refreshToken)
         tokenStore.saveUser(json.encodeToString(User.serializer(), res.user))

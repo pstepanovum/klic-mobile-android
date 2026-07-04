@@ -44,16 +44,24 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalHapticFeedback
+import kotlinx.coroutines.delay
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
@@ -82,9 +90,16 @@ import com.klic.mobile.app.feature.chat.composer.KlicCameraCapture
 import com.klic.mobile.app.feature.chat.composer.ComposerBar
 import com.klic.mobile.app.feature.chat.composer.MentionCandidate
 import com.klic.mobile.app.feature.chat.composer.MentionSuggestionStrip
-import com.klic.mobile.app.feature.chat.composer.RecordingBar
+import com.klic.mobile.app.feature.chat.composer.RecordDragResult
+import com.klic.mobile.app.feature.chat.composer.RecordPhase
+import com.klic.mobile.app.feature.chat.composer.CANCEL_MAX_TRAVEL
+import com.klic.mobile.app.feature.chat.composer.CANCEL_WIDTH_FRACTION
+import com.klic.mobile.app.feature.chat.composer.LOCK_TRAVEL
+import com.klic.mobile.app.feature.chat.composer.RELEASE_CANCEL_PROGRESS
 import com.klic.mobile.app.feature.chat.composer.insertMention
 import com.klic.mobile.app.feature.chat.composer.mentionQueryAt
+import com.klic.mobile.app.feature.chat.videonote.VideoNoteRecordingOverlay
+import com.klic.mobile.app.feature.chat.videonote.VideoNoteSession
 import com.klic.mobile.app.feature.chat.media.AttachmentDownloads
 import com.klic.mobile.app.feature.chat.media.FileDetailSheet
 import com.klic.mobile.app.feature.chat.media.MediaEditorDialog
@@ -160,9 +175,9 @@ fun ChatScreen(
     var showCamera by remember { mutableStateOf(false) }
     var showStickerSheet by remember { mutableStateOf(false) }
     var tempCameraUri by remember { mutableStateOf<Uri?>(null) }
-    var tempVideoUri by remember { mutableStateOf<Uri?>(null) }
     var pendingMedia by remember(conversation.id) { mutableStateOf<List<PendingMediaDraft>>(emptyList()) }
-    var captureMode by remember(conversation.id) { mutableStateOf(CaptureMode.AUDIO) }
+    // §16.2: mic ↔ round-video mode persists per app session (VM-scoped).
+    val captureMode by vm.captureMode.collectAsState()
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val stickerSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val stickers by vm.stickers.collectAsState()
@@ -192,10 +207,188 @@ fun ChatScreen(
     val isLoadingOlder by vm.isLoadingOlderMessages.collectAsState()
     val hasMore by vm.hasMoreMessages.collectAsState()
 
+    // ── §16.2: hold-to-record (audio + round video) with the lock system ──────
     val recorder = remember { VoiceRecorder(context) }
-    val micPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        if (granted && !recorder.start()) vm.error.value = context.getString(R.string.err_start_recording)
+    val haptics = LocalHapticFeedback.current
+    val density = LocalDensity.current
+    val configuration = androidx.compose.ui.platform.LocalConfiguration.current
+    var recordPhase by remember { mutableStateOf(RecordPhase.IDLE) }
+    var videoSession by remember { mutableStateOf<VideoNoteSession?>(null) }
+    var lastRecordDrag by remember { mutableStateOf(Offset.Zero) }
+    val cancelDistPx = with(density) {
+        minOf(configuration.screenWidthDp.dp * CANCEL_WIDTH_FRACTION, CANCEL_MAX_TRAVEL).toPx()
     }
+    val lockTravelPx = with(density) { LOCK_TRAVEL.toPx() }
+
+    val micPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (!granted) vm.error.value = context.getString(R.string.err_start_recording)
+    }
+    val videoNotePermissions = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { grants ->
+        if (grants[Manifest.permission.CAMERA] != true) {
+            vm.error.value = context.getString(R.string.err_video_note)
+        }
+    }
+
+    /** §16.2: send the finished round-video file as a VIDEO_NOTE message. */
+    fun sendVideoNote(file: File, durationMs: Int) {
+        scope.launch {
+            val meta = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                val retriever = android.media.MediaMetadataRetriever()
+                try {
+                    retriever.setDataSource(file.absolutePath)
+                    val w = retriever.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)?.toIntOrNull()
+                    val h = retriever.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)?.toIntOrNull()
+                    w to h
+                } catch (e: Exception) {
+                    null to null
+                } finally {
+                    runCatching { retriever.release() }
+                }
+            }
+            vm.sendAttachments(
+                conversation.id, null,
+                listOf(
+                    com.klic.mobile.app.data.AttachmentInput(
+                        key = "",
+                        kind = "VIDEO_NOTE",
+                        contentType = "video/mp4",
+                        byteSize = file.length().toInt(),
+                        width = meta.first,
+                        height = meta.second,
+                        durationMs = durationMs,
+                        localUri = Uri.fromFile(file).toString(),
+                    )
+                ),
+            )
+        }
+    }
+
+    fun cancelRecording() {
+        if (captureMode == CaptureMode.AUDIO) recorder.cancel()
+        else { videoSession?.cancel(); videoSession = null }
+        recordPhase = RecordPhase.IDLE
+    }
+
+    fun finishAndSendRecording() {
+        if (recordPhase == RecordPhase.IDLE) return
+        recordPhase = RecordPhase.IDLE
+        if (captureMode == CaptureMode.AUDIO) {
+            recorder.stop()?.let { (bytes, durationMs, waveform) ->
+                vm.sendVoice(conversation.id, bytes, durationMs, waveform)
+            }
+        } else {
+            val session = videoSession
+            videoSession = null
+            session?.stop { file, durationMs ->
+                if (file != null && durationMs >= 700) sendVideoNote(file, durationMs)
+                else file?.delete()
+            }
+        }
+    }
+
+    fun startRecording() {
+        lastRecordDrag = Offset.Zero
+        when (captureMode) {
+            CaptureMode.AUDIO -> {
+                if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO)
+                    == PackageManager.PERMISSION_GRANTED
+                ) {
+                    if (recorder.start()) recordPhase = RecordPhase.HELD
+                    else vm.error.value = context.getString(R.string.err_start_recording)
+                } else {
+                    micPermission.launch(Manifest.permission.RECORD_AUDIO)
+                }
+            }
+            CaptureMode.VIDEO -> {
+                val cameraOk = ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) ==
+                    PackageManager.PERMISSION_GRANTED
+                val micOk = ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) ==
+                    PackageManager.PERMISSION_GRANTED
+                if (cameraOk && micOk) {
+                    videoSession = VideoNoteSession(context)
+                    recordPhase = RecordPhase.HELD
+                } else {
+                    videoNotePermissions.launch(
+                        arrayOf(Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO)
+                    )
+                }
+            }
+        }
+    }
+
+    // §16.2: auto-lock at 59s (so the 60s cap never rips a held button away), then
+    // auto-stop + hand off to send at the 60s hard cap.
+    val recordElapsed = if (captureMode == CaptureMode.VIDEO) videoSession?.elapsed ?: 0f else recorder.elapsed
+    LaunchedEffect(recordPhase) {
+        while (recordPhase != RecordPhase.IDLE) {
+            val elapsed = if (vm.captureMode.value == CaptureMode.VIDEO) {
+                videoSession?.elapsed ?: 0f
+            } else {
+                recorder.elapsed
+            }
+            if (recordPhase == RecordPhase.HELD && elapsed >= 59f) {
+                recordPhase = RecordPhase.LOCKED
+                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+            }
+            if (elapsed >= 60f) {
+                finishAndSendRecording()
+                break
+            }
+            delay(100)
+        }
+    }
+
+    // ── §16.4: edit mode — original body in the field, previous draft restored ──
+    val editingMessage by vm.editing.collectAsState()
+    var editBackupDraft by remember { mutableStateOf<TextFieldValue?>(null) }
+    var shakeTrigger by remember { mutableIntStateOf(0) }
+    LaunchedEffect(editingMessage?.id) {
+        val target = editingMessage
+        if (target != null) {
+            editBackupDraft = draft
+            draft = TextFieldValue(target.body, selection = androidx.compose.ui.text.TextRange(target.body.length))
+            runCatching { composerFocus.requestFocus() }
+        }
+    }
+
+    fun exitEditMode() {
+        vm.setEditing(null)
+        draft = editBackupDraft ?: TextFieldValue("")
+        editBackupDraft = null
+    }
+
+    // ── §16.1/§16.3: jump-to-original + highlight flash ───────────────────────
+    var highlightedId by remember { mutableStateOf<String?>(null) }
+
+    fun jumpToMessage(messageId: String) {
+        scope.launch {
+            var attempts = 0
+            while (vm.messages.value.none { it.id == messageId } &&
+                vm.hasMoreMessages.value && attempts < 20
+            ) {
+                vm.loadOlderMessages().join()
+                attempts++
+            }
+            val index = vm.messages.value.indexOfFirst { it.id == messageId }
+            if (index >= 0) {
+                listState.animateScrollToItem(index)
+                highlightedId = messageId
+                delay(900)
+                if (highlightedId == messageId) highlightedId = null
+            }
+        }
+    }
+
+    // ── §16.3: pins ───────────────────────────────────────────────────────────
+    val pinnedMessages by vm.pinnedMessages.collectAsState()
+    val pinBarHiddenAt by vm.pinBarHiddenAt.collectAsState()
+    var pinStep by remember(conversation.id) { mutableIntStateOf(0) }
+    var pinTarget by remember { mutableStateOf<Message?>(null) }
+    var unpinTargetId by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(pinnedMessages.size) { pinStep = 0 }
+    val canPinHere = isDirect || conversation.isAdmin
 
     // Multi-select photos + videos together, matching iOS's PhotosPicker(.any(of: [.images, .videos])).
     val mediaLauncher = rememberLauncherForActivityResult(
@@ -221,20 +414,6 @@ fun ChatScreen(
                     pendingMedia = pendingMedia + draft
                 } ?: run {
                     vm.error.value = context.getString(R.string.err_read_photo)
-                }
-            }
-        }
-    }
-    // Video capture from the composer's hold-to-record button (captureMode == VIDEO).
-    val videoLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CaptureVideo()) { success ->
-        val uri = tempVideoUri
-        tempVideoUri = null
-        if (success && uri != null) {
-            scope.launch {
-                loadVideoDraft(context, uri)?.let { draft ->
-                    pendingMedia = pendingMedia + draft
-                } ?: run {
-                    vm.error.value = context.getString(R.string.err_read_video)
                 }
             }
         }
@@ -429,6 +608,24 @@ fun ChatScreen(
                     )
                 }
             }
+            // §16.3: pinned bar — newest pin first; taps step back through pins.
+            val newestPinId = pinnedMessages.lastOrNull()?.id
+            if (pinnedMessages.isNotEmpty() && pinBarHiddenAt[conversation.id] != newestPinId) {
+                val pinIndex = (pinnedMessages.size - 1 - (pinStep % pinnedMessages.size))
+                    .coerceIn(0, pinnedMessages.size - 1)
+                PinnedMessagesBar(
+                    pins = pinnedMessages,
+                    currentIndex = pinIndex,
+                    onTap = {
+                        jumpToMessage(pinnedMessages[pinIndex].id)
+                        pinStep++
+                    },
+                    onClose = {
+                        if (canPinHere) unpinTargetId = pinnedMessages[pinIndex].id
+                        else vm.hidePinBar(conversation.id)
+                    },
+                )
+            }
             Box(Modifier.weight(1f).fillMaxWidth()) {
             LazyColumn(
                 state = listState,
@@ -450,6 +647,20 @@ fun ChatScreen(
                     if (idx == 0 || !sameDay(messages[idx - 1].createdAt, msg.createdAt)) {
                         DateSeparator(msg.createdAt)
                     }
+                    // §16.1/§16.3: brief tinted pulse on the jump target bubble.
+                    val highlightAlpha by animateFloatAsState(
+                        targetValue = if (msg.id == highlightedId) 0.18f else 0f,
+                        animationSpec = tween(250),
+                        label = "jumpHighlight",
+                    )
+                    Box(
+                        Modifier
+                            .fillMaxWidth()
+                            .background(
+                                MaterialTheme.colorScheme.primary.copy(alpha = highlightAlpha),
+                                RoundedCornerShape(10.dp),
+                            ),
+                    ) {
                     // §15.3: swipe any bubble LEFT to reply (own and peer, every kind).
                     SwipeToReplyContainer(
                         enabled = !msg.isDeleted && msg.kind != "SYSTEM" && !msg.isCallEvent,
@@ -460,7 +671,14 @@ fun ChatScreen(
                             isMine  = isMine,
                             isFirst = isFirst,
                             isLast  = isLast,
-                            replyAuthorName = msg.replyTo?.let { if (it.senderId == me?.id) stringResource(R.string.common_you) else title } ?: "",
+                            // §16.1: resolve the QUOTED sender's display name (group-aware).
+                            replyAuthorName = msg.replyTo?.let { r ->
+                                when {
+                                    r.senderId == me?.id -> stringResource(R.string.common_you)
+                                    else -> conversation.members.firstOrNull { it.id == r.senderId }?.displayName
+                                        ?: title
+                                }
+                            } ?: "",
                             highlightMentions = !isDirect,
                             mentionNames = mentionableNames,
                             onCallBack = { kind -> vm.startCall(conversation.id, kind, title); onCall(kind) },
@@ -477,7 +695,10 @@ fun ChatScreen(
                                     }
                                 }
                             },
+                            // §16.1: tap the quote card → scroll to the original + flash.
+                            onQuoteClick = { msg.replyTo?.id?.let { jumpToMessage(it) } },
                         )
+                    }
                     }
                 }
                 if (peerTyping) {
@@ -549,19 +770,15 @@ fun ChatScreen(
                     )
                 }
             }
+            // §16.2: circular live camera overlay while recording a round video note.
+            if (recordPhase != RecordPhase.IDLE && captureMode == CaptureMode.VIDEO) {
+                videoSession?.let { session ->
+                    VideoNoteRecordingOverlay(session, Modifier.matchParentSize())
+                }
+            }
             } // Box (messages)
 
-            if (recorder.isRecording) {
-                RecordingBar(
-                    elapsed  = recorder.elapsed,
-                    onCancel = { recorder.cancel() },
-                    onSend   = {
-                        recorder.stop()?.let { (bytes, durationMs, waveform) ->
-                            vm.sendVoice(conversation.id, bytes, durationMs, waveform)
-                        }
-                    },
-                )
-            } else {
+            if (recordPhase == RecordPhase.IDLE) {
                 if (pendingMedia.isNotEmpty()) {
                     PendingMediaBar(
                         items = pendingMedia,
@@ -590,65 +807,85 @@ fun ChatScreen(
                         }
                     }
                 }
-                ComposerBar(
-                    draft    = draft,
-                    // §15.1: reply preview renders inside the composer's input container.
-                    replyAuthor = replyingTo?.let { target ->
-                        if (target.senderId == me?.id) stringResource(R.string.chat_yourself) else title
-                    },
-                    replyPreview = replyingTo?.let { messagePreview(it) } ?: "",
-                    onCancelReply = { vm.setReplyTo(null) },
-                    focusRequester = composerFocus,
-                    onChange = { draft = it; vm.setTyping(conversation.id, it.text.isNotBlank()) },
-                    onSend   = {
-                        if (pendingMedia.isNotEmpty()) {
-                            val toSend = pendingMedia
-                            val caption = draft.text.trim().takeIf { it.isNotBlank() }
-                            pendingMedia = emptyList()
-                            draft = TextFieldValue("")
-                            vm.saveDraft(conversation.id, null)
-                            // Optimistic pill takes over (§9.1); the composer frees up instantly.
-                            vm.sendAttachments(conversation.id, caption, toSend.map { it.attachment })
-                        } else if (draft.text.isNotBlank()) {
-                            vm.send(conversation.id, draft.text.trim()); draft = TextFieldValue("")
-                            vm.saveDraft(conversation.id, null)
-                        }
-                    },
-                    onAttach = { showAttachSheet = true },
-                    onStickers = { focusManager.clearFocus(); vm.loadStickers(); showStickerSheet = true },
-                    hasPendingAttachments = pendingMedia.isNotEmpty(),
-                    captureMode = captureMode,
-                    onToggleCaptureMode = {
-                        captureMode = if (captureMode == CaptureMode.AUDIO) CaptureMode.VIDEO else CaptureMode.AUDIO
-                    },
-                    onHoldStart = {
-                        when (captureMode) {
-                            CaptureMode.AUDIO -> {
-                                if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO)
-                                    == PackageManager.PERMISSION_GRANTED
-                                ) {
-                                    if (!recorder.start()) vm.error.value = "Couldn't start recording."
-                                } else {
-                                    micPermission.launch(Manifest.permission.RECORD_AUDIO)
-                                }
-                            }
-                            CaptureMode.VIDEO -> {
-                                val file = File.createTempFile("klic_vid_", ".mp4", context.cacheDir)
-                                val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
-                                tempVideoUri = uri
-                                videoLauncher.launch(uri)
-                            }
-                        }
-                    },
-                    onHoldEnd = {
-                        if (captureMode == CaptureMode.AUDIO && recorder.isRecording) {
-                            recorder.stop()?.let { (bytes, durationMs, waveform) ->
-                                vm.sendVoice(conversation.id, bytes, durationMs, waveform)
-                            }
-                        }
-                    },
-                )
             }
+            ComposerBar(
+                draft    = draft,
+                // §15.1: reply preview renders inside the composer's input container.
+                replyAuthor = replyingTo?.let { target ->
+                    if (target.senderId == me?.id) stringResource(R.string.chat_yourself) else title
+                },
+                replyPreview = replyingTo?.let { messagePreview(it) } ?: "",
+                onCancelReply = { vm.setReplyTo(null) },
+                // §16.4: edit banner + checkmark send while editing.
+                editingOriginal = editingMessage?.body,
+                onCancelEdit = { exitEditMode() },
+                shakeTrigger = shakeTrigger,
+                focusRequester = composerFocus,
+                onChange = { draft = it; vm.setTyping(conversation.id, it.text.isNotBlank()) },
+                onSend   = {
+                    val editTarget = editingMessage
+                    if (editTarget != null) {
+                        val text = draft.text.trim()
+                        when {
+                            // Empty apply → error shake, keep editing (§16.4).
+                            text.isEmpty() -> shakeTrigger++
+                            // Unchanged → silently exit edit mode, no request.
+                            text == editTarget.body -> exitEditMode()
+                            else -> {
+                                vm.editMessage(conversation.id, editTarget.id, text)
+                                exitEditMode()
+                            }
+                        }
+                    } else if (pendingMedia.isNotEmpty()) {
+                        val toSend = pendingMedia
+                        val caption = draft.text.trim().takeIf { it.isNotBlank() }
+                        pendingMedia = emptyList()
+                        draft = TextFieldValue("")
+                        vm.saveDraft(conversation.id, null)
+                        // Optimistic pill takes over (§9.1); the composer frees up instantly.
+                        vm.sendAttachments(conversation.id, caption, toSend.map { it.attachment })
+                    } else if (draft.text.isNotBlank()) {
+                        vm.send(conversation.id, draft.text.trim()); draft = TextFieldValue("")
+                        vm.saveDraft(conversation.id, null)
+                    }
+                },
+                onAttach = { showAttachSheet = true },
+                onStickers = { focusManager.clearFocus(); vm.loadStickers(); showStickerSheet = true },
+                hasPendingAttachments = pendingMedia.isNotEmpty(),
+                captureMode = captureMode,
+                onToggleCaptureMode = { vm.toggleCaptureMode() },
+                recordPhase = recordPhase,
+                recordElapsed = recordElapsed,
+                onHoldStart = { startRecording() },
+                onHoldDrag = { total ->
+                    lastRecordDrag = total
+                    when {
+                        recordPhase != RecordPhase.HELD -> RecordDragResult.LOCKED
+                        // §16.2: slide UP past 57dp → LOCK (haptic fires in the button).
+                        -total.y >= lockTravelPx -> {
+                            recordPhase = RecordPhase.LOCKED
+                            RecordDragResult.LOCKED
+                        }
+                        // §16.2: slide LEFT past min(35% width, 140dp) → cancel + discard.
+                        -total.x >= cancelDistPx -> {
+                            cancelRecording()
+                            RecordDragResult.CANCELED
+                        }
+                        else -> RecordDragResult.CONTINUE
+                    }
+                },
+                onHoldEnd = {
+                    if (recordPhase == RecordPhase.HELD) {
+                        // Release: cancel when slid past 55% of the cancel distance
+                        // (progress < 0.45, reference-style), else stop + send.
+                        val progress = 1f + lastRecordDrag.x.coerceAtMost(0f) / cancelDistPx
+                        if (progress < RELEASE_CANCEL_PROGRESS) cancelRecording()
+                        else finishAndSendRecording()
+                    }
+                },
+                onRecordCancel = { cancelRecording() },
+                onRecordSend = { finishAndSendRecording() },
+            )
         }
         } // Box
     }
@@ -724,11 +961,22 @@ fun ChatScreen(
         }
     }
 
-    // Long-press action menu (reactions + reply/copy/report/delete).
+    // Long-press action menu (reactions + reply/edit/pin/copy/report/delete).
     menuTarget?.let { target ->
+        val targetIsMine = target.senderId == me?.id
+        val targetPinned = target.pinnedAt != null || pinnedMessages.any { it.id == target.id }
+        // §16.4: own, non-deleted text/caption messages within 48h of sending.
+        val editableKind = target.kind in setOf("TEXT", "IMAGE", "VIDEO", "VOICE", "FILE", "VIDEO_NOTE")
+        val within48h = runCatching {
+            java.time.Instant.parse(target.createdAt)
+                .isAfter(java.time.Instant.now().minus(48, java.time.temporal.ChronoUnit.HOURS))
+        }.getOrDefault(false)
+        val canEdit = targetIsMine && !target.isDeleted && editableKind && within48h
+        val pinnable = canPinHere && !target.isDeleted &&
+            target.kind != "SYSTEM" && !target.isCallEvent
         MessageActionsOverlay(
             message = target,
-            isMine = target.senderId == me?.id,
+            isMine = targetIsMine,
             onReact = { emoji -> vm.react(conversation.id, target.id, emoji); menuTarget = null },
             onReply = { vm.setReplyTo(target); menuTarget = null },
             onCopy = { clipboard.setText(AnnotatedString(target.body)) },
@@ -736,6 +984,67 @@ fun ChatScreen(
             onDelete = { deleteTarget = target },
             onDismiss = { menuTarget = null },
             onReport = { reportMessageTarget = target; menuTarget = null },
+            // §16.3: Pin/Unpin (DM: both sides; group: admin only).
+            onPin = if (pinnable) {
+                {
+                    if (targetPinned) unpinTargetId = target.id else pinTarget = target
+                    menuTarget = null
+                }
+            } else null,
+            isPinned = targetPinned,
+            // §16.4: Edit — loads the original into the composer with the edit banner.
+            onEdit = if (canEdit) {
+                { vm.setEditing(target); menuTarget = null }
+            } else null,
+        )
+    }
+
+    // §16.3: pin confirmation — groups choose whether to notify; DMs simply confirm.
+    pinTarget?.let { target ->
+        AlertDialog(
+            onDismissRequest = { pinTarget = null },
+            title = { Text(stringResource(R.string.actions_pin)) },
+            text = { if (isDirect) Text(stringResource(R.string.pin_confirm_dm)) else null },
+            confirmButton = {
+                if (isDirect) {
+                    TextButton(onClick = {
+                        vm.pinMessage(conversation.id, target.id, notify = false)
+                        pinTarget = null
+                    }) { Text(stringResource(R.string.actions_pin)) }
+                } else {
+                    Column {
+                        TextButton(onClick = {
+                            vm.pinMessage(conversation.id, target.id, notify = true)
+                            pinTarget = null
+                        }) { Text(stringResource(R.string.pin_notify_all)) }
+                        TextButton(onClick = {
+                            vm.pinMessage(conversation.id, target.id, notify = false)
+                            pinTarget = null
+                        }) { Text(stringResource(R.string.pin_only)) }
+                    }
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { pinTarget = null }) { Text(stringResource(R.string.common_cancel)) }
+            },
+        )
+    }
+
+    // §16.3: unpin always confirms.
+    unpinTargetId?.let { messageId ->
+        AlertDialog(
+            onDismissRequest = { unpinTargetId = null },
+            title = { Text(stringResource(R.string.actions_unpin)) },
+            text = { Text(stringResource(R.string.unpin_confirm)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    vm.unpinMessage(conversation.id, messageId)
+                    unpinTargetId = null
+                }) { Text(stringResource(R.string.actions_unpin)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { unpinTargetId = null }) { Text(stringResource(R.string.common_cancel)) }
+            },
         )
     }
 

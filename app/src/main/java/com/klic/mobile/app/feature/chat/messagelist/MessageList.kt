@@ -68,7 +68,7 @@ import com.klic.mobile.app.data.SettingsStore
 import com.klic.mobile.app.feature.chat.actions.DeletedBubble
 import com.klic.mobile.app.feature.chat.actions.ReactionChipsInline
 import com.klic.mobile.app.feature.chat.actions.ReactionPillsRow
-import com.klic.mobile.app.feature.chat.actions.ReplyQuote
+import com.klic.mobile.app.feature.chat.actions.ReplyCard
 import com.klic.mobile.app.feature.chat.media.FileAttachmentView
 import com.klic.mobile.app.feature.chat.media.PdfFileBubbleView
 import com.klic.mobile.app.feature.chat.media.isPdfAttachment
@@ -107,6 +107,8 @@ internal fun MessageBubble(
     /** §10.9: opens the media viewer on the tapped IMAGE or VIDEO attachment. */
     onMediaClick: (Attachment) -> Unit = {},
     onFileClick: (Attachment) -> Unit = {},
+    /** §16.1: tap on the reply quote card → scroll to the original + highlight. */
+    onQuoteClick: () -> Unit = {},
 ) {
     if (message.isDeleted) { DeletedBubble(isMine); return }
     // SYSTEM notices ("«admin» removed «target»", §9.3) render as a centred pill.
@@ -137,6 +139,8 @@ internal fun MessageBubble(
     )
 
     val voiceAtt = message.attachments.firstOrNull { it.kind == "VOICE" }
+    // §16.2: round video notes render as a bubble-less circle, like stickers.
+    val videoNoteAtt = message.attachments.firstOrNull { it.kind == "VIDEO_NOTE" }
     // §13.17: images AND videos share one media list so a bulk message renders as a
     // single bento grid; a lone video keeps its dedicated player-style bubble.
     val mediaAtts = message.attachments.filter { it.kind == "IMAGE" || it.kind == "VIDEO" }
@@ -145,6 +149,8 @@ internal fun MessageBubble(
 
     val time = shortTime(message.createdAt)
     val status = if (isMine) message.status else null
+    // §16.4: lowercase "edited" immediately before the time in every meta placement.
+    val edited = message.editedAt != null
 
     // §8.4 Save to Photos (Always): incoming media auto-saves once, deduped by attachment id.
     val autoSaveContext = LocalContext.current
@@ -170,11 +176,29 @@ internal fun MessageBubble(
                     )
                 }
 
+            // §16.2: circular video-note playback — no bubble chrome, ring progress.
+            videoNoteAtt != null ->
+                Column(horizontalAlignment = if (isMine) Alignment.End else Alignment.Start) {
+                    message.replyTo?.let { StandaloneReplyCard(it, replyAuthorName, isMine, onQuoteClick) }
+                    Box(Modifier.combinedClickable(onClick = {}, onLongClick = onLongPress)) {
+                        com.klic.mobile.app.feature.chat.videonote.VideoNoteBubble(
+                            att = videoNoteAtt,
+                            conversationId = message.conversationId,
+                            time = time,
+                            status = status,
+                            starred = message.starred,
+                            edited = edited,
+                            onLongPress = onLongPress,
+                        )
+                    }
+                    if (message.reactions.isNotEmpty()) ReactionPillsRow(message.reactions, onReactionTap)
+                }
+
             mediaAtts.isNotEmpty() && (soleVideoAtt == null || message.body.isNotBlank()) ->
                 Column(horizontalAlignment = if (isMine) Alignment.End else Alignment.Start) {
                     if (message.body.isBlank()) {
                         // No caption: bare image/bento with the overlay time + ticks pill.
-                        message.replyTo?.let { ReplyQuote(it, replyAuthorName) }
+                        message.replyTo?.let { StandaloneReplyCard(it, replyAuthorName, isMine, onQuoteClick) }
                         Box(Modifier.clip(RoundedCornerShape(16.dp))) {
                             BentoMediaGrid(mediaAtts, tileRadius = 12.dp, onMediaClick = onMediaClick, onLongPress = onLongPress)
                             // §14.5: reactions live INSIDE the media edge, scrim-backed.
@@ -188,6 +212,7 @@ internal fun MessageBubble(
                                 time = time,
                                 status = status,
                                 starred = message.starred,
+                                edited = edited,
                                 modifier = Modifier.align(Alignment.BottomEnd).padding(8.dp),
                             )
                         }
@@ -206,8 +231,12 @@ internal fun MessageBubble(
                                 .padding(4.dp),
                         ) {
                             message.replyTo?.let {
-                                Box(Modifier.padding(start = 6.dp, top = 4.dp, end = 6.dp, bottom = 6.dp)) {
-                                    ReplyQuote(it, replyAuthorName, onPrimary = isMine)
+                                Box(Modifier.padding(start = 2.dp, top = 2.dp, end = 2.dp, bottom = 4.dp)) {
+                                    ReplyCard(
+                                        it, replyAuthorName, onPrimary = isMine,
+                                        onClick = onQuoteClick,
+                                        modifier = Modifier.fillMaxWidth(),
+                                    )
                                 }
                             }
                             BentoMediaGrid(mediaAtts, tileRadius = 14.dp, onMediaClick = onMediaClick, onLongPress = onLongPress)
@@ -220,7 +249,7 @@ internal fun MessageBubble(
                                 textColor = textColor,
                                 modifier = Modifier.width(240.dp).padding(horizontal = 6.dp, vertical = 6.dp),
                             ) {
-                                MetaRow(time, status, message.starred, timeColor, isMine)
+                                MetaRow(time, status, message.starred, timeColor, isMine, edited)
                             }
                             // §14.5: reactions inside the card's bottom edge.
                             ReactionChipsInline(
@@ -235,7 +264,7 @@ internal fun MessageBubble(
 
             soleVideoAtt != null && message.body.isBlank() ->
                 Column(horizontalAlignment = if (isMine) Alignment.End else Alignment.Start) {
-                    message.replyTo?.let { ReplyQuote(it, replyAuthorName) }
+                    message.replyTo?.let { StandaloneReplyCard(it, replyAuthorName, isMine, onQuoteClick) }
                     Box(
                         Modifier
                             .widthIn(max = 240.dp)
@@ -288,6 +317,7 @@ internal fun MessageBubble(
                             time = time,
                             status = status,
                             starred = message.starred,
+                            edited = edited,
                             modifier = Modifier.align(Alignment.BottomEnd).padding(8.dp),
                         )
                     }
@@ -297,7 +327,7 @@ internal fun MessageBubble(
                 // §7.3: files open in-app (pdf viewer / audio player / detail sheet) —
                 // the tap goes through onFileClick, never straight to the URL.
                 Column(horizontalAlignment = if (isMine) Alignment.End else Alignment.Start) {
-                    message.replyTo?.let { ReplyQuote(it, replyAuthorName) }
+                    message.replyTo?.let { StandaloneReplyCard(it, replyAuthorName, isMine, onQuoteClick) }
                     Box(
                         Modifier.combinedClickable(
                             onClick = { if (!isAudioAttachment(fileAtt)) onFileClick(fileAtt) },
@@ -339,6 +369,7 @@ internal fun MessageBubble(
                     time = time,
                     status = status,
                     starred = message.starred,
+                    edited = edited,
                     onLongPress = onLongPress,
                     reactions = message.reactions,
                     onReactionTap = onReactionTap,
@@ -360,8 +391,20 @@ internal fun MessageBubble(
                     val textColor = if (isMine) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
                     val timeColor = if (isMine) MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.65f)
                                     else MaterialTheme.colorScheme.onSurfaceVariant
-                    Column {
-                        message.replyTo?.let { ReplyQuote(it, replyAuthorName, onPrimary = isMine) }
+                    // §16.1: with a quote card the bubble grows to the wider of card/body
+                    // (and the card stretches to the bubble when the body is wider).
+                    Column(
+                        if (message.replyTo != null) {
+                            Modifier.width(androidx.compose.foundation.layout.IntrinsicSize.Max)
+                        } else Modifier,
+                    ) {
+                        message.replyTo?.let {
+                            ReplyCard(
+                                it, replyAuthorName, onPrimary = isMine,
+                                onClick = onQuoteClick,
+                                modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp),
+                            )
+                        }
                         // §15.2: body text with the time+ticks tucked into the last
                         // line's trailing gap when they fit, else a compact trailing row.
                         BodyWithInlineMeta(
@@ -371,7 +414,7 @@ internal fun MessageBubble(
                             mentionNames = mentionNames,
                             textColor = textColor,
                         ) {
-                            MetaRow(time, status, message.starred, timeColor, isMine)
+                            MetaRow(time, status, message.starred, timeColor, isMine, edited)
                         }
                         // §14.5: reactions at the bubble's bottom edge, inside it.
                         ReactionChipsInline(
@@ -530,12 +573,14 @@ private fun BentoMediaGrid(
 
 // Semi-transparent dark pill used as overlay on image/video.
 @Composable
-private fun MediaTimePill(
+internal fun MediaTimePill(
     modifier: Modifier = Modifier,
     time: String = "",
     text: String = "",           // for the duration pill on video (no ticks)
     status: String? = null,
     starred: Boolean = false,
+    /** §16.4: prefix a lowercase "edited" before the time. */
+    edited: Boolean = false,
 ) {
     Row(
         modifier = modifier
@@ -546,6 +591,13 @@ private fun MediaTimePill(
         horizontalArrangement = Arrangement.spacedBy(3.dp),
     ) {
         if (starred && text.isEmpty()) StarIndicator(Color.White)
+        if (edited && text.isEmpty()) {
+            Text(
+                stringResource(R.string.edited_label),
+                style = MaterialTheme.typography.labelSmall,
+                color = Color.White.copy(alpha = 0.85f),
+            )
+        }
         val label = text.ifEmpty { time }
         if (label.isNotEmpty()) {
             Text(
@@ -556,6 +608,29 @@ private fun MediaTimePill(
         }
         if (status != null && text.isEmpty()) {
             MessageTicks(status = status, onMedia = true)
+        }
+    }
+}
+
+/**
+ * §16.1: reply quote card floated above a bubble-less render (bare media, round video
+ * notes, files) — a solid bubble-coloured backing keeps the accent-tinted card
+ * readable over any chat wallpaper.
+ */
+@Composable
+internal fun StandaloneReplyCard(
+    reply: com.klic.mobile.app.data.ReplyPreview,
+    authorName: String,
+    isMine: Boolean,
+    onClick: () -> Unit,
+) {
+    Surface(
+        shape = RoundedCornerShape(14.dp),
+        color = if (isMine) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
+        modifier = Modifier.padding(bottom = 2.dp),
+    ) {
+        Box(Modifier.padding(4.dp)) {
+            ReplyCard(reply, authorName, onPrimary = isMine, onClick = onClick)
         }
     }
 }
@@ -626,12 +701,21 @@ internal fun MetaRow(
     starred: Boolean,
     timeColor: Color,
     isMine: Boolean,
+    /** §16.4: lowercase "edited" immediately BEFORE the time ("edited 9:39 ✓"). */
+    edited: Boolean = false,
 ) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(3.dp),
     ) {
         if (starred) StarIndicator(timeColor)
+        if (edited) {
+            Text(
+                stringResource(R.string.edited_label),
+                style = MaterialTheme.typography.labelSmall,
+                color = timeColor,
+            )
+        }
         Text(time, style = MaterialTheme.typography.labelSmall, color = timeColor)
         if (status != null) MessageTicks(status = status, onPrimary = isMine)
     }
@@ -718,6 +802,7 @@ private fun BigEmojiBubble(
     time: String,
     status: String?,
     starred: Boolean,
+    edited: Boolean = false,
     onLongPress: () -> Unit,
     reactions: List<com.klic.mobile.app.data.Reaction> = emptyList(),
     onReactionTap: (String) -> Unit = {},
@@ -742,6 +827,13 @@ private fun BigEmojiBubble(
         ) {
             val timeColor = MaterialTheme.colorScheme.onSurfaceVariant
             if (starred) StarIndicator(timeColor)
+            if (edited) {
+                Text(
+                    stringResource(R.string.edited_label),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = timeColor,
+                )
+            }
             Text(time, style = MaterialTheme.typography.labelSmall, color = timeColor)
             if (status != null) MessageTicks(status = status)
         }
@@ -881,6 +973,7 @@ internal fun messagePreview(m: Message): String = when {
     m.isSticker -> stringResource(R.string.preview_sticker)
     m.attachments.firstOrNull()?.kind == "IMAGE" -> stringResource(R.string.preview_photo)
     m.attachments.firstOrNull()?.kind == "VOICE" -> stringResource(R.string.preview_voice_message)
+    m.attachments.firstOrNull()?.kind == "VIDEO_NOTE" -> stringResource(R.string.preview_video_message)
     m.attachments.firstOrNull()?.kind == "VIDEO" -> stringResource(R.string.preview_video)
     m.attachments.isNotEmpty() -> stringResource(R.string.preview_file)
     else -> stringResource(R.string.preview_message)

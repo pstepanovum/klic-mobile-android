@@ -281,6 +281,30 @@ interface KlicApi {
 
     @DELETE("me/email")
     suspend fun removeEmail(): Response<ResponseBody>
+
+    // ── v0.5.9 (§16.3/§16.4): pins + message editing (WP-S9) ──
+
+    @POST("conversations/{id}/messages/{messageId}/pin")
+    suspend fun pinMessage(
+        @Path("id") id: String,
+        @Path("messageId") messageId: String,
+        @Body body: PinMessageRequest,
+    ): Response<ResponseBody>
+
+    @DELETE("conversations/{id}/messages/{messageId}/pin")
+    suspend fun unpinMessage(
+        @Path("id") id: String,
+        @Path("messageId") messageId: String,
+    ): Response<ResponseBody>
+
+    // Raw body: older servers don't know the route, and the shape of a success
+    // response may evolve — the socket's message:updated stays authoritative.
+    @PATCH("conversations/{id}/messages/{messageId}")
+    suspend fun editMessage(
+        @Path("id") id: String,
+        @Path("messageId") messageId: String,
+        @Body body: EditMessageRequest,
+    ): ResponseBody
 }
 
 /** Bare, synchronous refresh used by the Authenticator (no auth header, no authenticator → no recursion). */
