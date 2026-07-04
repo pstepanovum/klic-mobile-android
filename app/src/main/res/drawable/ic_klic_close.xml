@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Klic close (X) — 24×24, 1.5 stroke, round caps. Stroke color is a neutral ink
+     placeholder; every usage tints it via Icon (onSurface/onBackground, white in dark). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:pathData="M5,5L19,19M19,5L5,19"
+        android:strokeColor="#282930"
+        android:strokeWidth="1.5"
+        android:strokeLineCap="round" />
+</vector>

@@ -22,7 +22,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.PhotoCamera
@@ -168,7 +167,11 @@ fun EditProfileScreen(vm: KlicViewModel, onDone: () -> Unit) {
                 title = { Text(stringResource(R.string.settings_edit_profile), style = MaterialTheme.typography.titleMedium) },
                 navigationIcon = {
                     IconButton(onClick = onDone) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.common_back))
+                        Icon(
+                            painter = androidx.compose.ui.res.painterResource(com.klic.mobile.app.ui.theme.KlicIcons.back),
+                            contentDescription = stringResource(R.string.common_back),
+                            modifier = Modifier.size(24.dp),
+                        )
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),

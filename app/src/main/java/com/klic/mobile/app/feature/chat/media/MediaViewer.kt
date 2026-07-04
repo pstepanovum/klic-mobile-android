@@ -35,7 +35,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Reply
 import androidx.compose.material.icons.automirrored.filled.Send
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
@@ -150,7 +149,7 @@ fun MediaViewerOverlay(
             ) {
                 IconButton(onClick = onDismiss) {
                     Icon(
-                        Icons.Filled.Close,
+                        painter = androidx.compose.ui.res.painterResource(com.klic.mobile.app.ui.theme.KlicIcons.close),
                         contentDescription = stringResource(R.string.common_close),
                         tint = Color.White.copy(alpha = 0.9f),
                         modifier = Modifier.size(26.dp),
