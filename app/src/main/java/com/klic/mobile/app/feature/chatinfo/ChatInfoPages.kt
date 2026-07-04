@@ -45,6 +45,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
@@ -150,14 +151,19 @@ private fun MediaTab(vm: KlicViewModel, conversationId: String) {
                     .background(MaterialTheme.colorScheme.surfaceVariant)
                     .clickable { if (att.kind == "IMAGE") viewerUrl = att.url },
             ) {
-                AsyncImage(
-                    // §9.9: stable cache key — the grid never re-downloads thumbnails.
-                    model = rememberStableImageRequest(att.url),
-                    contentDescription = if (att.kind == "VIDEO") "Video" else "Photo",
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize(),
-                )
                 if (att.kind == "VIDEO") {
+                    // §14.2: media-browser video tiles get a real first-frame thumbnail.
+                    val thumb by com.klic.mobile.app.feature.chat.media.rememberVideoThumbnail(
+                        att.asAttachment(), conversationId,
+                    )
+                    thumb?.let {
+                        androidx.compose.foundation.Image(
+                            bitmap = it.asImageBitmap(),
+                            contentDescription = "Video",
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.fillMaxSize(),
+                        )
+                    }
                     Icon(
                         Icons.Filled.PlayArrow,
                         contentDescription = null,
@@ -166,6 +172,14 @@ private fun MediaTab(vm: KlicViewModel, conversationId: String) {
                             .align(Alignment.Center)
                             .size(28.dp)
                             .background(Color.Black.copy(alpha = 0.4f), CircleShape),
+                    )
+                } else {
+                    AsyncImage(
+                        // §9.9: stable cache key — the grid never re-downloads thumbnails.
+                        model = rememberStableImageRequest(att.url),
+                        contentDescription = "Photo",
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize(),
                     )
                 }
             }
