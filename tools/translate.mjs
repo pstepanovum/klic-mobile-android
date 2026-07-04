@@ -8,9 +8,9 @@
 //   node tools/translate.mjs            # translate missing keys only (idempotent)
 //   node tools/translate.mjs --force    # re-translate everything
 //
-// API key: env GEMINI_API_KEY, falling back to ../.translate.env relative to the
-// repo root (the workspace-level file OUTSIDE this repo). The key must NEVER be
-// committed — this repository is public.
+// API key: env GEMINI_API_KEY, falling back to ../klic-assets/env/.translate.env
+// relative to the repo root (the workspace-level file OUTSIDE this repo). The key
+// must NEVER be committed — this repository is public.
 //
 // Adding a language = add one entry to LANGS and rerun.
 
@@ -48,14 +48,14 @@ const force = process.argv.includes("--force");
 
 function apiKey() {
   if (process.env.GEMINI_API_KEY) return process.env.GEMINI_API_KEY.trim();
-  const envFile = join(repoRoot, "..", ".translate.env");
+  const envFile = join(repoRoot, "..", "klic-assets", "env", ".translate.env");
   if (existsSync(envFile)) {
     for (const line of readFileSync(envFile, "utf8").split("\n")) {
       const m = line.match(/^\s*GEMINI_API_KEY\s*=\s*(.+?)\s*$/);
       if (m) return m[1];
     }
   }
-  console.error("GEMINI_API_KEY not set and ../.translate.env not found — aborting.");
+  console.error("GEMINI_API_KEY not set and ../klic-assets/env/.translate.env not found — aborting.");
   process.exit(1);
 }
 
