@@ -99,3 +99,6 @@ Notes:
 ## Roadmap
 Done: M1 auth/friends · M2 read receipts + FCM push · M3 calling (full-screen incoming + LiveKit video).
 Next: Telecom ConnectionService, call history, group calls, typing indicators.
+
+## License
+Klic Android is released under the [MIT License](LICENSE).
