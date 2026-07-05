@@ -173,7 +173,7 @@
     <string name="pp_security_title">Безопасность</string>
     <string name="pp_security_body">Мы используем отраслевые стандарты шифрования для защиты ваших данных как при передаче, так и при хранении.</string>
     <string name="pp_contact_title">Контакты</string>
-    <string name="pp_contact_body">Вопросы? Пишите нам на privacy@klic.app</string>
+    <string name="pp_contact_body">Вопросы? Пишите нам на privacy@klic.pstepanov.dev</string>
     <string name="convos_new_message">Новое сообщение</string>
     <string name="convos_search_chats">Поиск чатов</string>
     <string name="convos_group_details">О группе</string>

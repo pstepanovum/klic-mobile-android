@@ -173,7 +173,7 @@
     <string name="pp_security_title">安全性</string>
     <string name="pp_security_body">我们使用行业标准加密技术来保护传输中和存储的数据。</string>
     <string name="pp_contact_title">联系我们</string>
-    <string name="pp_contact_body">有疑问？请通过 privacy@klic.app 联系我们</string>
+    <string name="pp_contact_body">有疑问？请通过 privacy@klic.pstepanov.dev 联系我们</string>
     <string name="convos_new_message">新消息</string>
     <string name="convos_search_chats">搜索聊天</string>
     <string name="convos_group_details">群组详情</string>

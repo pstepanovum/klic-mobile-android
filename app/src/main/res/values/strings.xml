@@ -210,7 +210,7 @@
     <string name="pp_security_title">Security</string>
     <string name="pp_security_body">We use industry-standard encryption to protect your data in transit and at rest.</string>
     <string name="pp_contact_title">Contact</string>
-    <string name="pp_contact_body">Questions? Reach us at privacy@klic.app</string>
+    <string name="pp_contact_body">Questions? Reach us at privacy@klic.pstepanov.dev</string>
 
     <!-- Chats list -->
     <string name="convos_new_message">New Message</string>
