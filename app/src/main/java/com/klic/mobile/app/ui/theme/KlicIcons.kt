@@ -22,6 +22,8 @@ object KlicIcons {
     val back     = R.drawable.ic_klic_back
     val copy     = R.drawable.ic_line_copy
     val check    = R.drawable.ic_line_check
+    // Accept-button checkmark (friend requests) — its own 24×24 glyph, distinct from the delivery ticks below.
+    val checkBold = R.drawable.ic_klic_check_accept
     // Shared "klic check" mark — message delivery ticks (single/double).
     val klicCheck = R.drawable.ic_klic_check
     // Combined "check and a half" glyph — delivered/read (§8.1, one asset, both paths).

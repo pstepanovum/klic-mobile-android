@@ -201,7 +201,7 @@ private fun RequestRow(req: FriendRequest, onAccept: () -> Unit, onDecline: () -
                 contentColor = MaterialTheme.colorScheme.onPrimary,
             ),
         ) {
-            Icon(painter = painterResource(KlicIcons.message), contentDescription = "Accept", modifier = Modifier.size(18.dp))
+            Icon(painter = painterResource(KlicIcons.checkBold), contentDescription = "Accept", modifier = Modifier.size(18.dp))
         }
         androidx.compose.foundation.layout.Spacer(Modifier.size(8.dp))
         IconButton(
