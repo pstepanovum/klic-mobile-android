@@ -90,6 +90,12 @@ class SocketService {
         val opts = IO.Options().apply { auth = mapOf("token" to accessToken) }
         val socket = IO.socket(Network.BASE_HTTP, opts).also { this.socket = it }
 
+        // Report our current foreground state on every (re)connect so the server can drive
+        // online presence — a backgrounded delivery socket must not count as online.
+        socket.on(Socket.EVENT_CONNECT) {
+            socket.emit("presence:active", JSONObject().put("active", appActive))
+        }
+
         socket.on("message:new") { args ->
             (args.firstOrNull() as? JSONObject)?.let { json ->
                 runCatching {
@@ -247,6 +253,15 @@ class SocketService {
     }
 
     fun emit(event: String, payload: JsonObject) = socket?.emit(event, JSONObject(payload.toString()))
+
+    // App foreground state → server presence. Default true; KlicApplication keeps it current.
+    @Volatile private var appActive = true
+
+    /** Report app foreground/background so the server drives online presence correctly. */
+    fun setActive(active: Boolean) {
+        appActive = active
+        socket?.emit("presence:active", JSONObject().put("active", active))
+    }
     fun disconnect() {
         socket?.off()
         socket?.disconnect()
