@@ -2,6 +2,7 @@ package com.klic.mobile.app.feature.chat.media
 
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import android.view.View
 import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
@@ -80,7 +81,9 @@ import com.klic.mobile.app.feature.KlicViewModel
 import com.klic.mobile.app.feature.chat.voice.durationText
 import com.klic.mobile.app.ui.components.AvatarView
 import com.klic.mobile.app.ui.components.rememberStableImageRequest
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * Full-screen media viewer (§10.9). Type detection keys STRICTLY on the attachment
@@ -236,22 +239,39 @@ fun MediaViewerOverlay(
                 showForward = false
                 scope.launch {
                     val file = AttachmentDownloads.ensureLocal(context, current, conversationId)
-                    val bytes = file?.readBytes()
-                    if (bytes == null) {
+                    if (file == null) {
                         Toast.makeText(context, context.getString(R.string.viewer_forward_failed), Toast.LENGTH_SHORT).show()
                         return@launch
                     }
-                    val input = AttachmentInput(
-                        key = "",
-                        kind = current.kind,
-                        contentType = current.contentType,
-                        byteSize = bytes.size,
-                        width = current.width,
-                        height = current.height,
-                        durationMs = current.durationMs,
-                        fileName = current.fileName,
-                        localBytes = bytes,
-                    )
+                    // §13.15: only IMAGE keeps the in-memory path; VIDEO/FILE stream from
+                    // the local Uri so a full video never lands in the heap (and the read
+                    // that does happen stays off the main thread).
+                    val input = if (current.kind == "IMAGE") {
+                        val bytes = withContext(Dispatchers.IO) { file.readBytes() }
+                        AttachmentInput(
+                            key = "",
+                            kind = current.kind,
+                            contentType = current.contentType,
+                            byteSize = bytes.size,
+                            width = current.width,
+                            height = current.height,
+                            durationMs = current.durationMs,
+                            fileName = current.fileName,
+                            localBytes = bytes,
+                        )
+                    } else {
+                        AttachmentInput(
+                            key = "",
+                            kind = current.kind,
+                            contentType = current.contentType,
+                            byteSize = current.byteSize,
+                            width = current.width,
+                            height = current.height,
+                            durationMs = current.durationMs,
+                            fileName = current.fileName,
+                            localUri = Uri.fromFile(file).toString(),
+                        )
+                    }
                     targets.forEach { convId -> vm.sendAttachments(convId, null, listOf(input)) }
                     Toast.makeText(context, context.getString(R.string.viewer_forwarded), Toast.LENGTH_SHORT).show()
                 }

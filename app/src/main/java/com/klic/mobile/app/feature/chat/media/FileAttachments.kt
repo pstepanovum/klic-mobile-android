@@ -5,6 +5,7 @@ import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.pdf.PdfRenderer
 import android.os.ParcelFileDescriptor
+import android.util.LruCache
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -157,16 +158,21 @@ object AttachmentDownloads {
  * PNG on disk. Any failure returns null and the bubble falls back to the doc pill.
  */
 object PdfThumbnails {
-    private val memory = ConcurrentHashMap<String, Bitmap>()
+    // Bounded in-memory cache (~12MB) mirroring VideoThumbnails; the disk PNG cache
+    // cheaply re-hydrates any bitmap evicted here, so long document-heavy sessions
+    // no longer grow the heap without bound.
+    private val memory = object : LruCache<String, Bitmap>(12 * 1024) {
+        override fun sizeOf(key: String, value: Bitmap) = value.byteCount / 1024
+    }
     private val renderLock = Mutex()
 
     suspend fun thumbnail(context: Context, att: Attachment, conversationId: String?): Bitmap? =
         withContext(Dispatchers.IO) {
-            memory[att.id]?.let { return@withContext it }
+            memory.get(att.id)?.let { return@withContext it }
             val cacheFile = File(File(context.cacheDir, "pdf_thumbs").apply { mkdirs() }, "${att.id}.png")
             if (cacheFile.length() > 0) {
                 android.graphics.BitmapFactory.decodeFile(cacheFile.absolutePath)?.let {
-                    memory[att.id] = it
+                    memory.put(att.id, it)
                     return@withContext it
                 }
             }
@@ -186,7 +192,7 @@ object PdfThumbnails {
                     }
                 }.getOrNull()
             } ?: return@withContext null
-            memory[att.id] = bitmap
+            memory.put(att.id, bitmap)
             runCatching { cacheFile.outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 90, it) } }
             bitmap
         }

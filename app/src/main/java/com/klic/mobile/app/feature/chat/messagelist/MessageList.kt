@@ -32,6 +32,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -82,6 +83,8 @@ import com.klic.mobile.app.feature.chat.voice.durationText
 import com.klic.mobile.app.ui.components.MessageTicks
 import com.klic.mobile.app.ui.components.rememberStableImageRequest
 import com.klic.mobile.app.ui.components.stableImageKey
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -420,6 +423,9 @@ internal fun MessageBubble(
                         ) {
                             MetaRow(time, status, message.starred, timeColor, isMine, edited)
                         }
+                        // Rich OG link-preview card below the text (mirrors iOS); renders
+                        // nothing unless the first URL yields usable preview metadata.
+                        LinkPreviewCard(message, modifier = Modifier.fillMaxWidth())
                         // §14.5: reactions at the bubble's bottom edge, inside it.
                         ReactionChipsInline(
                             reactions = message.reactions,
@@ -468,11 +474,15 @@ private fun BentoMediaGrid(
         val isVideo = att.kind == "VIDEO"
         val settings by SettingsStore.snapshot.collectAsState()
         var manuallyRequested by remember(att.id) { mutableStateOf(false) }
-        val cached = remember(att.url) {
-            runCatching {
-                // §9.9: the disk cache is keyed on the presign-stable URL.
-                context.imageLoader.diskCache?.openSnapshot(stableImageKey(att.url))?.use { true } ?: false
-            }.getOrDefault(false)
+        // §9.9: the disk cache is keyed on the presign-stable URL. openSnapshot does
+        // filesystem I/O, so it runs off the composition thread; the placeholder shows
+        // (as it already does for uncached images) until the check lands.
+        val cached by produceState(initialValue = false, att.url) {
+            value = withContext(Dispatchers.IO) {
+                runCatching {
+                    context.imageLoader.diskCache?.openSnapshot(stableImageKey(att.url))?.use { true } ?: false
+                }.getOrDefault(false)
+            }
         }
         val allowed = isVideo || cached || manuallyRequested ||
             settings.autoDownloadAllowed(SettingsStore.KIND_PHOTOS, DataUsage.isOnWifi())

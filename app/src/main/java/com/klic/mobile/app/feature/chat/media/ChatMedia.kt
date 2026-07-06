@@ -4,6 +4,7 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.media.MediaMetadataRetriever
 import android.net.Uri
+import android.os.Build
 import android.provider.OpenableColumns
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -86,7 +87,9 @@ suspend fun loadVideoDraft(context: Context, uri: Uri): PendingMediaDraft? = wit
         val durationMs = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toIntOrNull()
         val width = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)?.toIntOrNull()
         val height = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)?.toIntOrNull()
-        val thumbnail = retriever.frameAtTime ?: return@withContext null
+        // The preview is only ever drawn as a 76dp tile, so downscale to ~512px instead
+        // of retaining a full-resolution frame (~8MB for 1080p, ~33MB for 4K) in composer state.
+        val thumbnail = retriever.scaledPreviewFrame(width, height) ?: return@withContext null
         PendingMediaDraft(
             id = UUID.randomUUID().toString(),
             previewUri = null,
@@ -109,6 +112,34 @@ suspend fun loadVideoDraft(context: Context, uri: Uri): PendingMediaDraft? = wit
     } finally {
         retriever.release()
     }
+}
+
+private const val VIDEO_PREVIEW_EDGE = 512
+
+/** Extracts the video's representative frame already downscaled to ~512px so the
+ *  composer preview never holds a full-resolution frame in memory. On API 27+ the
+ *  decoder scales directly; older devices scale a decoded frame and recycle the source. */
+private fun MediaMetadataRetriever.scaledPreviewFrame(width: Int?, height: Int?): Bitmap? {
+    if (Build.VERSION.SDK_INT >= 27 && width != null && height != null && width > 0 && height > 0) {
+        val edge = maxOf(width, height)
+        val scale = if (edge > VIDEO_PREVIEW_EDGE) VIDEO_PREVIEW_EDGE.toFloat() / edge else 1f
+        return getScaledFrameAtTime(
+            -1,
+            MediaMetadataRetriever.OPTION_CLOSEST_SYNC,
+            (width * scale).toInt().coerceAtLeast(1),
+            (height * scale).toInt().coerceAtLeast(1),
+        )
+    }
+    val full = frameAtTime ?: return null
+    val edge = maxOf(full.width, full.height)
+    if (edge <= VIDEO_PREVIEW_EDGE) return full
+    val scale = VIDEO_PREVIEW_EDGE.toFloat() / edge
+    return Bitmap.createScaledBitmap(
+        full,
+        (full.width * scale).toInt().coerceAtLeast(1),
+        (full.height * scale).toInt().coerceAtLeast(1),
+        true,
+    ).also { if (it !== full) full.recycle() }
 }
 
 /** Picks the right loader for a gallery/camera Uri based on its MIME type. */
