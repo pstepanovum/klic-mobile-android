@@ -29,8 +29,8 @@ android {
         applicationId = "com.klic.mobile.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 59
-        versionName = "0.6.6"
+        versionCode = 60
+        versionName = "0.6.7"
         buildConfigField("String", "KLIC_API_ORIGIN", stringBuildConfig("KLIC_API_ORIGIN", "https://api.89.34.230.2.sslip.io"))
         // libsignal's native lib is ~70 MB per ABI — ship arm64 only (every Android
         // phone since ~2017). Emulator debug installs come from Studio's own build.
