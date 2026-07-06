@@ -788,8 +788,9 @@ private fun NewMessageSheet(
                         }
                         item {
                             PillButton(
+                                // A group can be created with no other members yet —
+                                // participants can be added later from the group info page.
                                 text = stringResource(R.string.common_next),
-                                enabled = selectedIds.isNotEmpty(),
                                 modifier = Modifier.padding(top = 16.dp, bottom = 32.dp),
                                 onClick = { screen = NewMsgScreen.NEW_GROUP_DETAILS },
                             )
