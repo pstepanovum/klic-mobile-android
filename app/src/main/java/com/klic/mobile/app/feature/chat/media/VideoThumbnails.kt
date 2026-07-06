@@ -118,12 +118,15 @@ object VideoThumbnails {
         val edge = maxOf(src.width, src.height)
         if (edge <= TARGET_EDGE) return src
         val scale = TARGET_EDGE.toFloat() / edge
-        return Bitmap.createScaledBitmap(
+        val result = Bitmap.createScaledBitmap(
             src,
             (src.width * scale).toInt().coerceAtLeast(1),
             (src.height * scale).toInt().coerceAtLeast(1),
             true,
         )
+        // Free the full-resolution frame; only the 512px scaled copy is kept.
+        if (result !== src) src.recycle()
+        return result
     }
 }
 

@@ -231,6 +231,18 @@ data class Message(
 @Serializable
 data class MessageEnvelope(val deviceId: Int, val type: Int, val ciphertext: String)
 
+/**
+ * Client-only OpenGraph preview for a URL in a message body (§ rich link cards).
+ * Fetched on-device by [LinkPreviewFetcher] — never sent by or mapped to the server.
+ */
+data class LinkPreview(
+    val url: String,
+    val title: String?,
+    val description: String?,
+    val imageUrl: String?,
+    val siteName: String?,
+)
+
 @Serializable
 data class RecentCall(
     val id: String,

@@ -55,11 +55,17 @@ class KlicApplication : Application(), ImageLoaderFactory {
                 val wasBackground = started == 0
                 started++; container.appForeground = started > 0
                 // §10.4 app lock: apply the timed auto-lock window on return to foreground.
-                if (wasBackground) com.klic.mobile.app.data.AppLockStore.onAppForegrounded()
+                if (wasBackground) {
+                    com.klic.mobile.app.data.AppLockStore.onAppForegrounded()
+                    socket.setActive(true) // presence: app came to foreground
+                }
             }
             override fun onActivityStopped(activity: Activity) {
                 started = (started - 1).coerceAtLeast(0); container.appForeground = started > 0
-                if (started == 0) com.klic.mobile.app.data.AppLockStore.onAppBackgrounded()
+                if (started == 0) {
+                    com.klic.mobile.app.data.AppLockStore.onAppBackgrounded()
+                    socket.setActive(false) // presence: app went to background
+                }
             }
             override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) {}
             override fun onActivityResumed(activity: Activity) {}
