@@ -1,5 +1,6 @@
 package com.klic.mobile.app.feature.call
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
@@ -127,6 +128,13 @@ fun CallScreen(
     }
 
     val pip = LocalPipController.current
+
+    // System back leaves the call RUNNING and drops to the floating overlay — identical to the
+    // Minimize chevron. Without this, back popped the call route while callMinimized stayed false,
+    // so the overlay never showed and an active call was stranded with no in-app way back to it.
+    // Disabled in PiP, where the system window owns its own dismissal.
+    BackHandler(enabled = !pip.isInPipMode) { onMinimize() }
+
     var localFullscreen by remember { mutableStateOf(false) }
     val density = LocalDensity.current
 
