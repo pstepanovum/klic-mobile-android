@@ -98,17 +98,30 @@ fun CallScreen(
     val me by vm.currentUser.collectAsState()
     val peerId by vm.callPeerId.collectAsState()
     val isGroupCall by vm.callIsGroup.collectAsState()
+    val connectedAt by vm.callConnectedAt.collectAsState()
     val isVideo = call.kind == "VIDEO"
     // 2+ remotes → tile grid; 0–1 remotes → today's fullscreen 1:1 layout.
     val gridMode = participants.size >= 2
     val shouldShowVideo = cameraEnabled || localVideo != null || remoteVideo != null
-    // §9.7: alone in a live group room → say so, never fake an ongoing peer.
-    val displayStatus =
-        if (isGroupCall && participants.isEmpty() && callStatus == "Connected") {
-            stringResource(R.string.call_waiting_for_others)
-        } else {
-            localizedCallStatus(callStatus)
+
+    // Live call duration: once connected, tick every second and render mm:ss (h:mm:ss past
+    // an hour) — same pattern as the minimized overlay. Before connect (or on hold) the
+    // status text stays.
+    var nowMs by remember { mutableStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            nowMs = System.currentTimeMillis()
+            delay(1_000)
         }
+    }
+    // §9.7: alone in a live group room → say so, never fake an ongoing peer.
+    val displayStatus = when {
+        isGroupCall && participants.isEmpty() && callStatus == "Connected" ->
+            stringResource(R.string.call_waiting_for_others)
+        callStatus != "On Hold" && connectedAt != null ->
+            formatCallDuration((nowMs - connectedAt!!) / 1000)
+        else -> localizedCallStatus(callStatus)
+    }
 
     // Trigger the join; the actual connect runs on CallManager's own scope, so it survives this
     // screen leaving the composition (which used to cancel it mid-connect on the emulator).
@@ -526,6 +539,16 @@ internal fun CallGridTile(
     }
 }
 
+
+/** Elapsed call time since connect: mm:ss, growing to h:mm:ss once past the first hour. */
+internal fun formatCallDuration(totalSeconds: Long): String {
+    val s = totalSeconds.coerceAtLeast(0)
+    val hours = s / 3600
+    val minutes = (s % 3600) / 60
+    val seconds = s % 60
+    return if (hours > 0) "%d:%02d:%02d".format(hours, minutes, seconds)
+    else "%d:%02d".format(minutes, seconds)
+}
 
 /** §10.5: user-visible mapping of the internal call-status sentinels. */
 @Composable
