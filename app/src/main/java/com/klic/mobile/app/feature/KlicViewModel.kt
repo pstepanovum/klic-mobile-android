@@ -293,6 +293,19 @@ class KlicViewModel(
 
     private var openConversationId: String? = null
     private var activeCallOutgoing = false
+    // Call-waiting: the call parked on hold behind the live one (its media is silenced in the
+    // CallManager). Snapshotted so [resumeHeldCall] can restore the full call state when the
+    // displacing call ends. Null when no call is held.
+    private data class HeldCall(
+        val session: CallSession,
+        val peerName: String,
+        val peerId: String?,
+        val isGroup: Boolean,
+        val outgoing: Boolean,
+        val connectedAt: Long?,
+        val conversationId: String?,
+    )
+    private var heldCall: HeldCall? = null
     private var ringTimeoutJob: Job? = null
     // The in-flight server-side end/cancel/decline of the last call. A new outgoing call
     // joins this first so POST /calls can't race it into a 409 call_exists.
@@ -880,16 +893,69 @@ class KlicViewModel(
         // On an FCM cold start this can run before the init coroutine has loaded/refreshed
         // the stored tokens — joining then would 401 and race the rotation. Wait it out.
         authReady.await()
-        callIsGroup.value = isGroup
-        callPeerName.value = peerName
-        callStatus.value = "Connecting..."
+        // "Hold & Answer": answering while another call is live parks that call on hold and hands
+        // the surface to this one. Fetch the join token BEFORE displacing the ongoing call so a
+        // token failure leaves it untouched (nothing is held/switched until we have a token).
+        val current = activeCall.value
+        val holding = current != null && current.callId != callId
+        if (!holding) {
+            callIsGroup.value = isGroup
+            callPeerName.value = peerName
+            callStatus.value = "Connecting..."
+        }
         val result = runCatching { repo.joinToken(callId) }
-        result.onSuccess { startActiveCall(it, peerName, outgoing = false) }
+        result.onSuccess { session ->
+            if (holding) holdCurrentCall()
+            callIsGroup.value = isGroup
+            callPeerName.value = peerName
+            callStatus.value = "Connecting..."
+            startActiveCall(session, peerName, outgoing = false)
+        }
         if (result.isFailure) {
             repo.failCall(callId)
-            callStatus.value = "Call failed"
-            finishCall(delayMs = 1200)
+            // Only surface failure when there was no ongoing call to fall back to; a live call
+            // being held is left exactly as it was.
+            if (!holding) {
+                callStatus.value = "Call failed"
+                finishCall(delayMs = 1200)
+            }
         }
+    }
+
+    /** Park the live call on hold to answer a second one (call-waiting): snapshot its state so
+     *  [resumeHeldCall] can restore it, then silence its media in the CallManager. */
+    private fun holdCurrentCall() {
+        val session = activeCall.value ?: return
+        heldCall = HeldCall(
+            session = session,
+            peerName = callPeerName.value,
+            peerId = callPeerId.value,
+            isGroup = callIsGroup.value,
+            outgoing = activeCallOutgoing,
+            connectedAt = callConnectedAt.value,
+            conversationId = container.activeCallConversationId.value,
+        )
+        cancelRingTimeout()
+        callManager.holdActiveCall()
+        // Detach from the surface so startActiveCall can adopt the incoming call cleanly.
+        activeCall.value = null
+    }
+
+    /** The call that displaced a held one just ended → restore the held call to the surface. */
+    private fun resumeHeldCall() {
+        val held = heldCall ?: return
+        heldCall = null
+        callManager.resumeHeldCall()
+        activeCallOutgoing = held.outgoing
+        callIsGroup.value = held.isGroup
+        callPeerName.value = held.peerName
+        callPeerId.value = held.peerId
+        callConnectedAt.value = held.connectedAt
+        container.activeCallConversationId.value = held.conversationId
+        callMinimized.value = false
+        callStatus.value = if (held.connectedAt != null) "Connected" else "Connecting..."
+        activeCall.value = held.session
+        OngoingCallService.start(container.appContext, held.peerName, isVideo = held.session.kind == "VIDEO")
     }
 
     /** Fetch the open conversation's live call (if any) for the "Join call" banner. */
@@ -1374,7 +1440,11 @@ class KlicViewModel(
         if (id != null && !finishingCallIds.add(id)) return
         cancelRingTimeout()
         callManager.stopRingback()
-        if (id == null || activeCall.value?.callId == id) {
+        val targetsLiveCall = id == null || activeCall.value?.callId == id
+        // Call-waiting: when the call that displaced a held one ends, restore the held call
+        // instead of tearing the whole call stack down.
+        val resumeHeld = targetsLiveCall && heldCall != null
+        if (targetsLiveCall && !resumeHeld) {
             activeCall.value = null
             activeCallOutgoing = false
             callStatus.value = "Ended"
@@ -1386,7 +1456,7 @@ class KlicViewModel(
         }
         viewModelScope.launch {
             if (delayMs > 0) delay(delayMs)
-            callManager.leave()
+            if (resumeHeld) resumeHeldCall() else callManager.leave()
             if (id != null) finishingCallIds.remove(id)
         }
     }

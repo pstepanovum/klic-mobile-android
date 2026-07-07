@@ -19,6 +19,7 @@ import io.livekit.android.events.collect
 import io.livekit.android.room.Room
 import io.livekit.android.room.participant.RemoteParticipant
 import io.livekit.android.room.track.LocalVideoTrack
+import io.livekit.android.room.track.RemoteTrackPublication
 import io.livekit.android.room.track.Track
 import io.livekit.android.room.track.VideoTrack
 import kotlinx.coroutines.CancellationException
@@ -90,6 +91,10 @@ class CallManager(
     val remoteVideoDimensions = MutableStateFlow<Pair<Int, Int>?>(null)
     /** True while another call/app holds the audio focus — mic auto-muted, UI shows "On Hold". */
     val onHold = MutableStateFlow(false)
+    /** True while a call is parked on hold behind the live call (call-waiting): its LiveKit room
+     *  stays connected but is fully silenced — local media paused, every remote track
+     *  unsubscribed — so it is neither heard nor rendered until [resumeHeldCall] restores it. */
+    val hasHeldCall = MutableStateFlow(false)
     /** All remote participants (connected + in-grace), for the group grid. */
     val participants = MutableStateFlow<List<RemoteCallParticipant>>(emptyList())
     /** True while the SFU flags ME as an active speaker — drives the local tile's glow (§17.1).
@@ -122,6 +127,14 @@ class CallManager(
     /** Whether the mic was on when audio focus was lost, so unhold restores the user's choice. */
     private var micBeforeHold = true
     private var currentCallId: String? = null
+    // Call-waiting: a call parked on hold behind the live one. Its room stays connected (so its
+    // peer isn't dropped) but silenced; these hold the pre-hold local toggles so [resumeHeldCall]
+    // can restore the user's mic/camera choice.
+    private var heldRoom: Room? = null
+    private var heldAudioHandler: AudioSwitchHandler? = null
+    private var heldCallId: String? = null
+    private var heldMicBeforeHold = true
+    private var heldCameraBeforeHold = false
     // Participants that dropped from the SFU and are inside their grace window:
     // userId → (timer, last-known snapshot rendered as a dimmed "reconnecting" tile).
     private val graceJobs = mutableMapOf<String, Job>()
@@ -174,6 +187,44 @@ class CallManager(
                 ),
             ),
         ).also { this.room = it }
+        attachRoomEvents(callId, room)
+        try {
+            diagnostic("livekit.join.connect.start", callId)
+            room.connect(url, token)
+            diagnostic("livekit.join.connect.ok", callId)
+
+            diagnostic("livekit.join.mic.start", callId)
+            room.localParticipant.setMicrophoneEnabled(micOn)
+            room.setMicrophoneMute(!micOn)
+            diagnostic("livekit.join.mic.ok", callId)
+
+            if (cameraOn) {
+                diagnostic("livekit.join.camera.start", callId)
+                room.localParticipant.setCameraEnabled(true)
+                diagnostic("livekit.join.camera.ok", callId)
+                scope.launch {
+                    delay(350)
+                    // Re-apply once the speaker device has settled into the available list.
+                    if (currentCallId == callId) updateAudioRouteForVideo(force = true)
+                }
+            }
+            room.setSpeakerMute(false)
+            isConnected.value = true
+            micEnabled.value = micOn
+            cameraEnabled.value = cameraOn
+            refreshTracks()
+        } catch (c: CancellationException) {
+            throw c // hang-up/teardown cancelled the in-flight join — not a real failure
+        } catch (t: Throwable) {
+            diagnostic("livekit.join.failed", callId, t.message ?: t::class.java.simpleName)
+            throw t
+        }
+    }
+
+    /** Collect a room's events onto [eventsJob] — refreshing exposed tracks and driving grace /
+     *  rejoin. Shared by the initial join and [resumeHeldCall] (which re-observes a held room). */
+    private fun attachRoomEvents(callId: String, room: Room) {
+        eventsJob?.cancel()
         eventsJob = scope.launch {
             room.events.collect { event ->
                 refreshTracks()
@@ -228,37 +279,6 @@ class CallManager(
                     else -> Unit
                 }
             }
-        }
-        try {
-            diagnostic("livekit.join.connect.start", callId)
-            room.connect(url, token)
-            diagnostic("livekit.join.connect.ok", callId)
-
-            diagnostic("livekit.join.mic.start", callId)
-            room.localParticipant.setMicrophoneEnabled(micOn)
-            room.setMicrophoneMute(!micOn)
-            diagnostic("livekit.join.mic.ok", callId)
-
-            if (cameraOn) {
-                diagnostic("livekit.join.camera.start", callId)
-                room.localParticipant.setCameraEnabled(true)
-                diagnostic("livekit.join.camera.ok", callId)
-                scope.launch {
-                    delay(350)
-                    // Re-apply once the speaker device has settled into the available list.
-                    if (currentCallId == callId) updateAudioRouteForVideo(force = true)
-                }
-            }
-            room.setSpeakerMute(false)
-            isConnected.value = true
-            micEnabled.value = micOn
-            cameraEnabled.value = cameraOn
-            refreshTracks()
-        } catch (c: CancellationException) {
-            throw c // hang-up/teardown cancelled the in-flight join — not a real failure
-        } catch (t: Throwable) {
-            diagnostic("livekit.join.failed", callId, t.message ?: t::class.java.simpleName)
-            throw t
         }
     }
 
@@ -434,6 +454,117 @@ class CallManager(
         currentCallId = null
     }
 
+    /**
+     * Call-waiting: park the current call on hold so an incoming call can take over the surface.
+     * The held room STAYS connected (its peer isn't dropped) but is fully silenced — our published
+     * mic/camera/screen are paused and every remote audio+video+screen track is unsubscribed, so
+     * the held call is neither heard nor rendered. All exposed track flows are cleared so the
+     * incoming call starts from a clean slate; this is what stops a held peer's video/screen
+     * leaking into the new call. Only one call can be held — a pre-existing held call is dropped.
+     */
+    fun holdActiveCall() {
+        val active = room ?: return
+        // Only one hold slot. Any previously held call is displaced for good.
+        dropHeldCall()
+        val heldId = currentCallId
+        // Stop observing / rejoining the call being held so it can't mutate the live surface or
+        // trip the rejoin loop while parked.
+        joinJob?.cancel(); joinJob = null
+        rejoinJob?.cancel(); rejoinJob = null
+        eventsJob?.cancel(); eventsJob = null
+        clearGrace()
+        heldMicBeforeHold = micEnabled.value
+        heldCameraBeforeHold = cameraEnabled.value
+        heldRoom = active
+        heldAudioHandler = audioHandler
+        heldCallId = heldId
+        hasHeldCall.value = true
+        scope.launch {
+            runCatching { active.localParticipant.setMicrophoneEnabled(false) }
+            runCatching { active.setMicrophoneMute(true) }
+            runCatching {
+                if (screenShareEnabled.value) active.localParticipant.setScreenShareEnabled(false, null)
+            }
+            runCatching { active.localParticipant.setCameraEnabled(false) }
+            setRemoteSubscribed(active, subscribed = false)
+            diagnostic("livekit.hold.call.start", heldId)
+        }
+        // Detach the held room from the live surface — the incoming call repopulates these.
+        room = null
+        audioHandler = null
+        currentCallId = null
+        leaving = false
+        isConnected.value = false
+        isReconnecting.value = false
+        onHold.value = false
+        videoRouteActive = false
+        micEnabled.value = true
+        cameraEnabled.value = false
+        screenShareEnabled.value = false
+        localVideoTrack.value = null
+        remoteVideoTrack.value = null
+        screenShareTrack.value = null
+        remoteVideoDimensions.value = null
+        participants.value = emptyList()
+        localSpeaking.value = false
+    }
+
+    /**
+     * Bring the held call back after the call that displaced it ended. Tears down the (ended) live
+     * room, re-points the surface at the held room, re-subscribes its remote tracks and restores
+     * the mic/camera to their pre-hold state. Returns the resumed callId, or null if none held.
+     */
+    fun resumeHeldCall(): String? {
+        val resumed = heldRoom ?: return null
+        val resumedId = heldCallId
+        // Tear down the displacing call's live room first (leave() never touches the held room).
+        leave()
+        room = resumed
+        audioHandler = heldAudioHandler
+        currentCallId = resumedId
+        leaving = false
+        heldRoom = null
+        heldAudioHandler = null
+        heldCallId = null
+        hasHeldCall.value = false
+        isConnected.value = true
+        frontCamera.value = true
+        attachRoomEvents(resumedId.orEmpty(), resumed)
+        scope.launch {
+            setRemoteSubscribed(resumed, subscribed = true)
+            runCatching { resumed.localParticipant.setMicrophoneEnabled(heldMicBeforeHold) }
+            runCatching { resumed.setMicrophoneMute(!heldMicBeforeHold) }
+            runCatching { resumed.localParticipant.setCameraEnabled(heldCameraBeforeHold) }
+            micEnabled.value = heldMicBeforeHold
+            cameraEnabled.value = heldCameraBeforeHold
+            refreshTracks()
+            diagnostic("livekit.hold.call.resume", resumedId)
+        }
+        return resumedId
+    }
+
+    /** Permanently end a held call — disconnects its room (its peer times out of grace). Used when
+     *  a held call is displaced by another hold. */
+    private fun dropHeldCall() {
+        if (heldRoom == null) return
+        diagnostic("livekit.hold.call.drop", heldCallId)
+        runCatching { heldRoom?.disconnect() }
+        heldRoom = null
+        heldAudioHandler = null
+        heldCallId = null
+        hasHeldCall.value = false
+    }
+
+    /** Subscribe or unsubscribe from every remote track on a room — unsubscribing fully stops both
+     *  audio playback and video for a held call, regardless of adaptive-stream auto-management. */
+    private fun setRemoteSubscribed(r: Room, subscribed: Boolean) {
+        r.remoteParticipants.values.forEach { p ->
+            p.trackPublications.values.forEach { pub ->
+                runCatching { (pub as? RemoteTrackPublication)?.setSubscribed(subscribed) }
+            }
+        }
+    }
+
     private fun refreshTracks() {
         val r = room ?: return
         localVideoTrack.value = r.localParticipant.videoTrackPublications
@@ -487,8 +618,12 @@ class CallManager(
         localSpeaking.value = r.localParticipant.isSpeaking
     }
 
-    private fun createAudioHandler(callId: String, video: Boolean): AudioSwitchHandler =
-        AudioSwitchHandler(appContext).apply {
+    private fun createAudioHandler(callId: String, video: Boolean): AudioSwitchHandler {
+        // Captured so the callbacks can tell whether THIS handler still drives the live call. A
+        // call-waiting hold leaves the held call's handler "started" and receiving focus/route
+        // callbacks; without this guard it would mute/route the call that displaced it.
+        lateinit var self: AudioSwitchHandler
+        self = AudioSwitchHandler(appContext).apply {
             preferredDeviceList = if (video) {
                 listOf(
                     AudioDevice.BluetoothHeadset::class.java,
@@ -505,6 +640,7 @@ class CallManager(
                 )
             }
             onAudioFocusChangeListener = AudioManager.OnAudioFocusChangeListener { change ->
+                if (audioHandler !== self) return@OnAudioFocusChangeListener
                 diagnostic("livekit.audio.focus", callId, "change=$change")
                 // §7.5: another call/app taking the call stream puts us "On Hold" (auto-mute);
                 // regaining focus restores the pre-hold mic state.
@@ -515,10 +651,14 @@ class CallManager(
                 }
             }
             audioDeviceChangeListener = { devices: List<AudioDevice>, selected: AudioDevice? ->
-                speakerOn.value = selected is AudioDevice.Speakerphone
-                diagnostic("livekit.audio.route", callId, routeDetail(devices, selected))
+                if (audioHandler === self) {
+                    speakerOn.value = selected is AudioDevice.Speakerphone
+                    diagnostic("livekit.audio.route", callId, routeDetail(devices, selected))
+                }
             }
         }
+        return self
+    }
 
     private fun holdForFocusLoss() {
         if (onHold.value) return

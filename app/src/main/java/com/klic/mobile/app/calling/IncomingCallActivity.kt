@@ -4,8 +4,10 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.app.KeyguardManager
 import android.os.Build
 import android.os.Bundle
+import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
@@ -28,6 +30,8 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -64,10 +68,24 @@ class IncomingCallActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Show the full-screen incoming-call UI over the keyguard and wake the screen when the
+        // device is locked / screen off. API 27+ uses the dedicated Activity APIs; older releases
+        // fall back to the (deprecated) window flags that do the same job.
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
             setShowWhenLocked(true)
             setTurnScreenOn(true)
+        } else {
+            @Suppress("DEPRECATION")
+            window.addFlags(
+                WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
+                    WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON or
+                    WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON,
+            )
         }
+        // Ask the system to dismiss the (insecure) keyguard so the call surface is fully reachable
+        // and the screen is turned on. On a secure lock this still wakes/shows over the keyguard.
+        (getSystemService(Context.KEYGUARD_SERVICE) as? KeyguardManager)
+            ?.requestDismissKeyguard(this, null)
         val parsed = CallInvite.fromIntent(intent)
         if (parsed == null) { finish(); return }
         invite.value = parsed
@@ -79,12 +97,18 @@ class IncomingCallActivity : ComponentActivity() {
             registerReceiver(callEndedReceiver, IntentFilter(ACTION_CALL_ENDED))
         }
 
+        val callManager = (application as KlicApplication).container.callManager
         setContent {
             KlicTheme {
                 invite.value?.let { current ->
+                    // Already in (or parking) a call → this is call-waiting: answering holds the
+                    // current call rather than ending it (the ViewModel does the hold on accept).
+                    val inCall by callManager.isConnected.collectAsState()
+                    val hasHeld by callManager.hasHeldCall.collectAsState()
                     IncomingCallScreen(
                         callerName = current.displayLabel,
                         isVideo = current.kind == "VIDEO",
+                        hasOngoingCall = inCall || hasHeld,
                         onAccept = { accept(current) },
                         onDecline = { decline(current) },
                     )
@@ -132,7 +156,13 @@ class IncomingCallActivity : ComponentActivity() {
 }
 
 @Composable
-private fun IncomingCallScreen(callerName: String, isVideo: Boolean, onAccept: () -> Unit, onDecline: () -> Unit) {
+private fun IncomingCallScreen(
+    callerName: String,
+    isVideo: Boolean,
+    hasOngoingCall: Boolean,
+    onAccept: () -> Unit,
+    onDecline: () -> Unit,
+) {
     Column(
         Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(vertical = 80.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -148,25 +178,48 @@ private fun IncomingCallScreen(callerName: String, isVideo: Boolean, onAccept: (
             Spacer(Modifier.height(16.dp))
             Text(callerName, style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onBackground)
             Text(
-                if (isVideo) "Incoming video call" else "Incoming call",
+                when {
+                    hasOngoingCall -> "Second incoming call"
+                    isVideo -> "Incoming video call"
+                    else -> "Incoming call"
+                },
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
         Row(
             Modifier.fillMaxWidth().padding(horizontal = 48.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.Top,
         ) {
-            IconButton(
-                onClick = onDecline,
-                modifier = Modifier.size(72.dp).background(MaterialTheme.colorScheme.error, CircleShape),
-            ) {
-                Icon(Icons.Filled.CallEnd, contentDescription = "Decline", tint = MaterialTheme.colorScheme.onError, modifier = Modifier.size(30.dp))
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                IconButton(
+                    onClick = onDecline,
+                    modifier = Modifier.size(72.dp).background(MaterialTheme.colorScheme.error, CircleShape),
+                ) {
+                    Icon(Icons.Filled.CallEnd, contentDescription = "Decline", tint = MaterialTheme.colorScheme.onError, modifier = Modifier.size(30.dp))
+                }
+                if (hasOngoingCall) {
+                    Spacer(Modifier.height(8.dp))
+                    Text("Decline", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
             }
-            IconButton(
-                onClick = onAccept,
-                modifier = Modifier.size(72.dp).background(Color(0xFF2BD158), CircleShape),
-            ) {
-                Icon(Icons.Filled.Call, contentDescription = "Accept", tint = Color.White, modifier = Modifier.size(30.dp))
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                IconButton(
+                    onClick = onAccept,
+                    modifier = Modifier.size(72.dp).background(Color(0xFF2BD158), CircleShape),
+                ) {
+                    Icon(
+                        Icons.Filled.Call,
+                        // Call-waiting: the ViewModel puts the current call on hold on accept.
+                        contentDescription = if (hasOngoingCall) "Hold & Answer" else "Accept",
+                        tint = Color.White,
+                        modifier = Modifier.size(30.dp),
+                    )
+                }
+                if (hasOngoingCall) {
+                    Spacer(Modifier.height(8.dp))
+                    Text("Hold & Answer", color = MaterialTheme.colorScheme.onBackground)
+                }
             }
         }
     }
