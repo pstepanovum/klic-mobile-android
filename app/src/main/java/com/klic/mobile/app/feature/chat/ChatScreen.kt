@@ -21,6 +21,15 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.systemBars
+import androidx.compose.foundation.layout.union
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -60,6 +69,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalDensity
@@ -520,6 +530,21 @@ fun ChatScreen(
         }
     }
 
+    // When the keyboard opens the list viewport shrinks under the IME inset; if the user
+    // was already at the newest message keep it pinned fully above the keyboard.
+    val imeInsets = WindowInsets.ime
+    LaunchedEffect(Unit) {
+        snapshotFlow { imeInsets.getBottom(density) }.collect { bottom ->
+            if (bottom > 0 && initialScrollDone) {
+                val info = listState.layoutInfo
+                val lastVisible = info.visibleItemsInfo.lastOrNull()?.index ?: 0
+                if (info.totalItemsCount > 0 && lastVisible >= info.totalItemsCount - 2) {
+                    listState.scrollToItem(info.totalItemsCount - 1)
+                }
+            }
+        }
+    }
+
     // Restore scroll position after older messages are prepended.
     LaunchedEffect(Unit) {
         vm.prependedCount.collect { count ->
@@ -592,6 +617,10 @@ fun ChatScreen(
     )
     Scaffold(
         containerColor = androidx.compose.ui.graphics.Color.Transparent,
+        // The bottom inset (nav bar + keyboard) is applied to the message/composer column
+        // below as navigationBars ∪ ime, so the composer rides above the keyboard without a
+        // doubled nav-bar gap; the Scaffold keeps only the top and side insets.
+        contentWindowInsets = WindowInsets.systemBars.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal),
         topBar = {
             // §18.4: back exits search mode first, then leaves the chat.
             BackHandler(enabled = searchActive) { searchActive = false; searchQuery = "" }
@@ -729,7 +758,11 @@ fun ChatScreen(
         Column(
             Modifier
                 .fillMaxWidth()
-                .fillMaxHeight(),
+                .fillMaxHeight()
+                // Lift the whole message/composer stack above the nav bar and, when it
+                // opens, the keyboard — the union takes the larger of the two so there is
+                // no doubled inset while typing.
+                .windowInsetsPadding(WindowInsets.navigationBars.union(WindowInsets.ime)),
         ) {
             // "Join call" banner: the conversation has a live call we're not part of yet.
             val chatCall by vm.chatActiveCall.collectAsState()
@@ -766,6 +799,9 @@ fun ChatScreen(
                 state = listState,
                 modifier = Modifier.fillMaxSize().padding(horizontal = 12.dp)
                     .pointerInput(Unit) { detectTapGestures { focusManager.clearFocus() } },
+                // A bottom gap so the newest message clears the input bar and is fully
+                // visible on open (the end-of-list clamp scrolls to include this padding).
+                contentPadding = PaddingValues(bottom = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(2.dp),
             ) {
                 items(

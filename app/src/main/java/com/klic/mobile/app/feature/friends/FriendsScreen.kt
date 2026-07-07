@@ -212,7 +212,7 @@ private fun RequestRow(req: FriendRequest, onAccept: () -> Unit, onDecline: () -
                 contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
             ),
         ) {
-            Icon(painter = painterResource(KlicIcons.close), contentDescription = "Decline", modifier = Modifier.size(18.dp))
+            Icon(painter = painterResource(KlicIcons.cancel), contentDescription = "Decline", modifier = Modifier.size(18.dp))
         }
     }
 }
