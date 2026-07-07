@@ -77,6 +77,10 @@ class CallManager(
     val localVideoTrack = MutableStateFlow<VideoTrack?>(null)
     /** First remote video track — drives the 1:1 fullscreen layout and audio routing. */
     val remoteVideoTrack = MutableStateFlow<VideoTrack?>(null)
+    /** A remote participant's screen-share video track, when someone is sharing their screen.
+     *  Rendered as the LARGE primary tile with camera feeds pushed to a secondary strip so the
+     *  shared desktop stays prominent. Detected by publication source == SCREEN_SHARE. */
+    val screenShareTrack = MutableStateFlow<VideoTrack?>(null)
     /** Pixel dimensions of that remote feed, when known — drives the system-PiP aspect ratio. */
     val remoteVideoDimensions = MutableStateFlow<Pair<Int, Int>?>(null)
     /** True while another call/app holds the audio focus — mic auto-muted, UI shows "On Hold". */
@@ -398,6 +402,7 @@ class CallManager(
         cameraEnabled.value = false
         localVideoTrack.value = null
         remoteVideoTrack.value = null
+        screenShareTrack.value = null
         remoteVideoDimensions.value = null
         onHold.value = false
         participants.value = emptyList()
@@ -413,13 +418,22 @@ class CallManager(
             .firstOrNull()?.second as? VideoTrack
         // A muted remote publication means their camera is off (LiveKit's setCameraEnabled(false)
         // mutes rather than unpublishes) — rendering it would freeze on the last decoded frame,
-        // so treat it as "no video" and let the UI fall back to the avatar placeholder.
+        // so treat it as "no video" and let the UI fall back to the avatar placeholder. Screen
+        // shares are handled separately (below) so they don't stand in as the "camera" feed.
         val remotePublication = r.remoteParticipants.values
             .flatMap { it.videoTrackPublications }
-            .firstOrNull { (publication, track) -> track != null && !publication.muted }
+            .firstOrNull { (publication, track) ->
+                track != null && !publication.muted && publication.source != Track.Source.SCREEN_SHARE
+            }
         remoteVideoTrack.value = remotePublication?.second as? VideoTrack
         remoteVideoDimensions.value = remotePublication?.first?.dimensions
             ?.let { it.width to it.height }
+        // Anyone sharing their screen → surface that track so the UI can promote it to the big tile.
+        screenShareTrack.value = r.remoteParticipants.values
+            .flatMap { it.videoTrackPublications }
+            .firstOrNull { (publication, track) ->
+                track != null && !publication.muted && publication.source == Track.Source.SCREEN_SHARE
+            }?.second as? VideoTrack
         refreshParticipants(r)
         diagnostic(
             "livekit.tracks.refresh",
@@ -436,8 +450,11 @@ class CallManager(
                 userId = userId,
                 name = p.name ?: "",
                 // Muted publication == camera off — no video for this tile (see refreshTracks).
+                // Exclude the screen share so a sharer's tile keeps showing their camera.
                 videoTrack = p.videoTrackPublications
-                    .firstOrNull { (publication, track) -> track != null && !publication.muted }
+                    .firstOrNull { (publication, track) ->
+                        track != null && !publication.muted && publication.source != Track.Source.SCREEN_SHARE
+                    }
                     ?.second as? VideoTrack,
                 micMuted = p.audioTrackPublications.firstOrNull()?.first?.muted ?: false,
                 isSpeaking = p.isSpeaking,
@@ -555,7 +572,8 @@ class CallManager(
      *  audio-only stretch isn't overridden until the video state actually flips. A connected
      *  Bluetooth/wired headset always wins and is never overridden. */
     private fun updateAudioRouteForVideo(force: Boolean = false) {
-        val videoActive = cameraEnabled.value || localVideoTrack.value != null || remoteVideoTrack.value != null
+        val videoActive = cameraEnabled.value || localVideoTrack.value != null ||
+            remoteVideoTrack.value != null || screenShareTrack.value != null
         if (!force && videoActive == videoRouteActive) return
         videoRouteActive = videoActive
         val handler = audioHandler ?: return
