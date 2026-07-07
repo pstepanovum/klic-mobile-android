@@ -1,6 +1,7 @@
 package com.klic.mobile.app.calling
 
 import android.content.Context
+import android.content.Intent
 import android.media.AudioAttributes
 import android.media.AudioManager
 import android.media.MediaPlayer
@@ -72,6 +73,10 @@ class CallManager(
     val isConnected = MutableStateFlow(false)
     val micEnabled = MutableStateFlow(true)
     val cameraEnabled = MutableStateFlow(false)
+    /** True while I'm sharing my phone screen into the call. Driving the local screen-capture
+     *  track lives in the LiveKit SDK's own foreground service; this only mirrors the on/off
+     *  state so the call controls can toggle it. */
+    val screenShareEnabled = MutableStateFlow(false)
     /** Whether call audio is on the loudspeaker (vs. earpiece / a connected headset). */
     val speakerOn = MutableStateFlow(false)
     val localVideoTrack = MutableStateFlow<VideoTrack?>(null)
@@ -370,6 +375,22 @@ class CallManager(
         diagnostic("livekit.camera.toggle.ok", detail = "enabled=$next")
     }
 
+    /** Start publishing my phone screen into the call. [resultData] is the Intent returned by the
+     *  MediaProjection permission dialog (via createScreenCaptureIntent). The LiveKit SDK creates
+     *  the capture track, starts its own mediaProjection foreground service, and publishes. */
+    suspend fun startScreenShare(resultData: Intent) {
+        room?.localParticipant?.setScreenShareEnabled(true, resultData)
+        screenShareEnabled.value = true
+        diagnostic("livekit.screenShare.start.ok")
+    }
+
+    /** Stop sharing my screen — unpublishes the screen-capture track and stops the FGS. */
+    suspend fun stopScreenShare() {
+        room?.localParticipant?.setScreenShareEnabled(false, null)
+        screenShareEnabled.value = false
+        diagnostic("livekit.screenShare.stop.ok")
+    }
+
     /** Flip between the front and back camera mid-call. */
     fun switchCamera() {
         val track = room?.localParticipant?.videoTrackPublications
@@ -400,6 +421,7 @@ class CallManager(
         isConnected.value = false
         micEnabled.value = true
         cameraEnabled.value = false
+        screenShareEnabled.value = false
         localVideoTrack.value = null
         remoteVideoTrack.value = null
         screenShareTrack.value = null
