@@ -19,6 +19,8 @@ object KlicIcons {
     // §14.1: the owner's exact nav artwork — stroke follows the Icon tint
     // (onSurface/onBackground; white in dark theme).
     val close    = R.drawable.ic_klic_close
+    // Decline-button X mark (friend requests) — its own 24×24 glyph.
+    val cancel   = R.drawable.ic_klic_cancel
     val back     = R.drawable.ic_klic_back
     val copy     = R.drawable.ic_line_copy
     val check    = R.drawable.ic_line_check
