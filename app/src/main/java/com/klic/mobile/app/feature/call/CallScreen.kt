@@ -67,6 +67,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.util.VelocityTracker
 import androidx.compose.ui.input.pointer.util.addPointerInputChange
@@ -97,11 +99,13 @@ fun CallScreen(
     onEnd: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
+    val haptic = LocalHapticFeedback.current
     val manager = vm.callManager
     val callStatus by vm.callStatus.collectAsState()
     val micEnabled by manager.micEnabled.collectAsState()
     val cameraEnabled by manager.cameraEnabled.collectAsState()
     val screenShareEnabled by manager.screenShareEnabled.collectAsState()
+    val hasHeldCall by manager.hasHeldCall.collectAsState()
     val speakerOn by manager.speakerOn.collectAsState()
     val remoteVideo by manager.remoteVideoTrack.collectAsState()
     val screenShare by manager.screenShareTrack.collectAsState()
@@ -232,6 +236,22 @@ fun CallScreen(
                         diameter = 44,
                     ) { pip.enter() }
                 }
+            }
+
+            // Call-waiting: another call is parked behind this one (its media stays silenced).
+            // Surface it so the user knows a held call will return when this one ends.
+            if (hasHeldCall) {
+                Text(
+                    stringResource(R.string.call_status_on_hold),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = Color.White,
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .padding(top = 20.dp)
+                        .clip(CircleShape)
+                        .background(Color.Black.copy(alpha = 0.55f))
+                        .padding(horizontal = 12.dp, vertical = 5.dp),
+                )
             }
 
             Column(
@@ -401,7 +421,12 @@ fun CallScreen(
                         fill = MaterialTheme.colorScheme.error,
                         tint = MaterialTheme.colorScheme.onError,
                         diameter = 72,
-                    ) { vm.endCall(); onEnd() }
+                    ) {
+                        // A single subtle buzz confirms the hang-up under the thumb.
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        vm.endCall()
+                        onEnd()
+                    }
 
                     // Camera toggle stays inline on video calls; on a voice call it lives in the
                     // overflow menu (below) so the inline bar keeps just the four essentials.
