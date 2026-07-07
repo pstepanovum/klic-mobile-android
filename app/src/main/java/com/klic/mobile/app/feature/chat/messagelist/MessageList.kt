@@ -4,6 +4,8 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -34,6 +36,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -44,6 +47,8 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.layout
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.AnnotatedString
@@ -85,6 +90,7 @@ import com.klic.mobile.app.ui.components.rememberStableImageRequest
 import com.klic.mobile.app.ui.components.stableImageKey
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlin.math.abs
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -234,7 +240,7 @@ internal fun MessageBubble(
                             Modifier
                                 .clip(RoundedCornerShape(18.dp))
                                 .background(cardColor)
-                                .combinedClickable(onClick = {}, onLongClick = onLongPress)
+                                .mediaTapGestures(onTap = {}, onLongPress = onLongPress)
                                 .padding(4.dp),
                         ) {
                             message.replyTo?.let {
@@ -279,7 +285,7 @@ internal fun MessageBubble(
                             .aspectRatio(imageAspect(soleVideoAtt))
                             .clip(RoundedCornerShape(16.dp))
                             .background(Color(0xFF1A1A1A))
-                            .combinedClickable(onClick = { onMediaClick(soleVideoAtt) }, onLongClick = onLongPress),
+                            .mediaTapGestures(onTap = { onMediaClick(soleVideoAtt) }, onLongPress = onLongPress),
                     ) {
                         // §14.2: real first-frame thumbnail behind the play badge.
                         val thumb by com.klic.mobile.app.feature.chat.media.rememberVideoThumbnail(
@@ -336,9 +342,9 @@ internal fun MessageBubble(
                 Column(horizontalAlignment = if (isMine) Alignment.End else Alignment.Start) {
                     message.replyTo?.let { StandaloneReplyCard(it, replyAuthorName, isMine, onQuoteClick) }
                     Box(
-                        Modifier.combinedClickable(
-                            onClick = { if (!isAudioAttachment(fileAtt)) onFileClick(fileAtt) },
-                            onLongClick = onLongPress,
+                        Modifier.mediaTapGestures(
+                            onTap = { if (!isAudioAttachment(fileAtt)) onFileClick(fileAtt) },
+                            onLongPress = onLongPress,
                         ),
                     ) {
                         // §10.10: PDFs preview their first page; other files keep the pill.
@@ -439,6 +445,56 @@ internal fun MessageBubble(
     }
 }
 
+/**
+ * §19.2: tap + long-press detection for the large media/file bubbles that never fights
+ * the enclosing LazyColumn's vertical scroll. Unlike [combinedClickable] it does NOT
+ * consume the press, and it abandons the gesture the moment the pointer travels past
+ * touch slop — leaving that drag entirely to the list, so a scroll that STARTS on an
+ * image / video / file bubble pans the conversation instead of being swallowed. Only an
+ * in-place release fires [onTap]; an in-place hold fires [onLongPress].
+ */
+@Composable
+private fun Modifier.mediaTapGestures(
+    onTap: () -> Unit,
+    onLongPress: () -> Unit,
+): Modifier {
+    val currentTap by rememberUpdatedState(onTap)
+    val currentLong by rememberUpdatedState(onLongPress)
+    return this.pointerInput(Unit) {
+        val slop = viewConfiguration.touchSlop
+        val longPressTimeout = viewConfiguration.longPressTimeoutMillis
+        awaitEachGesture {
+            val down = awaitFirstDown(requireUnconsumed = false)
+            var travelX = 0f
+            var travelY = 0f
+            var draggedAway = false
+            // Returns true on a clean in-place release; null on the long-press timeout;
+            // sets draggedAway (and returns false) if the pointer leaves as a scroll/drag.
+            val tapped = withTimeoutOrNull(longPressTimeout) {
+                var released = false
+                while (true) {
+                    val event = awaitPointerEvent()
+                    val change = event.changes.firstOrNull { it.id == down.id }
+                    // A null/consumed change means the list (or another node) claimed the
+                    // pointer for a pan — never treat that as a tap.
+                    if (change == null || change.isConsumed) { draggedAway = true; break }
+                    if (!change.pressed) { released = true; break }
+                    travelX += change.positionChange().x
+                    travelY += change.positionChange().y
+                    if (abs(travelX) > slop || abs(travelY) > slop) { draggedAway = true; break }
+                }
+                released
+            }
+            when {
+                draggedAway -> Unit          // a scroll/drag — the LazyColumn owns it
+                tapped == true -> currentTap()
+                tapped == null -> currentLong()
+                else -> Unit
+            }
+        }
+    }
+}
+
 // §7.2/§13.17 bento grid: 2 → side-by-side; 3 → one large + two stacked; 4+ → 2x2 with
 // a "+N" scrim on the fourth tile. Tiles render images AND videos (play badge +
 // duration); every tile opens the media viewer paged to the tapped attachment.
@@ -490,9 +546,9 @@ private fun BentoMediaGrid(
         Box(
             modifier
                 .clip(shape)
-                .combinedClickable(
-                    onClick = { if (allowed) onMediaClick(att) else manuallyRequested = true },
-                    onLongClick = onLongPress,
+                .mediaTapGestures(
+                    onTap = { if (allowed) onMediaClick(att) else manuallyRequested = true },
+                    onLongPress = onLongPress,
                 ),
         ) {
             if (isVideo) {
