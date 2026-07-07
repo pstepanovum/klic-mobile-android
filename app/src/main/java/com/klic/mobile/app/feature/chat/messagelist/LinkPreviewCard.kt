@@ -56,7 +56,7 @@ fun LinkPreviewCard(
     }
 
     val data = preview ?: return
-    if (data.title.isNullOrBlank() && data.imageUrl.isNullOrBlank()) return
+    if (data.title.isNullOrBlank() && data.imageUrl.isNullOrBlank() && data.siteName.isNullOrBlank()) return
 
     val context = LocalContext.current
     Column(

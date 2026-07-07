@@ -65,16 +65,24 @@ object LinkPreviewFetcher {
             .build()
         client.newCall(request).execute().use { response ->
             if (!response.isSuccessful) return@withContext null
-            val body = response.body ?: return@withContext null
-            val source = body.source()
-            source.request(MAX_BYTES)
-            val html = source.buffer.snapshot(minOf(source.buffer.size, MAX_BYTES).toInt()).utf8()
+            response.body ?: return@withContext null
+            // Read the (decoded) body straight through OkHttp: peekBody transparently
+            // handles gzip and the page's declared charset, and caps the read at
+            // MAX_BYTES so a giant body can't stall the card. The OG/<title> tags we
+            // need always live in <head>, well within the cap.
+            val html = runCatching { response.peekBody(MAX_BYTES).string() }
+                .getOrNull()
+                ?.takeIf { it.isNotBlank() }
+                ?: return@withContext null
 
             val title = ogContent(html, "og:title") ?: htmlTitle(html)
             val description = ogContent(html, "og:description")
             val image = ogContent(html, "og:image")?.let { absolutize(it, url) }
             val siteName = ogContent(html, "og:site_name")
-            if (title == null && description == null && image == null) return@withContext null
+            // Render a card if ANY usable field turned up (not just all of them).
+            if (title == null && description == null && image == null && siteName == null) {
+                return@withContext null
+            }
             LinkPreview(
                 url = url,
                 title = title,
@@ -91,14 +99,17 @@ object LinkPreviewFetcher {
      */
     private fun ogContent(html: String, property: String): String? {
         val p = Regex.escape(property)
+        // In each pattern the content value is delimited by whichever quote opened it
+        // (captured, then matched with a backreference) so a value that itself contains
+        // the *other* quote char — e.g. content="Rock 'n' Roll" — is captured in full.
         val patterns = listOf(
             // property=... then content=...
-            Regex("""<meta[^>]+(?:property|name)=["']$p["'][^>]+content=["']([^"']*)["']""", RegexOption.IGNORE_CASE),
+            Regex("""<meta[^>]+?(?:property|name)=["']$p["'][^>]*?content=(["'])(.*?)\1""", RegexOption.IGNORE_CASE),
             // content=... then property=...
-            Regex("""<meta[^>]+content=["']([^"']*)["'][^>]+(?:property|name)=["']$p["']""", RegexOption.IGNORE_CASE),
+            Regex("""<meta[^>]+?content=(["'])(.*?)\1[^>]*?(?:property|name)=["']$p["']""", RegexOption.IGNORE_CASE),
         )
         for (regex in patterns) {
-            val match = regex.find(html)?.groupValues?.getOrNull(1)?.trim()
+            val match = regex.find(html)?.groupValues?.getOrNull(2)?.trim()
             if (!match.isNullOrEmpty()) return decodeEntities(match)
         }
         return null
