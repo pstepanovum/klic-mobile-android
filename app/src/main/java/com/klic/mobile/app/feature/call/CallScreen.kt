@@ -1,6 +1,10 @@
 package com.klic.mobile.app.feature.call
 
+import android.app.Activity
+import android.media.projection.MediaProjectionManager
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
@@ -36,6 +40,8 @@ import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.OpenInFull
 import androidx.compose.material.icons.filled.PhoneInTalk
 import androidx.compose.material.icons.filled.PictureInPictureAlt
+import androidx.compose.material.icons.filled.ScreenShare
+import androidx.compose.material.icons.filled.StopScreenShare
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material.icons.filled.VideocamOff
 import androidx.compose.material3.Icon
@@ -61,6 +67,7 @@ import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.util.VelocityTracker
 import androidx.compose.ui.input.pointer.util.addPointerInputChange
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.style.TextOverflow
@@ -91,6 +98,7 @@ fun CallScreen(
     val callStatus by vm.callStatus.collectAsState()
     val micEnabled by manager.micEnabled.collectAsState()
     val cameraEnabled by manager.cameraEnabled.collectAsState()
+    val screenShareEnabled by manager.screenShareEnabled.collectAsState()
     val speakerOn by manager.speakerOn.collectAsState()
     val remoteVideo by manager.remoteVideoTrack.collectAsState()
     val screenShare by manager.screenShareTrack.collectAsState()
@@ -109,6 +117,20 @@ fun CallScreen(
     // 2+ remotes → tile grid; 0–1 remotes → today's fullscreen 1:1 layout.
     val gridMode = !screenSharePrimary && participants.size >= 2
     val shouldShowVideo = cameraEnabled || localVideo != null || remoteVideo != null || screenSharePrimary
+
+    // Screen sharing: the system MediaProjection consent dialog must be shown before capture.
+    // On approval, hand the result Intent to the SDK, which spins up its own capture foreground
+    // service and publishes the track into the call.
+    val context = LocalContext.current
+    val mpm = remember(context) { context.getSystemService(MediaProjectionManager::class.java) }
+    val screenShareLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        val data = result.data
+        if (result.resultCode == Activity.RESULT_OK && data != null) {
+            scope.launch { manager.startScreenShare(data) }
+        }
+    }
 
     // Live call duration: once connected, tick every second and render mm:ss (h:mm:ss past
     // an hour) — same pattern as the minimized overlay. Before connect (or on hold) the
@@ -373,6 +395,23 @@ fun CallScreen(
                         painter = rememberVectorPainter(if (cameraEnabled) Icons.Filled.Videocam else Icons.Filled.VideocamOff),
                         contentDescription = "Toggle camera",
                     ) { scope.launch { manager.toggleCamera() } }
+
+                    // Share my phone screen into the call. Toggles: stop if already sharing,
+                    // otherwise request MediaProjection consent and let the callback publish.
+                    CircleControl(
+                        painter = rememberVectorPainter(
+                            if (screenShareEnabled) Icons.Filled.StopScreenShare else Icons.Filled.ScreenShare
+                        ),
+                        contentDescription = "Share screen",
+                        fill = if (screenShareEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
+                        tint = if (screenShareEnabled) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
+                    ) {
+                        if (screenShareEnabled) {
+                            scope.launch { manager.stopScreenShare() }
+                        } else {
+                            mpm?.let { screenShareLauncher.launch(it.createScreenCaptureIntent()) }
+                        }
+                    }
 
                     if (cameraEnabled) {
                         CircleControl(
