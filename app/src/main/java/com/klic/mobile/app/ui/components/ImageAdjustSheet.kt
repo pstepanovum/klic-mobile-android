@@ -16,10 +16,12 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.requiredSize
-import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -86,6 +88,11 @@ fun ImageAdjustSheet(
     // Unreadable photo — bail out with the standard error path.
     LaunchedEffect(failed) { if (failed) onDismiss() }
 
+    // Captured in the host (edge-to-edge) composition. Reading window insets directly inside the
+    // Dialog below can resolve to zero on some devices, which would let the action buttons slide
+    // under the system navigation bar; sourcing them here keeps the controls clear of it.
+    val systemBarsInsets = WindowInsets.systemBars.asPaddingValues()
+
     Dialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false),
@@ -99,7 +106,7 @@ fun ImageAdjustSheet(
                     strokeWidth = 2.dp,
                 )
             } else {
-                AdjustCanvas(bmp = bmp, mask = mask, onDone = onDone, onDismiss = onDismiss)
+                AdjustCanvas(bmp = bmp, mask = mask, insets = systemBarsInsets, onDone = onDone, onDismiss = onDismiss)
             }
         }
     }
@@ -109,6 +116,7 @@ fun ImageAdjustSheet(
 private fun AdjustCanvas(
     bmp: Bitmap,
     mask: AdjustMask,
+    insets: PaddingValues,
     onDone: (Bitmap) -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -197,7 +205,7 @@ private fun AdjustCanvas(
             color = Color.White,
             modifier = Modifier
                 .align(Alignment.TopCenter)
-                .statusBarsPadding()
+                .padding(top = insets.calculateTopPadding())
                 .padding(top = 18.dp),
         )
 
@@ -205,7 +213,7 @@ private fun AdjustCanvas(
         Column(
             Modifier
                 .align(Alignment.BottomCenter)
-                .navigationBarsPadding()
+                .padding(bottom = insets.calculateBottomPadding())
                 .padding(horizontal = 24.dp, vertical = 20.dp)
                 .fillMaxWidth(),
         ) {
