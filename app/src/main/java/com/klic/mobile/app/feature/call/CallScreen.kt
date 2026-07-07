@@ -37,6 +37,7 @@ import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MicOff
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.OpenInFull
 import androidx.compose.material.icons.filled.PhoneInTalk
 import androidx.compose.material.icons.filled.PictureInPictureAlt
@@ -44,6 +45,8 @@ import androidx.compose.material.icons.filled.ScreenShare
 import androidx.compose.material.icons.filled.StopScreenShare
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material.icons.filled.VideocamOff
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -368,7 +371,16 @@ fun CallScreen(
                     Spacer(Modifier.weight(1f))
                 }
 
-                Row(horizontalArrangement = Arrangement.spacedBy(24.dp), verticalAlignment = Alignment.CenterVertically) {
+                // Primary controls stay inline; secondary actions (flip camera, screen share,
+                // and — on a voice call — turning the camera on) move into the "•••" overflow
+                // menu so the bar never crams on narrow phones. SpaceEvenly lets the row breathe
+                // and fill the width no matter how many controls are inline.
+                var moreExpanded by remember { mutableStateOf(false) }
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
                     CircleControl(
                         painter = rememberVectorPainter(if (micEnabled) Icons.Filled.Mic else Icons.Filled.MicOff),
                         contentDescription = "Toggle microphone",
@@ -391,33 +403,78 @@ fun CallScreen(
                         diameter = 72,
                     ) { vm.endCall(); onEnd() }
 
-                    CircleControl(
-                        painter = rememberVectorPainter(if (cameraEnabled) Icons.Filled.Videocam else Icons.Filled.VideocamOff),
-                        contentDescription = "Toggle camera",
-                    ) { scope.launch { manager.toggleCamera() } }
-
-                    // Share my phone screen into the call. Toggles: stop if already sharing,
-                    // otherwise request MediaProjection consent and let the callback publish.
-                    CircleControl(
-                        painter = rememberVectorPainter(
-                            if (screenShareEnabled) Icons.Filled.StopScreenShare else Icons.Filled.ScreenShare
-                        ),
-                        contentDescription = "Share screen",
-                        fill = if (screenShareEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
-                        tint = if (screenShareEnabled) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
-                    ) {
-                        if (screenShareEnabled) {
-                            scope.launch { manager.stopScreenShare() }
-                        } else {
-                            mpm?.let { screenShareLauncher.launch(it.createScreenCaptureIntent()) }
-                        }
+                    // Camera toggle stays inline on video calls; on a voice call it lives in the
+                    // overflow menu (below) so the inline bar keeps just the four essentials.
+                    if (isVideo) {
+                        CircleControl(
+                            painter = rememberVectorPainter(if (cameraEnabled) Icons.Filled.Videocam else Icons.Filled.VideocamOff),
+                            contentDescription = "Toggle camera",
+                        ) { scope.launch { manager.toggleCamera() } }
                     }
 
-                    if (cameraEnabled) {
+                    // "•••" overflow: secondary actions anchored to this control via a DropdownMenu.
+                    Box {
                         CircleControl(
-                            painter = rememberVectorPainter(Icons.Filled.Cameraswitch),
-                            contentDescription = "Switch camera",
-                        ) { manager.switchCamera() }
+                            painter = rememberVectorPainter(Icons.Filled.MoreVert),
+                            contentDescription = "More options",
+                        ) { moreExpanded = true }
+
+                        DropdownMenu(
+                            expanded = moreExpanded,
+                            onDismissRequest = { moreExpanded = false },
+                        ) {
+                            // Voice call: camera toggle isn't inline, so offer it here — this
+                            // preserves the ability to turn a voice call into a video one.
+                            if (!isVideo) {
+                                DropdownMenuItem(
+                                    text = { Text(if (cameraEnabled) "Turn off camera" else "Turn on camera") },
+                                    leadingIcon = {
+                                        Icon(
+                                            imageVector = if (cameraEnabled) Icons.Filled.VideocamOff else Icons.Filled.Videocam,
+                                            contentDescription = null,
+                                        )
+                                    },
+                                    onClick = {
+                                        moreExpanded = false
+                                        scope.launch { manager.toggleCamera() }
+                                    },
+                                )
+                            }
+
+                            // Flip between front/back — only meaningful while the camera is live.
+                            if (cameraEnabled) {
+                                DropdownMenuItem(
+                                    text = { Text("Flip camera") },
+                                    leadingIcon = {
+                                        Icon(Icons.Filled.Cameraswitch, contentDescription = null)
+                                    },
+                                    onClick = {
+                                        moreExpanded = false
+                                        manager.switchCamera()
+                                    },
+                                )
+                            }
+
+                            // Share my phone screen into the call. Start requests MediaProjection
+                            // consent via the existing launcher; stop tears the capture down.
+                            DropdownMenuItem(
+                                text = { Text(if (screenShareEnabled) "Stop sharing" else "Share screen") },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = if (screenShareEnabled) Icons.Filled.StopScreenShare else Icons.Filled.ScreenShare,
+                                        contentDescription = null,
+                                    )
+                                },
+                                onClick = {
+                                    moreExpanded = false
+                                    if (screenShareEnabled) {
+                                        scope.launch { manager.stopScreenShare() }
+                                    } else {
+                                        mpm?.let { screenShareLauncher.launch(it.createScreenCaptureIntent()) }
+                                    }
+                                },
+                            )
+                        }
                     }
                 }
             }
