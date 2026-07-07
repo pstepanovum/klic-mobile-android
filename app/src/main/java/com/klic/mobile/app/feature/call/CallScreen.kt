@@ -9,6 +9,8 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -91,6 +93,7 @@ fun CallScreen(
     val cameraEnabled by manager.cameraEnabled.collectAsState()
     val speakerOn by manager.speakerOn.collectAsState()
     val remoteVideo by manager.remoteVideoTrack.collectAsState()
+    val screenShare by manager.screenShareTrack.collectAsState()
     val localVideo by manager.localVideoTrack.collectAsState()
     val participants by manager.participants.collectAsState()
     val localSpeaking by manager.localSpeaking.collectAsState()
@@ -100,9 +103,12 @@ fun CallScreen(
     val isGroupCall by vm.callIsGroup.collectAsState()
     val connectedAt by vm.callConnectedAt.collectAsState()
     val isVideo = call.kind == "VIDEO"
+    // Someone sharing their screen takes over as the big tile — camera feeds become secondary,
+    // so the equal grid steps aside in favour of the fullscreen screen-share presentation.
+    val screenSharePrimary = screenShare != null
     // 2+ remotes → tile grid; 0–1 remotes → today's fullscreen 1:1 layout.
-    val gridMode = participants.size >= 2
-    val shouldShowVideo = cameraEnabled || localVideo != null || remoteVideo != null
+    val gridMode = !screenSharePrimary && participants.size >= 2
+    val shouldShowVideo = cameraEnabled || localVideo != null || remoteVideo != null || screenSharePrimary
 
     // Live call duration: once connected, tick every second and render mm:ss (h:mm:ss past
     // an hour) — same pattern as the minimized overlay. Before connect (or on hold) the
@@ -154,10 +160,16 @@ fun CallScreen(
     // Pick which feed is full-screen and which rides in the draggable card (WhatsApp-style swap).
     // §17.1: in grid mode there is NO floating card — my feed becomes a regular grid tile.
     val localTrack = if (cameraEnabled) localVideo else null
-    val primaryIsLocal = !gridMode && localFullscreen && localTrack != null
-    val primaryTrack = if (primaryIsLocal) localTrack else remoteVideo
-    val secondaryTrack = if (gridMode) null else if (primaryIsLocal) remoteVideo else localTrack
-    val hasPrimaryVideo = !gridMode && shouldShowVideo && primaryTrack != null
+    // A remote screen share always wins the big tile; otherwise the WhatsApp-style local/remote
+    // swap decides. Camera feeds ride in the secondary strip/card during a screen share.
+    val primaryIsLocal = !screenSharePrimary && !gridMode && localFullscreen && localTrack != null
+    val primaryTrack = when {
+        screenSharePrimary -> screenShare
+        primaryIsLocal -> localTrack
+        else -> remoteVideo
+    }
+    val secondaryTrack = if (gridMode || screenSharePrimary) null else if (primaryIsLocal) remoteVideo else localTrack
+    val hasPrimaryVideo = (!gridMode || screenSharePrimary) && shouldShowVideo && primaryTrack != null
     // §7.6: the "video-call look" keys on the REMOTE feed being fullscreen — never on the
     // local camera. No remote fullscreen → themed header with name + status pill.
     val remoteFullscreen = hasPrimaryVideo && !primaryIsLocal
@@ -166,7 +178,7 @@ fun CallScreen(
         if (pip.isInPipMode) {
             // Compacted into the system PiP window: ONLY the remote video, full-bleed, no
             // chrome. Fall back to a centred avatar while no remote feed is live.
-            val pipTrack = remoteVideo ?: participants.firstNotNullOfOrNull { it.videoTrack }
+            val pipTrack = screenShare ?: remoteVideo ?: participants.firstNotNullOfOrNull { it.videoTrack }
             if (pipTrack != null) {
                 LiveKitVideo(manager.room, pipTrack, Modifier.fillMaxSize())
             } else {
@@ -247,7 +259,50 @@ fun CallScreen(
                     }
                 }
 
-                if (gridMode) {
+                if (screenSharePrimary) {
+                    // A remote is sharing their screen (rendered full-bleed as the primary tile):
+                    // push the camera feeds into a small horizontal strip above the controls so the
+                    // shared desktop stays the prominent tile, no matter the participant count.
+                    Spacer(Modifier.weight(1f))
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState())
+                            .padding(horizontal = 12.dp, vertical = 12.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        participants.forEach { participant ->
+                            key(participant.userId) {
+                                Box(Modifier.size(96.dp, 128.dp)) {
+                                    CallGridTile(
+                                        room = manager.room,
+                                        videoTrack = participant.videoTrack,
+                                        displayName = participant.name.ifBlank {
+                                            vm.displayNameFor(participant.userId)
+                                                ?: stringResource(R.string.call_member)
+                                        },
+                                        avatarUrl = Network.avatarUrl(participant.userId),
+                                        micMuted = participant.micMuted,
+                                        isSpeaking = participant.isSpeaking,
+                                        reconnecting = participant.reconnecting,
+                                    )
+                                }
+                            }
+                        }
+                        Box(Modifier.size(96.dp, 128.dp)) {
+                            CallGridTile(
+                                room = manager.room,
+                                videoTrack = localTrack,
+                                displayName = stringResource(R.string.common_you),
+                                avatarUrl = me?.id?.let { Network.avatarUrl(it) },
+                                micMuted = !micEnabled,
+                                isSpeaking = localSpeaking,
+                                avatarName = me?.displayName ?: stringResource(R.string.common_you),
+                                mirrorVideo = frontCamera,
+                            )
+                        }
+                    }
+                } else if (gridMode) {
                     // §17.1: Zoom-style non-scrolling grid — remotes keep their order, MY
                     // tile goes LAST as a regular grid citizen (mirrored selfie feed when
                     // the camera is on, the same avatar/mute chrome as everyone when off).
