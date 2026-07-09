@@ -28,6 +28,7 @@ import kotlinx.coroutines.launch
 class OngoingCallService : Service() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var proximityLock: PowerManager.WakeLock? = null
+    private var cpuLock: PowerManager.WakeLock? = null
     private var started = false
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -40,6 +41,13 @@ class OngoingCallService : Service() {
         // Must enter foreground immediately. Start with the type the call launched as; the
         // collector below upgrades to include camera if the user turns it on mid-call.
         enterForeground(peerName, cameraOn = isVideo)
+        // Keep the CPU running while the screen is off. The mic|camera FGS keeps the PROCESS
+        // alive, but on Doze-aggressive OEMs it doesn't stop the CPU being suspended once the
+        // screen locks — which stalls the LiveKit connection and drops the call. A partial wake
+        // lock held for the call's duration (released in onDestroy when the call ends) keeps
+        // audio/video flowing with the screen off, so a call only ends on explicit hang-up or
+        // remote end.
+        acquireCpuLock()
 
         if (started) return START_NOT_STICKY
         started = true
@@ -77,6 +85,22 @@ class OngoingCallService : Service() {
     private fun hasPermission(permission: String): Boolean =
         ContextCompat.checkSelfPermission(this, permission) == PackageManager.PERMISSION_GRANTED
 
+    private fun acquireCpuLock() {
+        if (cpuLock?.isHeld == true) return
+        val pm = getSystemService(PowerManager::class.java)
+        cpuLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "klic:ongoing-call").apply {
+            setReferenceCounted(false)
+            // Safety timeout so a missed onDestroy can never leak the lock indefinitely; the
+            // call's own teardown (finishCall → OngoingCallService.stop) releases it far sooner.
+            acquire(4 * 60 * 60 * 1000L)
+        }
+    }
+
+    private fun releaseCpuLock() {
+        cpuLock?.let { if (it.isHeld) it.release() }
+        cpuLock = null
+    }
+
     private fun acquireProximity() {
         val pm = getSystemService(PowerManager::class.java)
         if (proximityLock == null &&
@@ -93,6 +117,7 @@ class OngoingCallService : Service() {
 
     override fun onDestroy() {
         releaseProximity()
+        releaseCpuLock()
         scope.cancel()
         super.onDestroy()
     }

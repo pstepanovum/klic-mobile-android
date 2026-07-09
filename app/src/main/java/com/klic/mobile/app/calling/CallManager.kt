@@ -158,7 +158,13 @@ class CallManager(
         // Already joining or connected to this exact call (e.g. a harmless recomposition re-fired
         // the trigger) — don't tear it down and restart.
         if (currentCallId == callId && (joinJob?.isActive == true || isConnected.value)) return
+        // The ViewModel starts the outgoing ringback (startActiveCall) the instant it sets the
+        // active call — which is exactly what triggers this join a frame later. leave()'s teardown
+        // stops the ringback, so it would be silenced the moment it started and the caller would
+        // never hear it ring. Preserve an in-flight ringback across the pre-join teardown.
+        val ringbackWasPlaying = ringbackPlayer != null
         leave()
+        if (ringbackWasPlaying) startRingback()
         currentCallId = callId
         leaving = false
         isReconnecting.value = false
