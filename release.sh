@@ -167,6 +167,9 @@ build_ios() {
     xcodebuild archive \
       $workspace_flag \
       -scheme Klic \
+      -destination 'generic/platform=iOS' \
+      -disableAutomaticPackageResolution \
+      -onlyUsePackageVersionsFromResolvedFile \
       -sdk iphoneos \
       -configuration Release \
       -archivePath "$unsigned_archive_path" \
@@ -216,6 +219,9 @@ EOF
     xcodebuild archive \
       $workspace_flag \
       -scheme Klic \
+      -destination 'generic/platform=iOS' \
+      -disableAutomaticPackageResolution \
+      -onlyUsePackageVersionsFromResolvedFile \
       -sdk iphoneos \
       -configuration Release \
       -archivePath "$signed_archive_path" \
