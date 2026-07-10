@@ -49,6 +49,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.klic.mobile.app.BuildConfig
 import com.klic.mobile.app.R
 import com.klic.mobile.app.calling.CallReliability
 import com.klic.mobile.app.feature.KlicViewModel
@@ -82,6 +83,9 @@ private sealed class SettingsRoute {
     object ChatTheme : SettingsRoute()
     // v0.5.7 (§14.4)
     object SavedMessages : SettingsRoute()
+    // Legal
+    object PrivacyPolicy : SettingsRoute()
+    object Terms : SettingsRoute()
 }
 
 @Composable
@@ -230,21 +234,23 @@ fun SettingsScreen(
 
                         Spacer(Modifier.height(16.dp))
 
-                        // Card 2: Updates
-                        Column(
-                            Modifier
-                                .fillMaxWidth()
-                                .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(20.dp))
-                                .padding(horizontal = 18.dp),
-                        ) {
-                            SettingsRow(
-                                icon = painterResource(KlicIcons.update),
-                                title = stringResource(R.string.settings_updates),
-                                onClick = { route = SettingsRoute.Updates },
-                            )
-                        }
+                        // Card 2: Updates — GitHub builds only; Play delivers its own updates.
+                        if (BuildConfig.SELF_UPDATER_ENABLED) {
+                            Column(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(20.dp))
+                                    .padding(horizontal = 18.dp),
+                            ) {
+                                SettingsRow(
+                                    icon = painterResource(KlicIcons.update),
+                                    title = stringResource(R.string.settings_updates),
+                                    onClick = { route = SettingsRoute.Updates },
+                                )
+                            }
 
-                        Spacer(Modifier.height(16.dp))
+                            Spacer(Modifier.height(16.dp))
+                        }
 
                         // Card 3: Privacy
                         Column(
@@ -257,6 +263,19 @@ fun SettingsScreen(
                                 icon = painterResource(R.drawable.ic_line_lock),
                                 title = stringResource(R.string.settings_privacy_security),
                                 onClick = { route = SettingsRoute.Privacy },
+                            )
+                            HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
+                            // Legal: the same documents shown during sign-up.
+                            SettingsRow(
+                                icon = painterResource(KlicIcons.document),
+                                title = stringResource(R.string.pp_title),
+                                onClick = { route = SettingsRoute.PrivacyPolicy },
+                            )
+                            HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
+                            SettingsRow(
+                                icon = painterResource(KlicIcons.document),
+                                title = stringResource(R.string.tos_title),
+                                onClick = { route = SettingsRoute.Terms },
                             )
                             HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
                             // §12.1: target-less report — "something in the app is broken".
@@ -458,23 +477,29 @@ fun SettingsScreen(
                             HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
                             InfoRow(label = stringResource(R.string.settings_platform), value = "Android")
                             HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
-                            InfoRow(label = stringResource(R.string.settings_distribution), value = "GitHub Releases")
+                            InfoRow(
+                                label = stringResource(R.string.settings_distribution),
+                                value = if (BuildConfig.SELF_UPDATER_ENABLED) "GitHub Releases" else "Google Play",
+                            )
                         }
 
-                        Spacer(Modifier.height(16.dp))
+                        // App updates — check GitHub releases and self-install. Play builds
+                        // never offer APK installs; Google Play delivers updates itself.
+                        if (BuildConfig.SELF_UPDATER_ENABLED) {
+                            Spacer(Modifier.height(16.dp))
 
-                        // App updates — check GitHub releases and self-install (no Play Store).
-                        AppUpdateCard(versionName = versionName, scope = scope, context = context)
+                            AppUpdateCard(versionName = versionName, scope = scope, context = context)
 
-                        Spacer(Modifier.height(12.dp))
+                            Spacer(Modifier.height(12.dp))
 
-                        Text(
-                            stringResource(R.string.settings_updates_footer),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            textAlign = TextAlign.Center,
-                            modifier = Modifier.fillMaxWidth(),
-                        )
+                            Text(
+                                stringResource(R.string.settings_updates_footer),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                        }
                     }
 
                     SettingsRoute.Notifications -> {
@@ -586,6 +611,22 @@ fun SettingsScreen(
                             onBack = { route = SettingsRoute.Main },
                         )
                         SavedMessagesContent(vm, onOpenMessage)
+                    }
+
+                    SettingsRoute.PrivacyPolicy -> {
+                        SubScreenHeader(
+                            title = stringResource(R.string.pp_title),
+                            onBack = { route = SettingsRoute.Main },
+                        )
+                        com.klic.mobile.app.feature.auth.PrivacyPolicyContent()
+                    }
+
+                    SettingsRoute.Terms -> {
+                        SubScreenHeader(
+                            title = stringResource(R.string.tos_title),
+                            onBack = { route = SettingsRoute.Main },
+                        )
+                        com.klic.mobile.app.feature.auth.TermsOfServiceContent()
                     }
                 }
             }

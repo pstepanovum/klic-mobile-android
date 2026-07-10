@@ -60,6 +60,7 @@ fun SignUpScreen(vm: KlicViewModel, onHaveAccount: () -> Unit) {
     var password by remember { mutableStateOf("") }
     var agreedToPrivacy by remember { mutableStateOf(false) }
     var showPrivacyPolicy by remember { mutableStateOf(false) }
+    var showTerms by remember { mutableStateOf(false) }
     var isSubmitting by remember { mutableStateOf(false) }
 
     LaunchedEffect(error) {
@@ -68,6 +69,11 @@ fun SignUpScreen(vm: KlicViewModel, onHaveAccount: () -> Unit) {
 
     if (showPrivacyPolicy) {
         PrivacyPolicyScreen(onBack = { showPrivacyPolicy = false })
+        return
+    }
+
+    if (showTerms) {
+        TermsOfServiceScreen(onBack = { showTerms = false })
         return
     }
 
@@ -159,6 +165,22 @@ fun SignUpScreen(vm: KlicViewModel, onHaveAccount: () -> Unit) {
                 vm.error.value = null
                 vm.register(username, password, displayName)
             }
+
+            // Tapping the caption opens the full Terms of Service.
+            Text(
+                stringResource(R.string.signup_terms_caption),
+                fontFamily = TikTokSans,
+                fontSize = 12.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 10.dp)
+                    .clickable(
+                        indication = null,
+                        interactionSource = remember { MutableInteractionSource() },
+                    ) { showTerms = true },
+            )
 
             error?.let {
                 Text(

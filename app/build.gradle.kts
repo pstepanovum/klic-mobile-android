@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -37,10 +39,47 @@ android {
         ndk { abiFilters += "arm64-v8a" }
     }
 
+    // Same app, two distribution channels. "github" keeps the existing sideload flow
+    // (GitHub-releases self-updater + REQUEST_INSTALL_PACKAGES); "play" strips both —
+    // Google Play prohibits self-updating apps — via SELF_UPDATER_ENABLED and the
+    // src/play manifest overlay. The applicationId is identical for both.
+    flavorDimensions += "distribution"
+    productFlavors {
+        create("github") {
+            dimension = "distribution"
+            isDefault = true
+            buildConfigField("boolean", "SELF_UPDATER_ENABLED", "true")
+        }
+        create("play") {
+            dimension = "distribution"
+            buildConfigField("boolean", "SELF_UPDATER_ENABLED", "false")
+        }
+    }
+
+    // Play upload key — lives OUTSIDE the repo (~/.klic-android/, gitignored patterns
+    // anyway). On machines without it the release build simply stays unsigned.
+    val keystoreProperties = file("${System.getProperty("user.home")}/.klic-android/keystore.properties")
+        .takeIf { it.exists() }
+        ?.let { f -> Properties().apply { f.inputStream().use { load(it) } } }
+
+    signingConfigs {
+        if (keystoreProperties != null) {
+            create("release") {
+                storeFile = file(keystoreProperties.getProperty("storeFile"))
+                storePassword = keystoreProperties.getProperty("storePassword")
+                keyAlias = keystoreProperties.getProperty("keyAlias")
+                keyPassword = keystoreProperties.getProperty("keyPassword")
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            if (keystoreProperties != null) {
+                signingConfig = signingConfigs.getByName("release")
+            }
         }
     }
     compileOptions {

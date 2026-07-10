@@ -50,6 +50,9 @@
     <string name="privacy_delete_all_drafts">Delete All Drafts</string>
     <string name="privacy_delete_drafts_confirm">Delete every saved message draft on this device?</string>
     <string name="privacy_drafts_deleted">Drafts deleted.</string>
+    <string name="privacy_reset_hidden">Reset Hidden Messages</string>
+    <string name="privacy_reset_hidden_confirm">Show every message you\'ve hidden on this device again?</string>
+    <string name="privacy_hidden_reset_done">Hidden messages restored.</string>
     <string name="privacy_account_section">Automatically delete my account</string>
     <string name="privacy_delete_if_away">If away for</string>
     <string name="privacy_months_format">%1$d months</string>
@@ -190,6 +193,7 @@
     <string name="login_subtitle">Welcome back — sign in to keep chatting.</string>
     <string name="signup_title">Sign Up</string>
     <string name="signup_subtitle">Yo! Let\'s create an account for you</string>
+    <string name="signup_terms_caption">By creating an account you agree to our Terms of Service</string>
     <string name="auth_waiting_for_passkey">Waiting for passkey…</string>
 
     <!-- Welcome -->
@@ -211,6 +215,24 @@
     <string name="pp_security_body">We use industry-standard encryption to protect your data in transit and at rest.</string>
     <string name="pp_contact_title">Contact</string>
     <string name="pp_contact_body">Questions? Reach us at privacy@klic.pstepanov.dev</string>
+
+    <!-- Terms of Service -->
+    <string name="tos_title">Terms of Service</string>
+    <string name="tos_effective_date">Effective date: July 9, 2026</string>
+    <string name="tos_accept_title">Acceptance of terms</string>
+    <string name="tos_accept_body">By creating an account or using Klic you agree to these Terms of Service and our Privacy Policy. If you do not agree, please do not use the app.</string>
+    <string name="tos_conduct_title">User conduct</string>
+    <string name="tos_conduct_body">Klic has zero tolerance for objectionable content and abusive users. You must not use Klic to harass, bully or threaten others; share hate speech, sexual content involving minors, or content that promotes or glorifies violence; impersonate other people; or send spam. You can report any message or user directly from the app, and block anyone at any time.</string>
+    <string name="tos_moderation_title">Reports and moderation</string>
+    <string name="tos_moderation_body">We act on reports within 24 hours: content that violates these terms is removed, and users responsible for serious or repeated violations are ejected from the service.</string>
+    <string name="tos_termination_title">Termination</string>
+    <string name="tos_termination_body">We may suspend or permanently terminate accounts that violate these terms, without prior notice. You can stop using Klic and delete your account at any time.</string>
+    <string name="tos_license_title">Your content</string>
+    <string name="tos_license_body">You keep ownership of everything you send. You grant Klic a limited license to transmit and store your content solely to provide the service — for example, holding a message until your friend\'s device picks it up. Content is encrypted in transit and stored encrypted on Klic\'s servers.</string>
+    <string name="tos_warranty_title">Disclaimer</string>
+    <string name="tos_warranty_body">Klic is provided \"as is\", without warranties of any kind. We work hard to keep the service fast and reliable, but we can\'t promise it will always be available or error-free, and we are not liable for losses arising from your use of the app.</string>
+    <string name="tos_contact_title">Contact</string>
+    <string name="tos_contact_body">Questions about these terms? Reach us at privacy@klic.pstepanov.dev</string>
 
     <!-- Chats list -->
     <string name="convos_new_message">New Message</string>
@@ -427,6 +449,7 @@
 
     <!-- Message actions -->
     <string name="actions_copy">Copy</string>
+    <string name="actions_hide">Hide</string>
     <string name="actions_reply_to">Reply to %1$s</string>
     <string name="actions_message_deleted">This message was deleted</string>
 

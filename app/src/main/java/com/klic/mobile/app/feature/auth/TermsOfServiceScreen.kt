@@ -22,15 +22,17 @@ import androidx.compose.ui.res.stringResource
 import com.klic.mobile.app.R
 
 private val sections = listOf(
-    R.string.pp_collect_title to R.string.pp_collect_body,
-    R.string.pp_use_title to R.string.pp_use_body,
-    R.string.pp_retention_title to R.string.pp_retention_body,
-    R.string.pp_security_title to R.string.pp_security_body,
-    R.string.pp_contact_title to R.string.pp_contact_body,
+    R.string.tos_accept_title to R.string.tos_accept_body,
+    R.string.tos_conduct_title to R.string.tos_conduct_body,
+    R.string.tos_moderation_title to R.string.tos_moderation_body,
+    R.string.tos_termination_title to R.string.tos_termination_body,
+    R.string.tos_license_title to R.string.tos_license_body,
+    R.string.tos_warranty_title to R.string.tos_warranty_body,
+    R.string.tos_contact_title to R.string.tos_contact_body,
 )
 
 @Composable
-fun PrivacyPolicyScreen(onBack: () -> Unit) {
+fun TermsOfServiceScreen(onBack: () -> Unit) {
     Box(
         modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
         contentAlignment = Alignment.TopCenter,
@@ -48,7 +50,7 @@ fun PrivacyPolicyScreen(onBack: () -> Unit) {
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
-                stringResource(R.string.pp_title),
+                stringResource(R.string.tos_title),
                 style = MaterialTheme.typography.headlineMedium,
                 color = MaterialTheme.colorScheme.onBackground,
             )
@@ -62,15 +64,15 @@ fun PrivacyPolicyScreen(onBack: () -> Unit) {
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 24.dp, vertical = 16.dp),
         ) {
-            PrivacyPolicyContent()
+            TermsOfServiceContent()
         }
     }
     } // Box
 }
 
-/** The policy sections without their own scroll — also embedded in Settings. */
+/** The terms sections without their own scroll — also embedded in Settings. */
 @Composable
-fun PrivacyPolicyContent() {
+fun TermsOfServiceContent() {
     Column(verticalArrangement = Arrangement.spacedBy(24.dp)) {
         sections.forEach { (title, body) ->
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -88,7 +90,7 @@ fun PrivacyPolicyContent() {
         }
 
         Text(
-            stringResource(R.string.pp_effective_date),
+            stringResource(R.string.tos_effective_date),
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )

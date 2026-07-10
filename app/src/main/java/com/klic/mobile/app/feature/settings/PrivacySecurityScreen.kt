@@ -79,6 +79,7 @@ fun PrivacySecurityContent(vm: KlicViewModel, onOpenSub: (PrivacySecuritySub) ->
     var showClearCookies by remember { mutableStateOf(false) }
     var showAwaySheet by remember { mutableStateOf(false) }
     var showDeleteDrafts by remember { mutableStateOf(false) }
+    var showResetHidden by remember { mutableStateOf(false) }
     var showDeleteAccount by remember { mutableStateOf(false) }
     val me by vm.currentUser.collectAsState()
     var awayMonths by remember(me?.deleteIfAwayMonths) { mutableStateOf(me?.deleteIfAwayMonths) }
@@ -278,6 +279,13 @@ fun PrivacySecurityContent(vm: KlicViewModel, onOpenSub: (PrivacySecuritySub) ->
             title = stringResource(R.string.privacy_delete_all_drafts),
             onClick = { showDeleteDrafts = true },
         )
+        RowDivider()
+        // Messages hidden via the long-press "Hide" action become visible again.
+        PrivacyRow(
+            icon = KlicIcons.lastSeen,
+            title = stringResource(R.string.privacy_reset_hidden),
+            onClick = { showResetHidden = true },
+        )
     }
 
     Spacer(Modifier.height(16.dp))
@@ -382,6 +390,25 @@ fun PrivacySecurityContent(vm: KlicViewModel, onOpenSub: (PrivacySecuritySub) ->
             },
             dismissButton = {
                 TextButton(onClick = { showDeleteDrafts = false }) { Text(stringResource(R.string.common_cancel)) }
+            },
+        )
+    }
+
+    if (showResetHidden) {
+        val hiddenReset = stringResource(R.string.privacy_hidden_reset_done)
+        AlertDialog(
+            onDismissRequest = { showResetHidden = false },
+            title = { Text(stringResource(R.string.privacy_reset_hidden)) },
+            text = { Text(stringResource(R.string.privacy_reset_hidden_confirm)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    showResetHidden = false
+                    scope.launch { SettingsStore.resetHiddenMessages() }
+                    Toast.makeText(context, hiddenReset, Toast.LENGTH_SHORT).show()
+                }) { Text(stringResource(R.string.common_reset)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showResetHidden = false }) { Text(stringResource(R.string.common_cancel)) }
             },
         )
     }
