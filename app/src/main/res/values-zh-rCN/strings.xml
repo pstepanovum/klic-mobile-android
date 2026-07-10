@@ -424,6 +424,7 @@
     <string name="err_send_voice">无法发送语音消息。请重试。</string>
     <string name="err_send_photo">无法发送照片。请重试。</string>
     <string name="err_sign_in">无法登录。请检查您的详细信息。</string>
+    <string name="err_call_start">无法发起通话，请重试。</string>
     <string name="privacy_blocked_toast">已屏蔽 %1$s。</string>
     <string name="err_block">无法屏蔽 %1$s。</string>
     <string name="err_unblock">无法取消屏蔽。请重试。</string>

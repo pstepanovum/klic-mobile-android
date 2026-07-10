@@ -498,6 +498,7 @@
     <string name="err_send_voice">Couldn\'t send voice message. Try again.</string>
     <string name="err_send_photo">Couldn\'t send photo. Try again.</string>
     <string name="err_sign_in">Could not sign in. Check your details.</string>
+    <string name="err_call_start">Couldn\u2019t start the call. Please try again.</string>
     <string name="privacy_blocked_toast">%1$s blocked.</string>
     <string name="err_block">Couldn\'t block %1$s.</string>
     <string name="err_unblock">Couldn\'t unblock. Try again.</string>
