@@ -426,6 +426,10 @@ class CallManager(
         diagnostic("livekit.camera.switch.ok")
     }
 
+    /** True while a room is live, a join is in flight, or a call is parked on hold — i.e. the
+     *  surface's activeCall is backed by real call machinery (used to self-heal stale state). */
+    fun hasLiveCall(): Boolean = room != null || joinJob?.isActive == true || heldRoom != null
+
     fun leave() {
         val callId = currentCallId
         val hadRoom = room != null
@@ -523,6 +527,14 @@ class CallManager(
     fun resumeHeldCall(): String? {
         val resumed = heldRoom ?: return null
         val resumedId = heldCallId
+        // A held room can die while parked (peer hung up, network dropped it). Restoring a dead
+        // room would strand the surface on a phantom "Connected" call that then blocks every
+        // future outgoing call — drop it and report nothing to resume instead.
+        if (resumed.state != Room.State.CONNECTED) {
+            dropHeldCall()
+            leave()
+            return null
+        }
         // Tear down the displacing call's live room first (leave() never touches the held room).
         leave()
         room = resumed
@@ -550,8 +562,8 @@ class CallManager(
     }
 
     /** Permanently end a held call — disconnects its room (its peer times out of grace). Used when
-     *  a held call is displaced by another hold. */
-    private fun dropHeldCall() {
+     *  a held call is displaced by another hold, or ends server-side while parked. */
+    fun dropHeldCall() {
         if (heldRoom == null) return
         diagnostic("livekit.hold.call.drop", heldCallId)
         runCatching { heldRoom?.disconnect() }

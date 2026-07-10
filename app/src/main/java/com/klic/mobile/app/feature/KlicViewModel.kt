@@ -306,6 +306,9 @@ class KlicViewModel(
         val conversationId: String?,
     )
     private var heldCall: HeldCall? = null
+    // When the current activeCall took the surface (elapsedRealtime) — lets startCall tell a
+    // call that is still setting up apart from one stranded with no machinery underneath.
+    private var activeCallStartedAt = 0L
     private var ringTimeoutJob: Job? = null
     // The in-flight server-side end/cancel/decline of the last call. A new outgoing call
     // joins this first so POST /calls can't race it into a 409 call_exists.
@@ -873,7 +876,16 @@ class KlicViewModel(
     }
 
     fun startCall(conversationId: String, kind: String, peerName: String) = viewModelScope.launch {
-        if (activeCall.value != null) return@launch
+        if (activeCall.value != null) {
+            // A surface stuck on a call with no machinery underneath (e.g. a held call restored
+            // after its room already died) used to swallow every call tap forever with no
+            // feedback. If nothing real is live and the state is old enough to rule out a call
+            // mid-setup, self-heal and place the call.
+            val stale = !callManager.hasLiveCall() && heldCall == null &&
+                android.os.SystemClock.elapsedRealtime() - activeCallStartedAt > 15_000
+            if (!stale) return@launch
+            clearCallSurface()
+        }
         // Let the previous call's server-side end/cancel land first, or POST /calls 409s
         // against the call we just hung up and the tap looks dead.
         serverTeardownJob?.join()
@@ -886,6 +898,8 @@ class KlicViewModel(
                 container.activeCallConversationId.value = conversationId
                 startActiveCall(it, peerName, outgoing = true)
             }
+            // A silently swallowed failure looks like a dead call button — say something.
+            .onFailure { error.value = str(com.klic.mobile.app.R.string.err_call_start) }
     }
 
     /** Answer an incoming call (from the full-screen notification): fetch a join token. */
@@ -926,6 +940,12 @@ class KlicViewModel(
      *  [resumeHeldCall] can restore it, then silence its media in the CallManager. */
     private fun holdCurrentCall() {
         val session = activeCall.value ?: return
+        // Only one hold slot: a previously parked call is displaced for good — end it
+        // server-side too (CallManager.dropHeldCall only disconnects the room, which would
+        // otherwise leave a zombie call that 409s the next outgoing attempt).
+        heldCall?.let { displaced ->
+            viewModelScope.launch { repo.endCall(displaced.session.callId) }
+        }
         heldCall = HeldCall(
             session = session,
             peerName = callPeerName.value,
@@ -945,7 +965,13 @@ class KlicViewModel(
     private fun resumeHeldCall() {
         val held = heldCall ?: return
         heldCall = null
-        callManager.resumeHeldCall()
+        if (callManager.resumeHeldCall() == null) {
+            // The held room died while parked — nothing to restore. Finish the teardown that
+            // finishCall skipped in favor of resuming, or the surface strands on a dead call.
+            clearCallSurface()
+            return
+        }
+        activeCallStartedAt = android.os.SystemClock.elapsedRealtime()
         activeCallOutgoing = held.outgoing
         callIsGroup.value = held.isGroup
         callPeerName.value = held.peerName
@@ -1383,6 +1409,7 @@ class KlicViewModel(
         callStatus.value = if (outgoing) "Calling..." else "Connecting..."
         callMinimized.value = false
         callConnectedAt.value = null
+        activeCallStartedAt = android.os.SystemClock.elapsedRealtime()
         activeCall.value = session
         // Play the outgoing ringback while we wait for the callee to answer (stopped on connect/end).
         if (outgoing) { startRingTimeout(session.callId); callManager.startRingback() } else cancelRingTimeout()
@@ -1408,6 +1435,27 @@ class KlicViewModel(
     }
 
     private fun handleCallEvent(event: SocketService.CallEvent) {
+        // A held call can end while parked (its peer hung up). It isn't the active call, so it
+        // would fall through the filter below and leave [heldCall] pointing at a dead room —
+        // which resumeHeldCall would then restore as a phantom call that blocks every future
+        // outgoing call. Drop it the moment the server says it's over.
+        val held = heldCall
+        if (held != null && event.callId == held.session.callId) {
+            when (event.type) {
+                SocketService.CallEvent.Type.CANCEL,
+                SocketService.CallEvent.Type.END -> {
+                    heldCall = null
+                    callManager.dropHeldCall()
+                }
+                // In a group a decline removes just that member; only a 1:1 decline ends it.
+                SocketService.CallEvent.Type.DECLINE -> if (!held.isGroup) {
+                    heldCall = null
+                    callManager.dropHeldCall()
+                }
+                else -> Unit
+            }
+            return
+        }
         val currentId = activeCall.value?.callId ?: return
         if (event.callId != currentId) return
         when (event.type) {
@@ -1445,20 +1493,25 @@ class KlicViewModel(
         // instead of tearing the whole call stack down.
         val resumeHeld = targetsLiveCall && heldCall != null
         if (targetsLiveCall && !resumeHeld) {
-            activeCall.value = null
-            activeCallOutgoing = false
-            callStatus.value = "Ended"
-            callIsGroup.value = false
-            callMinimized.value = false
-            callConnectedAt.value = null
-            container.activeCallConversationId.value = null
-            OngoingCallService.stop(container.appContext)
+            clearCallSurface()
         }
         viewModelScope.launch {
             if (delayMs > 0) delay(delayMs)
             if (resumeHeld) resumeHeldCall() else callManager.leave()
             if (id != null) finishingCallIds.remove(id)
         }
+    }
+
+    /** Reset every piece of call-surface state and stop the foreground service. */
+    private fun clearCallSurface() {
+        activeCall.value = null
+        activeCallOutgoing = false
+        callStatus.value = "Ended"
+        callIsGroup.value = false
+        callMinimized.value = false
+        callConnectedAt.value = null
+        container.activeCallConversationId.value = null
+        OngoingCallService.stop(container.appContext)
     }
 
     // Wraps a suspend auth call with error handling.
