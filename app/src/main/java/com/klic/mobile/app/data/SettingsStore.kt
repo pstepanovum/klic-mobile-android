@@ -77,6 +77,8 @@ object SettingsStore {
         val drafts: Map<String, String> = emptyMap(),
         /** Locally counted sent messages per conversation — drives Frequent contacts. */
         val sentCounts: Map<String, Long> = emptyMap(),
+        /** Message ids hidden on this device via the "Hide" action (UGC filter). */
+        val hiddenMessageIds: Set<String> = emptySet(),
     ) {
         fun autoDownloadAllowed(kind: String, onWifi: Boolean): Boolean {
             val key = "${kind}_${if (onWifi) "wifi" else "cell"}"
@@ -180,6 +182,18 @@ object SettingsStore {
         it[key] = (it[key] ?: 0L) + 1L
     }
 
+    /** "Hide" message action: keep the message out of this device's chat rendering. */
+    suspend fun hideMessage(messageId: String) = edit {
+        val current = it[HIDDEN_MESSAGES] ?: emptySet()
+        // Cap the set so it can't grow without bound.
+        it[HIDDEN_MESSAGES] = (current + messageId).let { set ->
+            if (set.size > 800) set.drop(set.size - 800).toSet() else set
+        }
+    }
+
+    /** "Reset hidden messages": every locally hidden message becomes visible again. */
+    suspend fun resetHiddenMessages() = edit { it.remove(HIDDEN_MESSAGES) }
+
     /** "Reset notification settings" (§8.5): toggles back to on + all local tones dropped. */
     suspend fun resetNotificationSettings() = edit { prefs ->
         prefs.remove(NOTIF_MESSAGES)
@@ -204,6 +218,7 @@ object SettingsStore {
     private val LINKS_NO_IN_APP = booleanPreferencesKey("links_never_in_app")
     private val CONTACTS_SYNC = booleanPreferencesKey("contacts_sync_enabled")
     private val SUGGEST_FREQUENT = booleanPreferencesKey("suggest_frequent_contacts")
+    private val HIDDEN_MESSAGES = stringSetPreferencesKey("hidden_message_ids")
 
     private suspend fun edit(block: (androidx.datastore.preferences.core.MutablePreferences) -> Unit) {
         appContext.settingsDataStore.edit(block)
@@ -260,6 +275,7 @@ object SettingsStore {
             suggestFrequentContacts = prefs[SUGGEST_FREQUENT] ?: true,
             drafts = drafts,
             sentCounts = sentCounts,
+            hiddenMessageIds = prefs[HIDDEN_MESSAGES] ?: emptySet(),
         )
     }
 }

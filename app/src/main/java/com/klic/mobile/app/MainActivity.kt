@@ -184,8 +184,10 @@ class MainActivity : ComponentActivity() {
                 // Offline or already on the latest version → proceeds normally.
                 var requiredUpdate by remember { mutableStateOf<AppUpdater.Release?>(null) }
                 LaunchedEffect(Unit) {
-                    AppUpdater.fetchLatest()?.let { latest ->
-                        if (AppUpdater.isNewerThanInstalled(latest.versionName)) requiredUpdate = latest
+                    if (BuildConfig.SELF_UPDATER_ENABLED) {
+                        AppUpdater.fetchLatest()?.let { latest ->
+                            if (AppUpdater.isNewerThanInstalled(latest.versionName)) requiredUpdate = latest
+                        }
                     }
                 }
                 val update = requiredUpdate

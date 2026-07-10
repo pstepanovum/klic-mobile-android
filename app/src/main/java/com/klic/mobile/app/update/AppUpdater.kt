@@ -30,6 +30,8 @@ object AppUpdater {
 
     /** Fetch the latest published (non-prerelease) release, or null on any failure. */
     suspend fun fetchLatest(): Release? = withContext(Dispatchers.IO) {
+        // Play builds never self-update — Google Play delivers updates itself.
+        if (!BuildConfig.SELF_UPDATER_ENABLED) return@withContext null
         runCatching {
             val req = Request.Builder()
                 .url(LATEST_URL)

@@ -151,11 +151,19 @@ fun ChatScreen(
     onCall: (String) -> Unit,
     onOpenProfile: () -> Unit = {},
 ) {
-    val messages by vm.messages.collectAsState()
+    val allMessages by vm.messages.collectAsState()
+    // Messages hidden locally via the long-press "Hide" action never render (UGC filter);
+    // "Reset hidden messages" in Privacy and Security brings them back.
+    val hiddenMessageIds = com.klic.mobile.app.data.SettingsStore.snapshot
+        .collectAsState().value.hiddenMessageIds
+    val messages = remember(allMessages, hiddenMessageIds) {
+        if (hiddenMessageIds.isEmpty()) allMessages
+        else allMessages.filter { it.id !in hiddenMessageIds }
+    }
     // §19.1: id → message index built once per list change, so the per-row reply-card
     // enrichment below is an O(1) lookup instead of an O(n) scan on every row that
     // carries a quote (previously O(n²) across the visible window while scrolling).
-    val messagesById = remember(messages) { messages.associateBy { it.id } }
+    val messagesById = remember(allMessages) { allMessages.associateBy { it.id } }
     val me by vm.currentUser.collectAsState()
     val presenceMap by vm.presence.collectAsState()
     // §10.4: composer drafts persist per conversation (restored here, saved on leave).
@@ -1202,6 +1210,13 @@ fun ChatScreen(
             onDelete = { deleteTarget = target },
             onDismiss = { menuTarget = null },
             onReport = { reportMessageTarget = target; menuTarget = null },
+            // Local-only hide — the message stays on the server but never renders here.
+            onHide = if (!targetIsMine) {
+                {
+                    scope.launch { com.klic.mobile.app.data.SettingsStore.hideMessage(target.id) }
+                    menuTarget = null
+                }
+            } else null,
             // §16.3: Pin/Unpin (DM: both sides; group: admin only).
             onPin = if (pinnable) {
                 {

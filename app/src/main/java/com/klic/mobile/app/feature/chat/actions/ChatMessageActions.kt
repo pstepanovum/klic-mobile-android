@@ -35,6 +35,7 @@ import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material.icons.outlined.Block
 import androidx.compose.material.icons.outlined.Flag
+import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -85,6 +86,8 @@ fun MessageActionsOverlay(
     onDismiss: () -> Unit,
     /** §12.1: "Report message" — only offered on other people's messages. */
     onReport: (() -> Unit)? = null,
+    /** "Hide" — locally hides another user's message on this device (UGC filter). */
+    onHide: (() -> Unit)? = null,
     /** §16.3: "Pin"/"Unpin" — null when the user lacks pin rights here. */
     onPin: (() -> Unit)? = null,
     isPinned: Boolean = false,
@@ -162,6 +165,9 @@ fun MessageActionsOverlay(
                         if (message.starred) stringResource(R.string.viewer_unstar) else stringResource(R.string.viewer_star),
                         if (message.starred) Icons.Filled.Star else Icons.Filled.StarBorder,
                     ) { onStar(); onDismiss() }
+                    if (!isMine && onHide != null) {
+                        ActionRow(stringResource(R.string.actions_hide), Icons.Outlined.VisibilityOff) { onHide() }
+                    }
                     if (!isMine && onReport != null) {
                         ActionRow(
                             stringResource(R.string.report_message_action),
