@@ -13,7 +13,9 @@ import io.livekit.android.AudioOptions
 import io.livekit.android.AudioType
 import io.livekit.android.LiveKit
 import io.livekit.android.LiveKitOverrides
+import io.livekit.android.RoomOptions
 import io.livekit.android.audio.AudioSwitchHandler
+import io.livekit.android.events.DisconnectReason
 import io.livekit.android.events.RoomEvent
 import io.livekit.android.events.collect
 import io.livekit.android.room.Room
@@ -186,6 +188,10 @@ class CallManager(
         val handler = createAudioHandler(callId, cameraOn).also { audioHandler = it }
         val room = LiveKit.create(
             appContext,
+            // Adaptive stream sizes each subscribed video to its actual on-screen renderer
+            // (and pauses off-screen ones); dynacast stops publishing simulcast layers nobody
+            // consumes. Big CPU/bandwidth win on group video grids.
+            options = RoomOptions(adaptiveStream = true, dynacast = true),
             overrides = LiveKitOverrides(
                 audioOptions = AudioOptions(
                     audioOutputType = AudioType.CallAudioType(),
@@ -260,7 +266,22 @@ class CallManager(
                         // WiFi→LTE switch with an IP change): rejoin with a fresh token instead
                         // of ending the call. isConnected guards against firing on a failed
                         // *initial* join, which the join() failure path already handles.
-                        if (!leaving && isConnected.value) startRejoin(callId)
+                        if (!leaving && isConnected.value) when (event.reason) {
+                            // Deliberate server-side eviction: another device of ours took the
+                            // call over (duplicate identity), we were removed, or the room is
+                            // gone. Rejoining would loop — or wrestle the call back from the
+                            // device that owns it now — so finish the surface quietly instead.
+                            // CALL_OVER (not GAVE_UP) so the ViewModel never ends the call
+                            // server-side: on DUPLICATE_IDENTITY it lives on elsewhere.
+                            DisconnectReason.DUPLICATE_IDENTITY,
+                            DisconnectReason.PARTICIPANT_REMOVED,
+                            DisconnectReason.ROOM_DELETED -> {
+                                diagnostic("livekit.disconnect.evicted", callId, "reason=${event.reason}")
+                                isReconnecting.value = false
+                                rejoinFailed.tryEmit(RejoinOutcome.CALL_OVER)
+                            }
+                            else -> startRejoin(callId)
+                        }
                     }
                     is RoomEvent.TrackSubscribed -> diagnostic(
                         "livekit.remote.subscribe",
@@ -296,6 +317,10 @@ class CallManager(
      */
     private fun startRejoin(callId: String) {
         if (rejoinJob?.isActive == true) return
+        // The grace timers belong to the room that just died — the drop was OURS, not the
+        // peers'. A peer already sitting in the new room emits no ParticipantConnected on
+        // rejoin, so a leftover timer would always fire at 60s and end a recovered call.
+        clearGrace()
         isReconnecting.value = true
         diagnostic("livekit.rejoin.start", callId)
         rejoinJob = scope.launch {

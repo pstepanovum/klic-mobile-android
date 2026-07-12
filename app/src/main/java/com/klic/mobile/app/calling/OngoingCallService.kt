@@ -71,15 +71,43 @@ class OngoingCallService : Service() {
     private fun enterForeground(peerName: String, cameraOn: Boolean) {
         val notification = CallNotifications.ongoingCallNotification(this, peerName, isVideo = cameraOn)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            var type = ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
-            // Camera FGS type is only legal once CAMERA is granted, else startForeground throws.
+            // Media FGS types are only legal while their runtime permission is granted, else
+            // startForeground throws (SecurityException on Android 14+) and takes the whole
+            // call down with it. The call entry points request the mic before any call starts;
+            // this is the never-crash backstop.
+            var type = 0
+            if (hasPermission(Manifest.permission.RECORD_AUDIO)) {
+                type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
+            }
             if (cameraOn && hasPermission(Manifest.permission.CAMERA)) {
                 type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA
             }
-            startForeground(CallNotifications.ONGOING_CALL_ID, notification, type)
+            if (type != 0) {
+                startForeground(CallNotifications.ONGOING_CALL_ID, notification, type)
+            } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                // Neither grant is held (shouldn't happen once the entry points gate on the
+                // mic). shortService needs no permission or manifest entry — degraded (3 min
+                // cap, see onTimeout) but never a crash.
+                startForeground(
+                    CallNotifications.ONGOING_CALL_ID, notification,
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_SHORT_SERVICE,
+                )
+            } else {
+                startForeground(CallNotifications.ONGOING_CALL_ID, notification, 0)
+            }
         } else {
             startForeground(CallNotifications.ONGOING_CALL_ID, notification)
         }
+    }
+
+    // Only reachable on the shortService fallback above (mic + camera grants both missing):
+    // stop cleanly at its 3-minute cap instead of ANRing the process.
+    override fun onTimeout(startId: Int) {
+        stopSelf(startId)
+    }
+
+    override fun onTimeout(startId: Int, fgsType: Int) {
+        stopSelf(startId)
     }
 
     private fun hasPermission(permission: String): Boolean =

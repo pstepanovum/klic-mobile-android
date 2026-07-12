@@ -341,7 +341,21 @@ class KlicViewModel(
         container.themeMode = mode
     }
 
-    fun callFriendDirect(userId: String, kind: String, peerName: String) =
+    /** Call actions parked here until MainActivity runs the RECORD_AUDIO request — re-fired
+     *  on grant, dropped (with a rationale toast) on denial. See [withMicPermission]. */
+    val micPermissionRequests = MutableSharedFlow<() -> Unit>(extraBufferCapacity = 1)
+
+    /** Every user-initiated call path funnels through this: without the mic grant the
+     *  ongoing-call service's microphone FGS type is illegal on Android 14+ (instant crash),
+     *  so a call may only proceed with the grant in hand. */
+    private fun withMicPermission(action: () -> Unit) {
+        val granted = androidx.core.content.ContextCompat.checkSelfPermission(
+            container.appContext, android.Manifest.permission.RECORD_AUDIO,
+        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        if (granted) action() else micPermissionRequests.tryEmit(action)
+    }
+
+    fun callFriendDirect(userId: String, kind: String, peerName: String) = withMicPermission {
         viewModelScope.launch {
             if (activeCall.value != null) return@launch
             serverTeardownJob?.join()
@@ -356,6 +370,7 @@ class KlicViewModel(
                 startActiveCall(session, peerName, outgoing = true)
             }
         }
+    }
 
     fun loadConversations() = viewModelScope.launch {
         runCatching { repo.conversations() }.onSuccess { list ->
@@ -875,35 +890,42 @@ class KlicViewModel(
         uploadTasks.value = uploadTasks.value.map { if (it.id == id) transform(it) else it }
     }
 
-    fun startCall(conversationId: String, kind: String, peerName: String) = viewModelScope.launch {
-        if (activeCall.value != null) {
-            // A surface stuck on a call with no machinery underneath (e.g. a held call restored
-            // after its room already died) used to swallow every call tap forever with no
-            // feedback. If nothing real is live and the state is old enough to rule out a call
-            // mid-setup, self-heal and place the call.
-            val stale = !callManager.hasLiveCall() && heldCall == null &&
-                android.os.SystemClock.elapsedRealtime() - activeCallStartedAt > 15_000
-            if (!stale) return@launch
-            clearCallSurface()
-        }
-        // Let the previous call's server-side end/cancel land first, or POST /calls 409s
-        // against the call we just hung up and the tap looks dead.
-        serverTeardownJob?.join()
-        val convo = conversations.value.firstOrNull { it.id == conversationId }
-        callIsGroup.value = convo?.type == "GROUP"
-        callPeerName.value = peerName
-        callPeerId.value = if (convo?.type == "DIRECT") convo.members.firstOrNull()?.id else null
-        runCatching { repo.startCall(conversationId, kind) }
-            .onSuccess {
-                container.activeCallConversationId.value = conversationId
-                startActiveCall(it, peerName, outgoing = true)
+    fun startCall(conversationId: String, kind: String, peerName: String) = withMicPermission {
+        viewModelScope.launch {
+            if (activeCall.value != null) {
+                // A surface stuck on a call with no machinery underneath (e.g. a held call restored
+                // after its room already died) used to swallow every call tap forever with no
+                // feedback. If nothing real is live and the state is old enough to rule out a call
+                // mid-setup, self-heal and place the call.
+                val stale = !callManager.hasLiveCall() && heldCall == null &&
+                    android.os.SystemClock.elapsedRealtime() - activeCallStartedAt > 15_000
+                if (!stale) return@launch
+                clearCallSurface()
             }
-            // A silently swallowed failure looks like a dead call button — say something.
-            .onFailure { error.value = str(com.klic.mobile.app.R.string.err_call_start) }
+            // Let the previous call's server-side end/cancel land first, or POST /calls 409s
+            // against the call we just hung up and the tap looks dead.
+            serverTeardownJob?.join()
+            val convo = conversations.value.firstOrNull { it.id == conversationId }
+            callIsGroup.value = convo?.type == "GROUP"
+            callPeerName.value = peerName
+            callPeerId.value = if (convo?.type == "DIRECT") convo.members.firstOrNull()?.id else null
+            runCatching { repo.startCall(conversationId, kind) }
+                .onSuccess {
+                    container.activeCallConversationId.value = conversationId
+                    startActiveCall(it, peerName, outgoing = true)
+                }
+                // A silently swallowed failure looks like a dead call button — say something.
+                .onFailure { error.value = str(com.klic.mobile.app.R.string.err_call_start) }
+        }
     }
 
     /** Answer an incoming call (from the full-screen notification): fetch a join token. */
-    fun acceptIncomingCall(callId: String, peerName: String, isGroup: Boolean = false) = viewModelScope.launch {
+    fun acceptIncomingCall(
+        callId: String,
+        peerName: String,
+        isGroup: Boolean = false,
+        conversationId: String? = null,
+    ) = viewModelScope.launch {
         // On an FCM cold start this can run before the init coroutine has loaded/refreshed
         // the stored tokens — joining then would 401 and race the rotation. Wait it out.
         authReady.await()
@@ -920,6 +942,12 @@ class KlicViewModel(
         val result = runCatching { repo.joinToken(callId) }
         result.onSuccess { session ->
             if (holding) holdCurrentCall()
+            // Glare guard, parity with the outgoing writers: a late duplicate invite (FCM
+            // redelivery) for this conversation must not re-ring over the answered call.
+            // Cleared with the rest of the surface in clearCallSurface.
+            if (!conversationId.isNullOrBlank()) {
+                container.activeCallConversationId.value = conversationId
+            }
             callIsGroup.value = isGroup
             callPeerName.value = peerName
             callStatus.value = "Connecting..."
@@ -993,32 +1021,34 @@ class KlicViewModel(
     }
 
     /** Late-join the conversation's ongoing call from the chat banner (same flow as answering). */
-    fun joinOngoingCall(conversationId: String) = viewModelScope.launch {
-        if (activeCall.value != null) return@launch
-        authReady.await()
-        val info = runCatching { repo.activeCall(conversationId) }.getOrNull()
-        if (info == null) {
-            // The call ended between render and tap.
-            if (openConversationId == conversationId) chatActiveCall.value = null
-            return@launch
+    fun joinOngoingCall(conversationId: String) = withMicPermission {
+        viewModelScope.launch {
+            if (activeCall.value != null) return@launch
+            authReady.await()
+            val info = runCatching { repo.activeCall(conversationId) }.getOrNull()
+            if (info == null) {
+                // The call ended between render and tap.
+                if (openConversationId == conversationId) chatActiveCall.value = null
+                return@launch
+            }
+            val convo = conversations.value.firstOrNull { it.id == conversationId }
+            val title = when {
+                convo == null -> "Call"
+                !convo.title.isNullOrBlank() -> convo.title
+                convo.type == "DIRECT" -> convo.members.firstOrNull()?.displayName ?: "Call"
+                else -> convo.members.joinToString(", ") { it.displayName }.ifBlank { "Group" }
+            }
+            callIsGroup.value = convo?.type == "GROUP"
+            callPeerName.value = title
+            callPeerId.value = if (convo?.type == "DIRECT") convo.members.firstOrNull()?.id else null
+            callStatus.value = "Connecting..."
+            val result = runCatching { repo.joinToken(info.callId) }
+            result.onSuccess {
+                container.activeCallConversationId.value = conversationId
+                startActiveCall(it, title, outgoing = false)
+            }
+            if (result.isFailure && openConversationId == conversationId) chatActiveCall.value = null
         }
-        val convo = conversations.value.firstOrNull { it.id == conversationId }
-        val title = when {
-            convo == null -> "Call"
-            !convo.title.isNullOrBlank() -> convo.title
-            convo.type == "DIRECT" -> convo.members.firstOrNull()?.displayName ?: "Call"
-            else -> convo.members.joinToString(", ") { it.displayName }.ifBlank { "Group" }
-        }
-        callIsGroup.value = convo?.type == "GROUP"
-        callPeerName.value = title
-        callPeerId.value = if (convo?.type == "DIRECT") convo.members.firstOrNull()?.id else null
-        callStatus.value = "Connecting..."
-        val result = runCatching { repo.joinToken(info.callId) }
-        result.onSuccess {
-            container.activeCallConversationId.value = conversationId
-            startActiveCall(it, title, outgoing = false)
-        }
-        if (result.isFailure && openConversationId == conversationId) chatActiveCall.value = null
     }
 
     /** Collapse the in-call screen into the floating overlay (media untouched). */

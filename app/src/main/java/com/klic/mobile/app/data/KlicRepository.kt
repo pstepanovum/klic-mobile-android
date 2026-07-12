@@ -197,11 +197,17 @@ class KlicRepository(
         }
     }
 
-    suspend fun endCall(callId: String) { runCatching { api.endCall(callId) } }
+    // The acting device's installId rides call actions as X-Install-Id so the server can
+    // dismiss this user's other ringing devices and scope teardown pushes (same stable id
+    // the device registration sends). Best-effort — a miss just keeps the old behavior.
+    private suspend fun callInstallId(): String? =
+        runCatching { installIdProvider?.invoke() }.getOrNull()
+
+    suspend fun endCall(callId: String) { runCatching { api.endCall(callId, callInstallId()) } }
     suspend fun mediaJoined(callId: String) { runCatching { api.mediaJoined(callId) } }
-    suspend fun declineCall(callId: String) { runCatching { api.declineCall(callId) } }
-    suspend fun cancelCall(callId: String) { runCatching { api.cancelCall(callId) } }
-    suspend fun failCall(callId: String) { runCatching { api.failCall(callId) } }
+    suspend fun declineCall(callId: String) { runCatching { api.declineCall(callId, callInstallId()) } }
+    suspend fun cancelCall(callId: String) { runCatching { api.cancelCall(callId, callInstallId()) } }
+    suspend fun failCall(callId: String) { runCatching { api.failCall(callId, callInstallId()) } }
 
     suspend fun friends(): List<User> = api.friends()
     suspend fun friendRequests(): List<FriendRequest> = api.friendRequests()
@@ -402,7 +408,7 @@ class KlicRepository(
     suspend fun startCall(conversationId: String, kind: String): CallSession =
         api.startCall(StartCallRequest(conversationId, kind))
 
-    suspend fun joinToken(callId: String): CallSession = api.joinToken(callId)
+    suspend fun joinToken(callId: String): CallSession = api.joinToken(callId, callInstallId())
 
     /** The conversation's live call, or null when there is none (the endpoint 404s). */
     suspend fun activeCall(conversationId: String): ActiveCallInfo? =
