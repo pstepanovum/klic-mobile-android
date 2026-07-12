@@ -1,15 +1,20 @@
 package com.klic.mobile.app.calling
 
+import android.Manifest
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.pm.PackageManager
 import android.app.KeyguardManager
 import android.os.Build
 import android.os.Bundle
 import android.view.WindowManager
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -40,6 +45,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import com.klic.mobile.app.KlicApplication
 import com.klic.mobile.app.MainActivity
+import com.klic.mobile.app.R
 import com.klic.mobile.app.ui.theme.KlicIcons
 import com.klic.mobile.app.ui.theme.KlicTheme
 import kotlinx.coroutines.launch
@@ -133,7 +139,33 @@ class IncomingCallActivity : ComponentActivity() {
         super.onDestroy()
     }
 
+    // Answering needs the mic grant up front: the join starts a microphone-type foreground
+    // service, which throws on Android 14+ without RECORD_AUDIO. On denial the ring keeps
+    // going — the user can still decline, or grant and answer.
+    private var pendingAccept: CallInvite? = null
+    private val micPermission =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+            val invite = pendingAccept
+            pendingAccept = null
+            if (granted && invite != null) {
+                proceedToAccept(invite)
+            } else {
+                Toast.makeText(this, getString(R.string.call_mic_permission_needed), Toast.LENGTH_LONG).show()
+            }
+        }
+
     private fun accept(invite: CallInvite) {
+        val micGranted = ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) ==
+            PackageManager.PERMISSION_GRANTED
+        if (!micGranted) {
+            pendingAccept = invite
+            micPermission.launch(Manifest.permission.RECORD_AUDIO)
+            return
+        }
+        proceedToAccept(invite)
+    }
+
+    private fun proceedToAccept(invite: CallInvite) {
         CallRinger.stop()
         CallNotifications.cancelIncomingCall(this)
         startActivity(
@@ -149,7 +181,13 @@ class IncomingCallActivity : ComponentActivity() {
     private fun decline(invite: CallInvite) {
         CallRinger.stop()
         val container = (application as KlicApplication).container
-        container.applicationScope.launch { container.repository.declineCall(invite.callId) }
+        container.applicationScope.launch {
+            // FCM can ring a cold process that never loaded the stored tokens — the decline
+            // would 401 silently and the caller rings out the full timeout. Load them first
+            // (mirrors the accept path's authReady gate in the ViewModel).
+            if (!container.tokenStore.hasSession) container.tokenStore.load()
+            container.repository.declineCall(invite.callId)
+        }
         CallNotifications.cancelIncomingCall(this)
         finish()
     }

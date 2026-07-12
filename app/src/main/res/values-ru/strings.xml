@@ -446,6 +446,7 @@
     <string name="err_send_photo">Не удалось отправить фото. Попробуйте ещё раз.</string>
     <string name="err_sign_in">Не удалось войти. Проверьте свои данные.</string>
     <string name="err_call_start">Не удалось начать звонок. Попробуйте ещё раз.</string>
+    <string name="call_mic_permission_needed">Для звонков Klic нужен доступ к микрофону.</string>
     <string name="privacy_blocked_toast">%1$s заблокирован(а).</string>
     <string name="err_block">Не удалось заблокировать пользователя %1$s.</string>
     <string name="err_unblock">Не удалось разблокировать. Попробуйте ещё раз.</string>
