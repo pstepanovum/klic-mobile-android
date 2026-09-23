@@ -8,6 +8,7 @@ import android.content.res.Configuration
 import android.os.Bundle
 import android.util.Rational
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
@@ -108,6 +109,23 @@ class MainActivity : ComponentActivity() {
 
     private val permissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {}
+
+    // Answer tapped on the call notification without the mic grant (that path skips
+    // IncomingCallActivity and its own request): the invite waits here while the system
+    // dialog is up. Granted → answer; denied → explain, and the ring keeps going.
+    private var pendingAnswer: CallInvite? = null
+    private val answerMicLauncher =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+            val invite = pendingAnswer
+            pendingAnswer = null
+            if (granted && invite != null) {
+                acceptInvite(invite)
+            } else {
+                android.widget.Toast.makeText(
+                    this, getString(R.string.call_mic_permission_needed), android.widget.Toast.LENGTH_LONG,
+                ).show()
+            }
+        }
 
     override fun attachBaseContext(newBase: android.content.Context) {
         // §10.5: apply the in-app language on pre-33 devices.
@@ -256,22 +274,34 @@ class MainActivity : ComponentActivity() {
                 ?.let { pendingAddFriend.value = it }
         }
         if (intent?.action == IncomingCallActivity.ACTION_ACCEPT_CALL) {
-            val invite = CallInvite.fromIntent(intent)
-            pendingCall.value = invite
-            // Answering from the notification's Answer button lands here without going through
-            // IncomingCallActivity, so tear down the incoming surfaces ourselves: stop the ring,
-            // remove the incoming notification, and dismiss the full-screen Activity if it's up.
-            CallRinger.stop()
-            CallNotifications.cancelIncomingCall(this)
-            invite?.callId?.let { id ->
-                sendBroadcast(
-                    Intent(IncomingCallActivity.ACTION_CALL_ENDED).apply {
-                        setPackage(packageName)
-                        putExtra("callId", id)
-                    }
-                )
+            val invite = CallInvite.fromIntent(intent) ?: return
+            // Joining starts a microphone-type FGS, illegal on Android 14+ without the mic
+            // grant — ask before touching the ring so a denial leaves the call answerable.
+            val micGranted = androidx.core.content.ContextCompat.checkSelfPermission(
+                this, Manifest.permission.RECORD_AUDIO,
+            ) == PackageManager.PERMISSION_GRANTED
+            if (!micGranted) {
+                pendingAnswer = invite
+                answerMicLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                return
             }
+            acceptInvite(invite)
         }
+    }
+
+    private fun acceptInvite(invite: CallInvite) {
+        pendingCall.value = invite
+        // Answering from the notification's Answer button lands here without going through
+        // IncomingCallActivity, so tear down the incoming surfaces ourselves: stop the ring,
+        // remove the incoming notification, and dismiss the full-screen Activity if it's up.
+        CallRinger.stop()
+        CallNotifications.cancelIncomingCall(this)
+        sendBroadcast(
+            Intent(IncomingCallActivity.ACTION_CALL_ENDED).apply {
+                setPackage(packageName)
+                putExtra("callId", invite.callId)
+            }
+        )
     }
 
     // Picture-in-Picture: "compact" the call so the user can keep using Klic during it.
@@ -321,6 +351,23 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+        // Outgoing/join call paths blocked on the mic grant (see withMicPermission): run the
+        // system request here, re-fire the parked call action on grant, explain on denial.
+        var pendingCallAction by remember { mutableStateOf<(() -> Unit)?>(null) }
+        val callMicLauncher =
+            rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+                val action = pendingCallAction
+                pendingCallAction = null
+                if (granted) action?.invoke()
+                else vm.error.value = context.getString(R.string.call_mic_permission_needed)
+            }
+        LaunchedEffect(Unit) {
+            vm.micPermissionRequests.collect { action ->
+                pendingCallAction = action
+                callMicLauncher.launch(Manifest.permission.RECORD_AUDIO)
+            }
+        }
+
         val backStack by navController.currentBackStackEntryAsState()
         val route = backStack?.destination?.route
         val showBar = route in tabRoutes
@@ -338,7 +385,12 @@ class MainActivity : ComponentActivity() {
         val incoming by pendingCall.collectAsState()
         LaunchedEffect(incoming) {
             incoming?.let { invite ->
-                vm.acceptIncomingCall(invite.callId, invite.displayLabel, isGroup = invite.isGroup)
+                vm.acceptIncomingCall(
+                    invite.callId,
+                    invite.displayLabel,
+                    isGroup = invite.isGroup,
+                    conversationId = invite.conversationId,
+                )
                 pendingCall.value = null
             }
         }

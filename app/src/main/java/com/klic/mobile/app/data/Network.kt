@@ -15,6 +15,7 @@ import retrofit2.converter.kotlinx.serialization.asConverterFactory
 import retrofit2.http.Body
 import retrofit2.http.DELETE
 import retrofit2.http.GET
+import retrofit2.http.Header
 import retrofit2.http.PATCH
 import retrofit2.http.POST
 import retrofit2.http.PUT
@@ -93,17 +94,33 @@ interface KlicApi {
     @POST("calls/{id}/media-joined")
     suspend fun mediaJoined(@Path("id") id: String): Response<ResponseBody>
 
+    // Call actions carry the acting device's stable installId as X-Install-Id so the server
+    // can dismiss this user's OTHER ringing devices (answered/declined elsewhere) and scope
+    // teardown pushes per-device. Null (older installs mid-migration) keeps the old behavior.
+
     @POST("calls/{id}/decline")
-    suspend fun declineCall(@Path("id") id: String): Response<ResponseBody>
+    suspend fun declineCall(
+        @Path("id") id: String,
+        @Header("X-Install-Id") installId: String? = null,
+    ): Response<ResponseBody>
 
     @POST("calls/{id}/cancel")
-    suspend fun cancelCall(@Path("id") id: String): Response<ResponseBody>
+    suspend fun cancelCall(
+        @Path("id") id: String,
+        @Header("X-Install-Id") installId: String? = null,
+    ): Response<ResponseBody>
 
     @POST("calls/{id}/fail")
-    suspend fun failCall(@Path("id") id: String): Response<ResponseBody>
+    suspend fun failCall(
+        @Path("id") id: String,
+        @Header("X-Install-Id") installId: String? = null,
+    ): Response<ResponseBody>
 
     @POST("calls/{id}/end")
-    suspend fun endCall(@Path("id") id: String): Response<ResponseBody>
+    suspend fun endCall(
+        @Path("id") id: String,
+        @Header("X-Install-Id") installId: String? = null,
+    ): Response<ResponseBody>
 
     @GET("users")
     suspend fun findUser(@Query("username") username: String): List<User>
@@ -131,7 +148,10 @@ interface KlicApi {
     suspend fun startCall(@Body body: StartCallRequest): CallSession
 
     @POST("calls/{id}/token")
-    suspend fun joinToken(@Path("id") id: String): CallSession
+    suspend fun joinToken(
+        @Path("id") id: String,
+        @Header("X-Install-Id") installId: String? = null,
+    ): CallSession
 
     @GET("conversations/{id}/active-call")
     suspend fun activeCall(@Path("id") id: String): ActiveCallInfo
