@@ -33,7 +33,9 @@ android {
         targetSdk = 35
         versionCode = 81
         versionName = "0.6.20"
-        buildConfigField("String", "KLIC_API_ORIGIN", stringBuildConfig("KLIC_API_ORIGIN", "https://api.89.34.230.2.sslip.io"))
+        // Domain, never an IP-derived host: the 2026-09 outage proved sslip origins die
+        // with the server's IP, stranding every installed build. DNS moves; this doesn't.
+        buildConfigField("String", "KLIC_API_ORIGIN", stringBuildConfig("KLIC_API_ORIGIN", "https://api.klic.pstepanov.dev"))
         // libsignal's native lib is ~70 MB per ABI — ship arm64 only (every Android
         // phone since ~2017). Emulator debug installs come from Studio's own build.
         ndk { abiFilters += "arm64-v8a" }
