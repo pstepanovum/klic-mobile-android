@@ -178,7 +178,7 @@
     <string name="pp_security_title">Безопасность</string>
     <string name="pp_security_body">Мы используем отраслевые стандарты шифрования для защиты ваших данных как при передаче, так и при хранении.</string>
     <string name="pp_contact_title">Контакты</string>
-    <string name="pp_contact_body">Вопросы? Пишите нам на privacy@klic.pstepanov.dev</string>
+    <string name="pp_contact_body">Вопросы? Пишите нам на support@pstepanov.dev</string>
     <string name="tos_title">Условия использования</string>
     <string name="tos_effective_date">Дата вступления в силу: 9 июля 2026 г.</string>
     <string name="tos_accept_title">Принятие условий</string>
@@ -194,7 +194,7 @@
     <string name="tos_warranty_title">Отказ от гарантий</string>
     <string name="tos_warranty_body">Klic предоставляется «как есть», без каких-либо гарантий. Мы стараемся, чтобы сервис работал быстро и надёжно, но не можем обещать, что он всегда будет доступен и безошибочен, и не несём ответственности за убытки, связанные с использованием приложения.</string>
     <string name="tos_contact_title">Контакты</string>
-    <string name="tos_contact_body">Вопросы по этим условиям? Пишите нам на privacy@klic.pstepanov.dev</string>
+    <string name="tos_contact_body">Вопросы по этим условиям? Пишите нам на support@pstepanov.dev</string>
     <string name="convos_new_message">Новое сообщение</string>
     <string name="convos_search_chats">Поиск чатов</string>
     <string name="convos_group_details">О группе</string>

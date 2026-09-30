@@ -214,7 +214,7 @@
     <string name="pp_security_title">Security</string>
     <string name="pp_security_body">We use industry-standard encryption to protect your data in transit and at rest.</string>
     <string name="pp_contact_title">Contact</string>
-    <string name="pp_contact_body">Questions? Reach us at privacy@klic.pstepanov.dev</string>
+    <string name="pp_contact_body">Questions? Reach us at support@pstepanov.dev</string>
 
     <!-- Terms of Service -->
     <string name="tos_title">Terms of Service</string>
@@ -232,7 +232,7 @@
     <string name="tos_warranty_title">Disclaimer</string>
     <string name="tos_warranty_body">Klic is provided \"as is\", without warranties of any kind. We work hard to keep the service fast and reliable, but we can\'t promise it will always be available or error-free, and we are not liable for losses arising from your use of the app.</string>
     <string name="tos_contact_title">Contact</string>
-    <string name="tos_contact_body">Questions about these terms? Reach us at privacy@klic.pstepanov.dev</string>
+    <string name="tos_contact_body">Questions about these terms? Reach us at support@pstepanov.dev</string>
 
     <!-- Chats list -->
     <string name="convos_new_message">New Message</string>

@@ -178,7 +178,7 @@
     <string name="pp_security_title">安全性</string>
     <string name="pp_security_body">我们使用行业标准加密技术来保护传输中和存储的数据。</string>
     <string name="pp_contact_title">联系我们</string>
-    <string name="pp_contact_body">有疑问？请通过 privacy@klic.pstepanov.dev 联系我们</string>
+    <string name="pp_contact_body">有疑问？请通过 support@pstepanov.dev 联系我们</string>
     <string name="tos_title">服务条款</string>
     <string name="tos_effective_date">生效日期：2026年7月9日</string>
     <string name="tos_accept_title">条款的接受</string>
@@ -194,7 +194,7 @@
     <string name="tos_warranty_title">免责声明</string>
     <string name="tos_warranty_body">Klic 按“现状”提供，不作任何形式的保证。我们努力保持服务快速可靠，但无法承诺它始终可用或没有错误，也不对因使用本应用产生的损失承担责任。</string>
     <string name="tos_contact_title">联系我们</string>
-    <string name="tos_contact_body">对这些条款有疑问？请通过 privacy@klic.pstepanov.dev 联系我们</string>
+    <string name="tos_contact_body">对这些条款有疑问？请通过 support@pstepanov.dev 联系我们</string>
     <string name="convos_new_message">新消息</string>
     <string name="convos_search_chats">搜索聊天</string>
     <string name="convos_group_details">群组详情</string>
