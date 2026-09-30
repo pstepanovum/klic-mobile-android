@@ -31,8 +31,8 @@ android {
         applicationId = "com.klic.mobile.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 82
-        versionName = "0.6.21"
+        versionCode = 83
+        versionName = "1.0"
         // Domain, never an IP-derived host: the 2026-09 outage proved sslip origins die
         // with the server's IP, stranding every installed build. DNS moves; this doesn't.
         buildConfigField("String", "KLIC_API_ORIGIN", stringBuildConfig("KLIC_API_ORIGIN", "https://api.klic.pstepanov.dev"))
