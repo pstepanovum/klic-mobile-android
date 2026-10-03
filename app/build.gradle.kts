@@ -100,6 +100,12 @@ android {
     }
 }
 
+// Kotlin 2.0.20+ Compose compiler: strong skipping is already on by default. The stability
+// file marks the immutable API models (List-bearing data classes) as stable.
+composeCompiler {
+    stabilityConfigurationFile = layout.projectDirectory.file("compose_stability.conf")
+}
+
 dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
