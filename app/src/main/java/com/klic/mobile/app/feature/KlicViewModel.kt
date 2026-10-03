@@ -328,6 +328,8 @@ class KlicViewModel(
     }
 
     fun logout() = viewModelScope.launch {
+        // Best-effort server revoke (refresh tokens + this install's push device),
+        // bounded by a short timeout, then local token wipe — never fails.
         repo.logout()
         socket.disconnect()
         // §13.12: the app lock never survives the signed-out transition — the next
@@ -1560,7 +1562,8 @@ class KlicViewModel(
                 SettingsStore.deleteAllDrafts()
                 // §13.12: full wipe (passcode + biometric toggle + auto-lock mode).
                 com.klic.mobile.app.data.AppLockStore.wipe()
-                repo.logout()
+                // Server already deleted the account (and its sessions/devices).
+                repo.logout(revokeRemote = false)
                 socket.disconnect()
                 conversations.value = emptyList()
                 messages.value = emptyList()

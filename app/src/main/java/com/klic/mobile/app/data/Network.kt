@@ -346,6 +346,17 @@ interface KlicApi {
     ): ResponseBody
 }
 
+/**
+ * Unauthenticated session endpoints, served by a bare client (see [Network.createSessionApi]):
+ * no Authorization header and no [TokenAuthenticator], so a 401 here can never trigger a
+ * token refresh — logout must not rotate the very session it is trying to revoke.
+ */
+interface SessionApi {
+    // 204 on success. The refresh token in the body is the credential.
+    @POST("auth/logout")
+    suspend fun logout(@Body body: LogoutRequest): Response<ResponseBody>
+}
+
 /** Bare, synchronous refresh used by the Authenticator (no auth header, no authenticator → no recursion). */
 private interface AuthApi {
     @POST("auth/refresh")
@@ -361,6 +372,21 @@ object Network {
     fun avatarUrl(userId: String): String = "$BASE_HTTP/api/v1/users/$userId/avatar"
 
     private val json = Json { ignoreUnknownKeys = true }
+
+    /**
+     * Bare client for [SessionApi] — no interceptors, no authenticator — with a short
+     * whole-call timeout so a best-effort logout never holds up signing out.
+     */
+    fun createSessionApi(): SessionApi = Retrofit.Builder()
+        .baseUrl(API)
+        .client(
+            OkHttpClient.Builder()
+                .callTimeout(java.time.Duration.ofSeconds(5))
+                .build(),
+        )
+        .addConverterFactory(json.asConverterFactory("application/json".toMediaType()))
+        .build()
+        .create(SessionApi::class.java)
 
     fun create(tokenStore: TokenStore, onSessionExpired: () -> Unit): KlicApi {
         val converter = json.asConverterFactory("application/json".toMediaType())

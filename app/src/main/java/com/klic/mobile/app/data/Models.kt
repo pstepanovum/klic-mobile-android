@@ -72,6 +72,14 @@ data class LoginRequest(val username: String, val password: String)
 @Serializable
 data class RefreshRequest(val refreshToken: String)
 
+/**
+ * POST /auth/logout — revokes this login session's refresh tokens; with [installId]
+ * the server also drops this install's push-device row(s). A null installId is
+ * omitted on the wire (encodeDefaults=false), matching the legacy body shape.
+ */
+@Serializable
+data class LogoutRequest(val refreshToken: String, val installId: String? = null)
+
 @OptIn(ExperimentalSerializationApi::class)
 @Serializable
 data class MobileDiagnosticRequest(

@@ -2,6 +2,7 @@ package com.klic.mobile.app.data
 
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
@@ -11,12 +12,17 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 
+/** Upper bound on the best-effort server-side logout before local sign-out proceeds. */
+private const val LOGOUT_TIMEOUT_MS = 5_000L
+
 /** Single entry point for the UI to reach the API + token storage. */
 class KlicRepository(
     private val api: KlicApi,
     private val tokenStore: TokenStore,
     /** App context — resolves staged content Uris for streamed uploads (§13.15). */
     private val appContext: android.content.Context? = null,
+    /** Unauthenticated logout endpoint (bare client, never hits the TokenAuthenticator). */
+    private val sessionApi: SessionApi? = null,
 ) {
     private val json = Json { ignoreUnknownKeys = true }
     // Bare client for presigned PUT uploads — no auth header, no base URL.
@@ -74,7 +80,23 @@ class KlicRepository(
         tokenStore.save(res.accessToken, res.refreshToken)
     }
 
-    suspend fun logout() {
+    /**
+     * Signs out locally. With [revokeRemote] (the default) it first tells the server —
+     * best-effort, capped at a few seconds — to revoke this session's refresh tokens and
+     * drop this install's push-device row, so the phone stops receiving pushes. Network
+     * errors / timeouts / non-2xx never block or fail the local sign-out.
+     */
+    suspend fun logout(revokeRemote: Boolean = true) {
+        val refresh = tokenStore.cachedRefresh
+        val sessionApi = sessionApi
+        if (revokeRemote && refresh != null && sessionApi != null) {
+            runCatching {
+                withTimeoutOrNull(LOGOUT_TIMEOUT_MS) {
+                    val installId = runCatching { installIdProvider?.invoke() }.getOrNull()
+                    sessionApi.logout(LogoutRequest(refresh, installId)).body()?.close()
+                }
+            }
+        }
         tokenStore.clear()
         currentUser = null
     }
