@@ -3,10 +3,10 @@ package com.klic.mobile.app.data
 import android.content.Context
 import android.os.Looper
 import android.util.Base64
+import android.util.Log
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
-import com.klic.mobile.app.BuildConfig
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.JsonPrimitive
@@ -83,10 +83,13 @@ class TokenStore(private val context: Context) {
         runBlocking { clear() }
     }
 
-    /** Debug builds fail fast if a blocking DataStore write ever lands on the UI thread. */
+    /**
+     * Flags a blocking DataStore write on the UI thread. Logs rather than throws: the
+     * GitHub APK is a debug build, so a debug-only crash would reach real users.
+     */
     private fun assertOffMainThread(what: String) {
-        if (BuildConfig.DEBUG) {
-            check(Looper.myLooper() != Looper.getMainLooper()) { "TokenStore.$what must not run on the main thread" }
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            Log.w("TokenStore", "$what ran on the main thread", IllegalStateException())
         }
     }
 }
