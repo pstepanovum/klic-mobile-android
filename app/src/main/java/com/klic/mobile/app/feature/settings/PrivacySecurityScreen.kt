@@ -23,7 +23,6 @@ import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
@@ -60,6 +59,7 @@ import kotlinx.coroutines.delay
 import com.klic.mobile.app.ui.theme.KlicIcons
 import kotlinx.coroutines.launch
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.klic.mobile.app.ui.components.KlicDivider
 
 /** Sub-pages of Privacy and Security (§10.4, §18.2). */
 enum class PrivacySecuritySub { BLOCKED, APP_LOCK, PASSKEYS, CHANGE_PASSWORD, RECOVERY_EMAIL }
@@ -707,9 +707,7 @@ fun PasskeysContent(vm: KlicViewModel) {
 // SettingsCard + SectionLabel are shared with DataStorageScreen (same package).
 
 @Composable
-internal fun RowDivider() {
-    HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
-}
+internal fun RowDivider() = KlicDivider()
 
 @Composable
 internal fun PrivacyRow(

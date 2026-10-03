@@ -2,7 +2,6 @@ package com.klic.mobile.app.feature.settings
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -49,6 +48,8 @@ import kotlinx.coroutines.launch
 import androidx.compose.ui.res.stringResource
 import com.klic.mobile.app.R
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.klic.mobile.app.ui.components.KlicCard
+import com.klic.mobile.app.ui.components.KlicSectionLabel
 
 /**
  * Settings → "Data and Storage" (§8.3): cache scan by category with a segmented bar,
@@ -359,21 +360,7 @@ fun DataStorageContent(vm: KlicViewModel) {
 }
 
 @Composable
-internal fun SectionLabel(text: String) {
-    Text(
-        text,
-        style = MaterialTheme.typography.labelSmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(start = 18.dp, bottom = 6.dp),
-    )
-}
+internal fun SectionLabel(text: String) = KlicSectionLabel(text)
 
 @Composable
-internal fun SettingsCard(content: @Composable () -> Unit) {
-    Column(
-        Modifier
-            .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(20.dp))
-            .padding(horizontal = 18.dp),
-    ) { content() }
-}
+internal fun SettingsCard(content: @Composable () -> Unit) = KlicCard(content)

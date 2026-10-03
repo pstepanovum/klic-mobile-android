@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
@@ -45,6 +44,9 @@ import java.time.temporal.ChronoUnit
 import androidx.compose.ui.res.stringResource
 import com.klic.mobile.app.R
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.klic.mobile.app.ui.components.KlicCard
+import com.klic.mobile.app.ui.components.KlicSectionLabel
+import com.klic.mobile.app.ui.components.KlicDivider
 
 /** Sub-pages reachable from a chat info screen (§8.4, §14.3). */
 enum class ChatInfoSub { MEDIA, STARRED, STORAGE, THEME, ENCRYPTION }
@@ -54,30 +56,17 @@ internal const val MUTE_ALWAYS_ISO = "9999-12-31T00:00:00.000Z"
 
 // ── Shared row/card building blocks ──────────────────────────────────────────
 
-@Composable
-internal fun InfoCard(content: @Composable () -> Unit) {
-    Column(
-        Modifier
-            .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(20.dp))
-            .padding(horizontal = 18.dp),
-    ) { content() }
-}
+// Aliases kept so existing call sites don't change; the implementations live in
+// ui/components/KlicList.kt.
 
 @Composable
-internal fun InfoDivider() {
-    HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
-}
+internal fun InfoCard(content: @Composable () -> Unit) = KlicCard(content)
 
 @Composable
-internal fun InfoSectionLabel(text: String) {
-    Text(
-        text,
-        style = MaterialTheme.typography.labelSmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(start = 18.dp, bottom = 6.dp),
-    )
-}
+internal fun InfoDivider() = KlicDivider()
+
+@Composable
+internal fun InfoSectionLabel(text: String) = KlicSectionLabel(text)
 
 @Composable
 internal fun InfoRowItem(
