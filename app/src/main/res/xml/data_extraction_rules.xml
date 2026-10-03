@@ -8,6 +8,9 @@
         <exclude domain="database" path="klic_e2ee_messages.db" />
         <exclude domain="database" path="klic_e2ee_messages.db-wal" />
         <exclude domain="database" path="klic_e2ee_messages.db-shm" />
+        <!-- App-lock passcode hash, salt + failed-attempt throttle state (AppLockStore). -->
+        <exclude domain="sharedpref" path="klic_app_lock.xml" />
+        <exclude domain="sharedpref" path="klic_app_lock_fallback.xml" />
     </cloud-backup>
     <device-transfer>
         <exclude domain="file" path="datastore/klic_tokens.preferences_pb" />
@@ -15,5 +18,8 @@
         <exclude domain="database" path="klic_e2ee_messages.db" />
         <exclude domain="database" path="klic_e2ee_messages.db-wal" />
         <exclude domain="database" path="klic_e2ee_messages.db-shm" />
+        <!-- App-lock passcode hash, salt + failed-attempt throttle state (AppLockStore). -->
+        <exclude domain="sharedpref" path="klic_app_lock.xml" />
+        <exclude domain="sharedpref" path="klic_app_lock_fallback.xml" />
     </device-transfer>
 </data-extraction-rules>

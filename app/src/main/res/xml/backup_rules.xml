@@ -6,4 +6,7 @@
     <exclude domain="database" path="klic_e2ee_messages.db" />
     <exclude domain="database" path="klic_e2ee_messages.db-wal" />
     <exclude domain="database" path="klic_e2ee_messages.db-shm" />
+    <!-- App-lock passcode hash, salt + failed-attempt throttle state (AppLockStore). -->
+    <exclude domain="sharedpref" path="klic_app_lock.xml" />
+    <exclude domain="sharedpref" path="klic_app_lock_fallback.xml" />
 </full-backup-content>
