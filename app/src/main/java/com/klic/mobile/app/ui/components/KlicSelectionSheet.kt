@@ -211,13 +211,14 @@ fun KlicTonePickerSheet(
             val rows = listOf<Pair<String, String?>>(
                 stringResource(com.klic.mobile.app.R.string.common_default) to null,
             ) + tones.map { (name, uri) -> name to uri }
+            val rowKeys = remember(rows) { uniqueLazyKeys(rows.map { (_, uri) -> uri?.let { "tone:$it" } ?: "default" }) }
             LazyColumn(
                 Modifier
                     .fillMaxWidth()
                     .heightIn(max = 380.dp)
                     .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(20.dp)),
             ) {
-                items(rows.size) { index ->
+                items(rows.size, key = { rowKeys[it] }) { index ->
                     val (name, uri) = rows[index]
                     Row(
                         Modifier

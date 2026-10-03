@@ -20,6 +20,8 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
+import com.klic.mobile.app.ui.components.uniqueLazyKeys
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -231,8 +233,9 @@ private fun LinksTab(vm: KlicViewModel, conversationId: String) {
         EmptyTab(stringResource(R.string.info_no_links))
         return
     }
+    val linkKeys = remember(links) { uniqueLazyKeys(links.map { (link, msg) -> "${msg.id}|$link" }) }
     LazyColumn(Modifier.fillMaxSize()) {
-        items(links) { (link, msg) ->
+        itemsIndexed(links, key = { index, _ -> linkKeys[index] }) { _, (link, msg) ->
             Row(
                 Modifier
                     .fillMaxWidth()

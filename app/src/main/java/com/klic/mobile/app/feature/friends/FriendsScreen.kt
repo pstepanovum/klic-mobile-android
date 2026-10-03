@@ -110,7 +110,7 @@ fun FriendsScreen(
             ) {
                 if (requests.isNotEmpty()) {
                     item { SectionTitle(stringResource(R.string.friends_requests)) }
-                    items(requests) { req ->
+                    items(requests, key = { "req:${it.requestId}" }, contentType = { "request" }) { req ->
                         RequestRow(
                             req,
                             onAccept  = { vm.acceptRequest(req.requestId) },
@@ -145,7 +145,7 @@ fun FriendsScreen(
                         }
                     }
                 }
-                items(friends) { friend ->
+                items(friends, key = { "friend:${it.id}" }, contentType = { "friend" }) { friend ->
                     val online = presenceMap[friend.id]?.online == true
                     FriendRow(friend = friend, online = online) {
                         vm.openConversationWith(friend.id) { convo -> onOpenProfile(convo.id) }

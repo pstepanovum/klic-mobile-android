@@ -719,7 +719,7 @@ private fun NewMessageSheet(
                             )
                         }
                         grouped.forEach { (letter, group) ->
-                            item {
+                            item(key = "letter:$letter", contentType = "letter") {
                                 Text(
                                     letter.toString(),
                                     style = MaterialTheme.typography.labelMedium,
@@ -727,7 +727,7 @@ private fun NewMessageSheet(
                                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
                                 )
                             }
-                            items(group) { friend ->
+                            items(group, key = { "friend:${it.id}" }, contentType = { "friend" }) { friend ->
                                 FriendSheetRow(friend) {
                                     vm.openConversationWith(friend.id) { convo ->
                                         onOpenChat(convo)
@@ -745,7 +745,7 @@ private fun NewMessageSheet(
                             .fillMaxWidth()
                             .padding(horizontal = 16.dp),
                     ) {
-                        items(friends) { friend ->
+                        items(friends, key = { it.id }) { friend ->
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
