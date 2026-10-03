@@ -21,14 +21,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -40,7 +37,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
@@ -54,39 +50,10 @@ import com.klic.mobile.app.calling.CallReliability
 import com.klic.mobile.app.feature.KlicViewModel
 import com.klic.mobile.app.ui.components.AvatarView
 import com.klic.mobile.app.ui.components.KlicLottieView
-import com.klic.mobile.app.update.AppUpdater
 import com.klic.mobile.app.ui.theme.KlicIcons
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-
-private sealed class SettingsRoute {
-    object Main : SettingsRoute()
-    object Appearance : SettingsRoute()
-    object AutoNightMode : SettingsRoute()
-    object Updates : SettingsRoute()
-    object Privacy : SettingsRoute()
-    object Notifications : SettingsRoute()
-    object DataStorage : SettingsRoute()
-    // v0.5.3
-    object PrivacyBlocked : SettingsRoute()
-    object PrivacyAppLock : SettingsRoute()
-    object PrivacyPasskeys : SettingsRoute()
-    // v0.6.0 (§18.2)
-    object PrivacyChangePassword : SettingsRoute()
-    object PrivacyRecoveryEmail : SettingsRoute()
-    object Language : SettingsRoute()
-    object QrCode : SettingsRoute()
-    object RecentCalls : SettingsRoute()
-    // v0.5.5
-    object ChatTheme : SettingsRoute()
-    // v0.5.7 (§14.4)
-    object SavedMessages : SettingsRoute()
-    // Legal
-    object PrivacyPolicy : SettingsRoute()
-    object Terms : SettingsRoute()
-}
 
 @Composable
 fun SettingsScreen(
@@ -643,254 +610,6 @@ fun SettingsScreen(
     }
 }
 
-/**
- * §12.2 Email row: no email → "Add" launches the Google picker; linked → the address
- * with a "Verified" badge, tap → confirm-remove dialog (DELETE /me/email).
- */
-@Composable
-private fun EmailRow(vm: KlicViewModel) {
-    val user by vm.currentUser.collectAsStateWithLifecycle()
-    val busy by vm.emailBusy.collectAsStateWithLifecycle()
-    val context = LocalContext.current
-    var confirmRemove by remember { mutableStateOf(false) }
-    val email = user?.email
-
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(enabled = !busy) {
-                if (email == null) vm.linkGoogleEmail(context) else confirmRemove = true
-            }
-            .padding(vertical = 14.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(14.dp),
-    ) {
-        Box(
-            modifier = Modifier
-                .size(32.dp)
-                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f), RoundedCornerShape(8.dp)),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(
-                painter = painterResource(KlicIcons.email),
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(18.dp),
-            )
-        }
-        Column(Modifier.weight(1f)) {
-            Text(
-                stringResource(R.string.settings_email),
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurface,
-            )
-            if (email != null) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text(
-                        email,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    if (user?.emailVerified == true) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(3.dp),
-                            modifier = Modifier
-                                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f), CircleShape)
-                                .padding(horizontal = 7.dp, vertical = 2.dp),
-                        ) {
-                            Icon(
-                                painter = painterResource(KlicIcons.check),
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(9.dp),
-                            )
-                            Text(
-                                stringResource(R.string.settings_email_verified),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.primary,
-                            )
-                        }
-                    }
-                }
-            }
-        }
-        if (busy) {
-            androidx.compose.material3.CircularProgressIndicator(
-                modifier = Modifier.size(18.dp),
-                strokeWidth = 2.dp,
-                color = MaterialTheme.colorScheme.primary,
-            )
-        } else if (email == null) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(
-                    stringResource(R.string.settings_email_add),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(20.dp),
-                )
-            }
-        } else {
-            Icon(
-                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(20.dp),
-            )
-        }
-    }
-
-    if (confirmRemove && email != null) {
-        androidx.compose.material3.AlertDialog(
-            onDismissRequest = { confirmRemove = false },
-            title = { Text(stringResource(R.string.settings_email_remove_title)) },
-            text = { Text(stringResource(R.string.settings_email_remove_body, email)) },
-            confirmButton = {
-                androidx.compose.material3.TextButton(onClick = {
-                    confirmRemove = false
-                    vm.removeEmail()
-                }) {
-                    Text(stringResource(R.string.settings_email_remove), color = MaterialTheme.colorScheme.error)
-                }
-            },
-            dismissButton = {
-                androidx.compose.material3.TextButton(onClick = { confirmRemove = false }) {
-                    Text(stringResource(R.string.common_cancel))
-                }
-            },
-        )
-    }
-}
-
-@Composable
-private fun SubScreenHeader(title: String, onBack: () -> Unit) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier.fillMaxWidth().padding(bottom = 20.dp),
-    ) {
-        Box(
-            modifier = Modifier
-                .size(36.dp)
-                .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.surface)
-                .clickable(onClick = onBack),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(
-                painter = painterResource(KlicIcons.back),
-                contentDescription = stringResource(R.string.common_back),
-                modifier = Modifier.size(18.dp),
-                tint = MaterialTheme.colorScheme.onSurface,
-            )
-        }
-        Text(
-            title,
-            style = MaterialTheme.typography.headlineMedium,
-            color = MaterialTheme.colorScheme.onBackground,
-            modifier = Modifier.padding(start = 12.dp),
-        )
-    }
-}
-
-@Composable
-private fun SettingsRow(
-    icon: Painter,
-    title: String,
-    modifier: Modifier = Modifier,
-    onClick: (() -> Unit)? = null,
-    trailing: @Composable (() -> Unit)? = null,
-) {
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
-            .padding(vertical = 14.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(14.dp),
-    ) {
-        Box(
-            modifier = Modifier
-                .size(32.dp)
-                .background(
-                    MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
-                    RoundedCornerShape(8.dp),
-                ),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(
-                painter = icon,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(18.dp),
-            )
-        }
-        Text(
-            title,
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurface,
-            modifier = Modifier.weight(1f),
-        )
-        if (trailing != null) {
-            trailing()
-        } else {
-            Icon(
-                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(20.dp),
-            )
-        }
-    }
-}
-
-@Composable
-private fun NightModeOption(
-    title: String,
-    subtitle: String,
-    isActive: Boolean,
-    onClick: () -> Unit,
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(vertical = 14.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Column(Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurface)
-            Text(subtitle, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-        if (isActive) {
-            Icon(
-                imageVector = Icons.Default.Check,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(20.dp),
-            )
-        }
-    }
-}
-
-@Composable
-private fun InfoRow(label: String, value: String) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 13.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(label, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurface)
-        Text(value, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-    }
-}
-
 @Composable
 private fun CopyableUsername(username: String) {
     val clipboardManager = LocalClipboardManager.current
@@ -929,90 +648,5 @@ private fun CopyableUsername(username: String) {
             tint = if (copied) MaterialTheme.colorScheme.primary
                    else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f),
         )
-    }
-}
-
-@Composable
-private fun AppUpdateCard(versionName: String, scope: CoroutineScope, context: android.content.Context) {
-    var checking by remember { mutableStateOf(false) }
-    var statusMsg by remember { mutableStateOf<String?>(null) }
-    var available by remember { mutableStateOf<AppUpdater.Release?>(null) }
-    var downloading by remember { mutableStateOf(false) }
-    var progress by remember { mutableStateOf(0f) }
-
-    Column(
-        Modifier
-            .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(20.dp))
-            .padding(18.dp),
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                Text(stringResource(R.string.settings_app_updates), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurface)
-                Text(
-                    statusMsg ?: stringResource(R.string.settings_version_format, versionName),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            if (available == null && !downloading) {
-                Button(
-                    onClick = {
-                        checking = true
-                        statusMsg = null
-                        scope.launch {
-                            val r = AppUpdater.fetchLatest()
-                            checking = false
-                            when {
-                                r == null -> statusMsg = context.getString(R.string.settings_update_check_failed)
-                                AppUpdater.isNewerThanInstalled(r.versionName) -> {
-                                    available = r
-                                    statusMsg = context.getString(R.string.settings_update_available, r.versionName)
-                                }
-                                else -> statusMsg = context.getString(R.string.settings_update_latest)
-                            }
-                        }
-                    },
-                    enabled = !checking,
-                    shape = CircleShape,
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                        contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                    ),
-                ) { Text(if (checking) stringResource(R.string.settings_checking) else stringResource(R.string.settings_check)) }
-            }
-        }
-
-        val update = available
-        if (update != null) {
-            Spacer(Modifier.height(12.dp))
-            if (downloading) {
-                LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth())
-            } else {
-                Button(
-                    onClick = {
-                        if (!AppUpdater.canInstall(context)) {
-                            AppUpdater.openInstallPermissionSettings(context)
-                            return@Button
-                        }
-                        downloading = true
-                        progress = 0f
-                        scope.launch {
-                            runCatching { AppUpdater.download(context, update.apkUrl) { progress = it } }
-                                .onSuccess { file ->
-                                    downloading = false
-                                    AppUpdater.install(context, file)
-                                }
-                                .onFailure {
-                                    downloading = false
-                                    statusMsg = context.getString(R.string.settings_download_failed)
-                                }
-                        }
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = CircleShape,
-                ) { Text(stringResource(R.string.settings_download_install, update.versionName)) }
-            }
-        }
     }
 }
