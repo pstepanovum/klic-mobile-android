@@ -87,7 +87,7 @@ class KlicApplication : Application(), ImageLoaderFactory {
                 add(coil.decode.VideoFrameDecoder.Factory())
             }
             // Attribute image/sticker fetches in the data-usage counters (§8.3).
-            .okHttpClient { okhttp3.OkHttpClient.Builder().addInterceptor(DataUsage.interceptor).build() }
+            .okHttpClient { com.klic.mobile.app.data.KlicHttp.base }
             .memoryCache {
                 MemoryCache.Builder(this)
                     .maxSizePercent(0.25)

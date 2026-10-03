@@ -15,7 +15,6 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
-import kotlinx.serialization.json.Json
 import org.signal.libsignal.protocol.IdentityKeyPair
 import org.signal.libsignal.protocol.ecc.ECKeyPair
 import org.signal.libsignal.protocol.kem.KEMKeyPair
@@ -115,7 +114,7 @@ class E2eeKeyManager(
     scope: CoroutineScope,
 ) {
     val mutex = Mutex()
-    private val json = Json { ignoreUnknownKeys = true }
+    private val json = KlicJson
 
     private val snapshotWriter = WriteBehind<E2eeStoreSnapshot>(scope, SNAPSHOT_DEBOUNCE_MS) { snapshot ->
         context.e2eeDataStore.edit {

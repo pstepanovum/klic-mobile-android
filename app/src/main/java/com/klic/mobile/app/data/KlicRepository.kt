@@ -3,12 +3,10 @@ package com.klic.mobile.app.data
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
-import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import okhttp3.MediaType.Companion.toMediaType
-import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 
@@ -24,14 +22,13 @@ class KlicRepository(
     /** Unauthenticated logout endpoint (bare client, never hits the TokenAuthenticator). */
     private val sessionApi: SessionApi? = null,
 ) {
-    private val json = Json { ignoreUnknownKeys = true }
+    private val json = KlicJson
     // Bare client for presigned PUT uploads — no auth header, no base URL.
     // Carries the data-usage interceptor so uploads are attributed by media kind (§8.3).
     // §13.15: generous timeouts so a multi-hundred-MB video on a slow uplink can finish —
     // the write timeout only trips on a fully stalled socket, never on slow progress,
     // and there is deliberately no whole-call timeout.
-    private val uploader = OkHttpClient.Builder()
-        .addInterceptor(DataUsage.interceptor)
+    private val uploader = KlicHttp.base.newBuilder()
         .connectTimeout(java.time.Duration.ofSeconds(30))
         .writeTimeout(java.time.Duration.ofMinutes(5))
         .readTimeout(java.time.Duration.ofMinutes(5))

@@ -1,7 +1,6 @@
 package com.klic.mobile.app.data
 
 import com.klic.mobile.app.BuildConfig
-import kotlinx.serialization.json.Json
 import okhttp3.Authenticator
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -363,6 +362,22 @@ private interface AuthApi {
     fun refresh(@Body body: RefreshRequest): Call<AuthResponse>
 }
 
+/**
+ * Process-wide OkHttp roots. Every client in the app derives from [root] via
+ * newBuilder(), so all of them share ONE connection pool and dispatcher instead of
+ * each building its own. Neither root carries auth: the bearer interceptor and
+ * [TokenAuthenticator] are added only to the Klic API client in [Network.create] —
+ * never to clients that hit presigned S3 URLs or external hosts (link previews,
+ * GitHub updater). Per-client timeouts/interceptors are layered on by each caller.
+ */
+object KlicHttp {
+    /** No interceptors at all — auth refresh, session revoke, the GitHub updater. */
+    val root: OkHttpClient by lazy { OkHttpClient() }
+
+    /** [root] + data-usage attribution (§8.3): media uploads/downloads, Coil, previews. */
+    val base: OkHttpClient by lazy { root.newBuilder().addInterceptor(DataUsage.interceptor).build() }
+}
+
 object Network {
     // Klic-specific host override, usually supplied from Gradle property `KLIC_API_ORIGIN`.
     val BASE_HTTP = BuildConfig.KLIC_API_ORIGIN
@@ -371,7 +386,7 @@ object Network {
     /** Public, stable avatar URL for any user id (404s → UI falls back to initials). */
     fun avatarUrl(userId: String): String = "$BASE_HTTP/api/v1/users/$userId/avatar"
 
-    private val json = Json { ignoreUnknownKeys = true }
+    private val json = KlicJson
 
     /**
      * Bare client for [SessionApi] — no interceptors, no authenticator — with a short
@@ -380,7 +395,7 @@ object Network {
     fun createSessionApi(): SessionApi = Retrofit.Builder()
         .baseUrl(API)
         .client(
-            OkHttpClient.Builder()
+            KlicHttp.root.newBuilder()
                 .callTimeout(java.time.Duration.ofSeconds(5))
                 .build(),
         )
@@ -394,12 +409,14 @@ object Network {
         // Plain client (no interceptors) so refresh never recurses through itself.
         val authApi = Retrofit.Builder()
             .baseUrl(API)
-            .client(OkHttpClient.Builder().build())
+            .client(KlicHttp.root)
             .addConverterFactory(converter)
             .build()
             .create(AuthApi::class.java)
 
-        val client = OkHttpClient.Builder()
+        // Derived from the bare root (not [KlicHttp.base]) to keep the original
+        // interceptor order: auth header first, then data-usage accounting.
+        val client = KlicHttp.root.newBuilder()
             .addInterceptor { chain ->
                 val builder = chain.request().newBuilder()
                 tokenStore.cachedAccess?.let { builder.header("Authorization", "Bearer $it") }

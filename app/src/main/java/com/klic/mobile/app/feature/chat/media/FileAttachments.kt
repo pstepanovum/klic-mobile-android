@@ -69,7 +69,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
-import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
@@ -86,9 +85,7 @@ object AttachmentDownloads {
     val progress = mutableStateMapOf<String, Float>()
 
     // Data-usage interceptor so downloads are attributed by media kind (§8.3).
-    private val client by lazy {
-        OkHttpClient.Builder().addInterceptor(com.klic.mobile.app.data.DataUsage.interceptor).build()
-    }
+    private val client get() = com.klic.mobile.app.data.KlicHttp.base
     private val locks = ConcurrentHashMap<String, Mutex>()
 
     /**

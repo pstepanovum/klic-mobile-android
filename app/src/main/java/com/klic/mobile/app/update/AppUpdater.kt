@@ -10,11 +10,11 @@ import android.os.Build
 import android.provider.Settings
 import androidx.core.content.FileProvider
 import com.klic.mobile.app.BuildConfig
+import com.klic.mobile.app.data.KlicHttp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
-import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONObject
 import java.io.File
@@ -36,7 +36,8 @@ object AppUpdater {
     private const val LATEST_URL =
         "https://api.github.com/repos/pstepanovum/klic-mobile-android/releases/latest"
 
-    private val client = OkHttpClient()
+    // Shares the app-wide pool/dispatcher; bare root — no auth, no data-usage attribution.
+    private val client = KlicHttp.root
 
     /**
      * APK download client: never downgrades https→http on redirect, and a network

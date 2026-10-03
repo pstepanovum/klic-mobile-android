@@ -6,11 +6,11 @@ import com.klic.mobile.app.data.AccessToken
 import com.klic.mobile.app.data.Message
 import com.klic.mobile.app.data.Network
 import com.klic.mobile.app.data.Reaction
+import com.klic.mobile.app.data.KlicJson
 import io.socket.client.IO
 import io.socket.client.Socket
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import org.json.JSONObject
 import java.time.Instant
@@ -45,7 +45,7 @@ class SocketService {
     private val mainHandler = Handler(Looper.getMainLooper())
     private val typingTokens = mutableMapOf<String, Any>()
     /** §14.3: fan-out payloads may carry fields this client doesn't model yet. */
-    private val lenientJson = Json { ignoreUnknownKeys = true }
+    private val lenientJson = KlicJson
 
     data class Presence(val online: Boolean, val lastSeenMs: Long? = null)
     data class Receipt(val conversationId: String, val userId: String, val atMs: Long)

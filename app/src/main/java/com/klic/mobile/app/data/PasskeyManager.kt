@@ -7,7 +7,6 @@ import androidx.credentials.CredentialManager
 import androidx.credentials.GetCredentialRequest
 import androidx.credentials.GetPublicKeyCredentialOption
 import androidx.credentials.PublicKeyCredential
-import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 
 /**
@@ -19,7 +18,7 @@ import kotlinx.serialization.json.JsonObject
  */
 class PasskeyManager(private val repo: KlicRepository) {
 
-    private val json = Json { ignoreUnknownKeys = true }
+    private val json = KlicJson
 
     /** Adds a passkey for the signed-in user. Throws [PasskeyException] on refusal. */
     suspend fun register(context: Context) {

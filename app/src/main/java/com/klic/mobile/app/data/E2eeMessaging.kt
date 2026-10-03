@@ -1,6 +1,5 @@
 package com.klic.mobile.app.data
 
-import kotlinx.serialization.json.Json
 import retrofit2.HttpException
 
 /** Feature gate: flips on together with iOS at the cutover release (E2EE.md §16). */
@@ -21,7 +20,7 @@ class E2eeMessaging(
     private val store: E2eeMessageStore,
     private val api: KlicApi,
 ) {
-    private val json = Json { ignoreUnknownKeys = true }
+    private val json = KlicJson
 
     /**
      * Make a CIPHERTEXT message renderable: local store first, else decrypt the

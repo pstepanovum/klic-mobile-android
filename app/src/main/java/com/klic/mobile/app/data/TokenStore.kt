@@ -9,7 +9,6 @@ import androidx.datastore.preferences.preferencesDataStore
 import com.klic.mobile.app.BuildConfig
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
-import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
@@ -97,7 +96,7 @@ class TokenStore(private val context: Context) {
  * proactive refresh is actually needed — avoiding a token rotation on every launch.
  */
 object AccessToken {
-    private val json = Json { ignoreUnknownKeys = true }
+    private val json = KlicJson
 
     /** True when there is no token, it can't be parsed, or it expires within [leewaySec]. */
     fun isExpired(token: String?, leewaySec: Long = 30): Boolean {

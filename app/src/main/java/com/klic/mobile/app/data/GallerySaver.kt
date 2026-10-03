@@ -6,7 +6,6 @@ import android.os.Build
 import android.provider.MediaStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import okhttp3.OkHttpClient
 import okhttp3.Request
 
 /**
@@ -15,7 +14,7 @@ import okhttp3.Request
  * (scoped storage — no write permission needed); older devices skip auto-save.
  */
 object GallerySaver {
-    private val client by lazy { OkHttpClient.Builder().addInterceptor(DataUsage.interceptor).build() }
+    private val client get() = KlicHttp.base
 
     /** Auto-save an incoming message's media per the chat's Save-to-Photos pref. */
     suspend fun maybeAutoSave(context: Context, message: Message) {

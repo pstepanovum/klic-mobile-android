@@ -15,7 +15,6 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.serialization.builtins.MapSerializer
 import kotlinx.serialization.builtins.serializer
-import kotlinx.serialization.json.Json
 import okhttp3.Interceptor
 import okhttp3.Response
 import java.util.concurrent.ConcurrentHashMap
@@ -47,7 +46,7 @@ object DataUsage {
 
     private val Context.usageDataStore by preferencesDataStore(name = "klic_data_usage")
     private val KEY = stringPreferencesKey("counters")
-    private val json = Json { ignoreUnknownKeys = true }
+    private val json = KlicJson
     private val mapSerializer = MapSerializer(String.serializer(), Long.serializer())
 
     /** "category.direction.network" → bytes. direction ∈ {up, down}. */

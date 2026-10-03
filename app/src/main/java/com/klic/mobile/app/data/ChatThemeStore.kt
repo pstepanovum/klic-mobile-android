@@ -131,7 +131,7 @@ object ChatThemeStore {
         val bubbleId: String = DEFAULT_BUBBLE,
     )
 
-    private val json = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
+    private val json = KlicJson
     private val overridesSerializer = MapSerializer(String.serializer(), OverrideDto.serializer())
 
     private lateinit var appContext: Context

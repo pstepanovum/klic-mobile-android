@@ -5,7 +5,6 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import okhttp3.HttpUrl.Companion.toHttpUrl
-import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
@@ -26,8 +25,7 @@ object LinkPreviewFetcher {
     private const val MAX_BYTES = 512 * 1024L
 
     private val client by lazy {
-        OkHttpClient.Builder()
-            .addInterceptor(DataUsage.interceptor)
+        KlicHttp.base.newBuilder()
             .connectTimeout(10, TimeUnit.SECONDS)
             .readTimeout(10, TimeUnit.SECONDS)
             .build()
