@@ -295,44 +295,6 @@ class KlicRepository(
         }.getOrThrow()
     }
 
-    suspend fun uploadImage(
-        conversationId: String,
-        bytes: ByteArray,
-        contentType: String,
-        width: Int? = null,
-        height: Int? = null,
-    ): Message {
-        val normalizedType = contentType.ifBlank { "image/jpeg" }
-        diagnostic("upload.image.presign.start", "type=$normalizedType bytes=${bytes.size}")
-        val ticket = api.requestUpload(UploadRequest(conversationId, "IMAGE", normalizedType, bytes.size))
-        diagnostic("upload.image.presign.ok", "type=$normalizedType bytes=${bytes.size}")
-        diagnostic("upload.image.put.start", "bytes=${bytes.size}")
-        runCatching {
-            putToPresignedUrl(ticket.uploadUrl, bytes, normalizedType, "Image")
-        }.onFailure {
-            diagnostic("upload.image.put.failed", it.message ?: it::class.java.simpleName)
-            throw it
-        }
-        diagnostic("upload.image.put.ok", "bytes=${bytes.size}")
-        diagnostic("upload.image.message.start")
-        return runCatching {
-            api.sendMessage(conversationId, SendWithAttachmentsRequest(
-                attachments = listOf(AttachmentInput(
-                    key = ticket.key,
-                    kind = "IMAGE",
-                    contentType = normalizedType,
-                    byteSize = bytes.size,
-                    width = width,
-                    height = height,
-                ))
-            ))
-        }.onSuccess {
-            diagnostic("upload.image.message.ok", it.id)
-        }.onFailure {
-            diagnostic("upload.image.message.failed", it.message ?: it::class.java.simpleName)
-        }.getOrThrow()
-    }
-
     /** Uploads one or more staged attachments (mixed images/videos/files) and sends them as
      *  a single message — each attachment is presigned/PUT using its own kind/contentType,
      *  not hardcoded to "IMAGE" the way the old image-only path was. [onProgress] reports

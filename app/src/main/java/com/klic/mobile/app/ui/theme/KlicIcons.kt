@@ -3,18 +3,12 @@ package com.klic.mobile.app.ui.theme
 import com.klic.mobile.app.R
 
 object KlicIcons {
-    val mic      = R.drawable.ic_bold_mic
-    val micOff   = R.drawable.ic_bold_call_muted
     val camera   = R.drawable.ic_bold_camera
-    val cameraOff = R.drawable.ic_bold_camera_slash
-    val video    = R.drawable.ic_bold_video
     val phone    = R.drawable.ic_line_phone
-    val callEnd  = R.drawable.ic_bold_call_slash
     val message  = R.drawable.ic_line_message
     val send     = R.drawable.ic_klic_send
     val search   = R.drawable.ic_line_search
     val user     = R.drawable.ic_line_user
-    val addUser  = R.drawable.ic_line_user_plus
     val settings = R.drawable.ic_line_setting
     // §14.1: the owner's exact nav artwork — stroke follows the Icon tint
     // (onSurface/onBackground; white in dark theme).
@@ -80,9 +74,6 @@ object KlicIcons {
     // New-message modal artwork: single user + group of users.
     val userLine = R.drawable.ic_klic_tab_user
     val usersGroup = R.drawable.ic_klic_users_group
-    val folder   = R.drawable.ic_line_folder
-    val notification = R.drawable.ic_line_notification
-    val chart    = R.drawable.ic_line_chart
     // Owner chain-link artwork — Links privacy row + chat-info Links tab.
     val link     = R.drawable.ic_klic_link
     // Tab bar — owner-supplied artwork: line icons at rest, solid when active.
@@ -94,9 +85,4 @@ object KlicIcons {
     val tabUserSolid     = R.drawable.ic_klic_tab_user_solid
     val tabCallSolid     = R.drawable.ic_klic_tab_call_solid
     val tabSettingsSolid = R.drawable.ic_klic_tab_settings_solid
-    val messageChat     = R.drawable.ic_klic_tab_chat
-    val messageChatBold = R.drawable.ic_klic_tab_chat_solid
-    val userBold        = R.drawable.ic_klic_tab_user_solid
-    val phoneBold       = R.drawable.ic_klic_tab_call_solid
-    val settingsBold    = R.drawable.ic_klic_tab_settings_solid
 }

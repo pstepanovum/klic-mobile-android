@@ -997,28 +997,6 @@ internal fun StarIndicator(tint: Color) {
 private fun mentionAccent(isMine: Boolean): Color =
     if (isMine) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.primary
 
-/** Highlights "@all" and member-name mentions (accent + semibold) when [highlight] is on (§9.5). */
-internal fun bodyWithMentions(
-    body: String,
-    highlight: Boolean,
-    accent: Color,
-    names: List<String> = emptyList(),
-): AnnotatedString {
-    if (!highlight) return AnnotatedString(body)
-    val matches = mentionAllRanges(body) + names.flatMap { mentionNameRanges(body, it) }
-    if (matches.isEmpty()) return AnnotatedString(body)
-    return buildAnnotatedString {
-        append(body)
-        matches.forEach { range ->
-            addStyle(
-                SpanStyle(color = accent, fontWeight = FontWeight.SemiBold),
-                range.first,
-                range.last + 1,
-            )
-        }
-    }
-}
-
 /** Character ranges of "@Display Name" mentions for one member name (§9.5). */
 internal fun mentionNameRanges(body: String, name: String): List<IntRange> {
     if (name.isBlank()) return emptyList()
@@ -1145,7 +1123,14 @@ internal fun messageContentType(m: Message): String = when {
     else -> "text"
 }
 
-internal fun sameDay(a: String, b: String): Boolean = a.take(10) == b.take(10)
+// Compare local calendar days (the ISO strings are UTC, so their date prefix
+// would split day separators at UTC midnight rather than the user's midnight).
+internal fun sameDay(a: String, b: String): Boolean {
+    val zone = ZoneId.systemDefault()
+    val da = runCatching { Instant.parse(a).atZone(zone).toLocalDate() }.getOrNull()
+    val db = runCatching { Instant.parse(b).atZone(zone).toLocalDate() }.getOrNull()
+    return if (da != null && db != null) da == db else a.take(10) == b.take(10)
+}
 
 internal fun shortTime(iso: String): String = runCatching {
     val instant = Instant.parse(iso)

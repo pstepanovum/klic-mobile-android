@@ -41,13 +41,6 @@ object ImageUploads {
         return result
     }
 
-    fun encodeAvatar(
-        context: Context,
-        uri: Uri,
-        maxDimension: Int = 2048,
-        quality: Int = 85,
-    ): EncodedImage? = encodeImage(context, uri, maxDimension, quality)
-
     /**
      * §11.5: decode a picked photo for the pinch-zoom adjust step. Forces a SOFTWARE
      * allocation (the crop draws it onto a software Canvas) and bounds it to 4096px.

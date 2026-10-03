@@ -48,9 +48,6 @@ class E2eeMessaging(
         }
     }
 
-    suspend fun materializeAll(messages: List<Message>, myUserId: String?): List<Message> =
-        messages.map { materialize(it, myUserId) }
-
     /**
      * Encrypt and send a text message. Retries once when the server reports
      * 409 STALE_DEVICES (a device joined/left since our directory fetch).

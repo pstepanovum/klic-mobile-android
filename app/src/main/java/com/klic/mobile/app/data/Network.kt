@@ -317,7 +317,7 @@ interface KlicApi {
     suspend fun searchConversationMessages(
         @Path("id") id: String,
         @Query("q") q: String,
-        @Query("limit") limit: Int = 50,
+        @Query("limit") limit: Int = 30, // server caps in-chat search at 30
         @Query("cursor") cursor: String? = null,
     ): ConversationSearchResponse
 

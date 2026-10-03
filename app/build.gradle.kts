@@ -120,7 +120,6 @@ dependencies {
     implementation(libs.retrofit.kotlinx.serialization)
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.okhttp)
-    implementation(libs.okhttp.logging)
     implementation(libs.androidx.datastore.preferences)
 
     // E2EE — Signal protocol (identity keys + prekeys now; sessions arrive in Phase 2)

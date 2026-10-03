@@ -769,14 +769,6 @@ class KlicViewModel(
                 .onFailure { error.value = str(com.klic.mobile.app.R.string.err_send_voice) }
         }
 
-    fun sendImage(conversationId: String, bytes: ByteArray, contentType: String, width: Int? = null, height: Int? = null) =
-        viewModelScope.launch {
-            replyingTo.value = null
-            runCatching { repo.uploadImage(conversationId, bytes, contentType, width, height) }
-                .onSuccess { upsertMessage(it) }
-                .onFailure { error.value = str(com.klic.mobile.app.R.string.err_send_photo) }
-        }
-
     // ── Optimistic uploads (§9.1) ─────────────────────────────────────────────
 
     /** In-flight/failed optimistic uploads, rendered as progress pills in the chat. */
@@ -795,28 +787,6 @@ class KlicViewModel(
         )
         uploadTasks.value = uploadTasks.value + task
         startUpload(task)
-    }
-
-    /**
-     * §11.2 bulk send from the attach sheet: ONE message per item, sent strictly in
-     * selection order — each pill uploads and lands before the next one starts.
-     */
-    fun sendAttachmentsSequentially(conversationId: String, items: List<AttachmentInput>) {
-        if (items.isEmpty()) return
-        replyingTo.value = null
-        val tasks = items.map {
-            UploadTask(
-                id = java.util.UUID.randomUUID().toString(),
-                conversationId = conversationId,
-                body = null,
-                attachments = listOf(it),
-                replyToId = null,
-            )
-        }
-        uploadTasks.value = uploadTasks.value + tasks
-        viewModelScope.launch {
-            for (task in tasks) startUpload(task).join()
-        }
     }
 
     fun retryUpload(taskId: String) {
