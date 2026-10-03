@@ -11,12 +11,14 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
@@ -207,7 +209,20 @@ class MainActivity : ComponentActivity() {
                 // first frame after returning to foreground, never from a paused collector.
                 val appLocked by com.klic.mobile.app.data.AppLockStore.locked.collectAsState()
                 val lockEnabled by com.klic.mobile.app.data.AppLockStore.enabled.collectAsState()
-                val lockActive = isAuthed && lockEnabled && appLocked && activeCallForPip == null
+                // The lock prefs open off the main thread at startup: until they have, show
+                // no content at all (an enabled lock would still read as disabled).
+                val lockLoaded by com.klic.mobile.app.data.AppLockStore.loaded.collectAsState()
+                if (!lockLoaded) {
+                    Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background))
+                    return@KlicTheme
+                }
+                // The direct .value reads cover the frame where [loaded]'s collector has
+                // landed but locked/enabled's haven't yet (they're set before it).
+                val lockActive = isAuthed && activeCallForPip == null && (
+                    (lockEnabled && appLocked) ||
+                        (com.klic.mobile.app.data.AppLockStore.isEnabled &&
+                            com.klic.mobile.app.data.AppLockStore.locked.value)
+                    )
                 Box(
                     Modifier.fillMaxSize().then(
                         // Modifier.blur needs RenderEffect (API 31+); older devices get an

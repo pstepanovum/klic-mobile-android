@@ -42,7 +42,9 @@ class KlicApplication : Application(), ImageLoaderFactory {
         DataUsage.init(this, container.applicationScope)
         // Chat theme (§12.3) — local-only; the chat screen reads it on every frame.
         com.klic.mobile.app.data.ChatThemeStore.init(this, container.applicationScope)
-        com.klic.mobile.app.data.AppLockStore.init(this)
+        // App lock prefs (EncryptedSharedPreferences, 50–300 ms) open off the main thread;
+        // MainActivity shows no content until AppLockStore.loaded.
+        com.klic.mobile.app.data.AppLockStore.init(this, container.applicationScope)
         CallNotifications.createChannels(this)
         trackForeground()
     }

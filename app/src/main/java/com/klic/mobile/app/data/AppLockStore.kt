@@ -4,8 +4,11 @@ import android.content.Context
 import android.content.SharedPreferences
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.launch
 
 /**
  * Local app lock (§10.4 "Passcode & Biometrics"): a 4–6 digit passcode stored as a
@@ -38,7 +41,16 @@ object AppLockStore {
         data class LockedOut(val remainingMs: Long) : VerifyResult
     }
 
-    private lateinit var prefs: SharedPreferences
+    private lateinit var appContext: Context
+    @Volatile private var loadedPrefs: SharedPreferences? = null
+
+    /**
+     * The prefs, opening them on first use. EncryptedSharedPreferences.create costs
+     * 50–300 ms (Keystore + Tink), so [init] opens them on a background thread; an
+     * accessor that wins the race simply blocks on the same lock until they're open.
+     */
+    private val prefs: SharedPreferences
+        get() = loadedPrefs ?: load()
 
     private val _enabled = MutableStateFlow(false)
     val enabled: StateFlow<Boolean> = _enabled
@@ -46,18 +58,34 @@ object AppLockStore {
     /** True while the lock overlay must cover the app. */
     val locked = MutableStateFlow(false)
 
+    private val _loaded = MutableStateFlow(false)
+
+    /**
+     * False until the prefs are open and [enabled]/[locked] reflect them. The UI must not
+     * show app content before this flips (MainActivity gates on it), since until then an
+     * enabled lock still reads as disabled.
+     */
+    val loaded: StateFlow<Boolean> = _loaded
+
     /** Wall-clock millis when the app last went to background (for timed auto-lock). */
     private var backgroundedAt: Long? = null
 
-    /** Idempotent; call once from Application.onCreate. */
-    fun init(context: Context) {
-        if (::prefs.isInitialized) return
-        prefs = runCatching {
-            val masterKey = MasterKey.Builder(context.applicationContext)
+    /** Idempotent; call once from Application.onCreate. Opens the prefs off the main thread. */
+    fun init(context: Context, scope: CoroutineScope) {
+        if (::appContext.isInitialized) return
+        appContext = context.applicationContext
+        scope.launch(Dispatchers.IO) { prefs }
+    }
+
+    @Synchronized
+    private fun load(): SharedPreferences {
+        loadedPrefs?.let { return it }
+        val opened = runCatching {
+            val masterKey = MasterKey.Builder(appContext)
                 .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
                 .build()
             EncryptedSharedPreferences.create(
-                context.applicationContext,
+                appContext,
                 "klic_app_lock",
                 masterKey,
                 EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
@@ -68,10 +96,15 @@ object AppLockStore {
             // still only ever hold the salted PBKDF2 hash (or a legacy salted SHA-256 one
             // awaiting migration), the passcode length and throttle counters — never the
             // passcode — and the file is excluded from cloud backup / device transfer.
-            context.applicationContext.getSharedPreferences("klic_app_lock_fallback", Context.MODE_PRIVATE)
+            appContext.getSharedPreferences("klic_app_lock_fallback", Context.MODE_PRIVATE)
         }
-        _enabled.value = prefs.contains(KEY_HASH)
-        locked.value = _enabled.value
+        val enabledNow = opened.contains(KEY_HASH)
+        // Lock state first, [loaded] last: anything gated on [loaded] sees final values.
+        locked.value = enabledNow
+        _enabled.value = enabledNow
+        loadedPrefs = opened
+        _loaded.value = true
+        return opened
     }
 
     val isEnabled: Boolean get() = _enabled.value
@@ -122,8 +155,8 @@ object AppLockStore {
      * auto-lock mode all go, so the next account starts from a clean slate.
      */
     fun wipe() {
-        if (!::prefs.isInitialized) return
-        prefs.edit().clear().apply()
+        if (!::appContext.isInitialized) return
+        prefs.edit().clear().apply() // waits for a still-opening load, so it can't resurrect the lock
         _enabled.value = false
         locked.value = false
         backgroundedAt = null
