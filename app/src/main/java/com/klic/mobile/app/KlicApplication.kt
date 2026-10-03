@@ -26,6 +26,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.launch
 
 /** Tiny manual DI container — swap for Hilt as the app grows. */
 class KlicApplication : Application(), ImageLoaderFactory {
@@ -65,6 +66,8 @@ class KlicApplication : Application(), ImageLoaderFactory {
                 if (started == 0) {
                     com.klic.mobile.app.data.AppLockStore.onAppBackgrounded()
                     container.socket.setActive(false) // presence: app went to background
+                    // E2EE store is write-behind — make it durable before the process may die.
+                    container.applicationScope.launch { runCatching { container.e2eeKeys.flush() } }
                 }
             }
             override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) {}
@@ -121,7 +124,7 @@ class AppContainer(app: Application) {
     val passkeyManager = com.klic.mobile.app.data.PasskeyManager(repository)
     /** Email add/verify via Google (§12.2). */
     val googleEmailManager = com.klic.mobile.app.data.GoogleEmailManager(repository)
-    val e2eeKeys = E2eeKeyManager(appContext, api).also {
+    val e2eeKeys = E2eeKeyManager(appContext, api, applicationScope).also {
         // §18.3: device registration reuses the crypto install's stable id.
         repository.installIdProvider = it::installId
     }

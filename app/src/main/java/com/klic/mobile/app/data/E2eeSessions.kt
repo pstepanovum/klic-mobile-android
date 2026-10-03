@@ -97,6 +97,9 @@ class E2eeSessions(private val keys: E2eeKeyManager, private val api: KlicApi) {
                     DebugLog.w(TAG, "encrypt to ${target.userId}/${target.deviceId} failed", it)
                 }.getOrNull()
             }
+            // Ratchet + session state must be on disk before the ciphertext leaves the
+            // device: a rollback after send would reuse message keys / lose new sessions.
+            keys.flush()
             EncryptedFanOut(senderDeviceId = myDeviceId, envelopes = envelopes)
         }
 
@@ -110,7 +113,7 @@ class E2eeSessions(private val keys: E2eeKeyManager, private val api: KlicApi) {
             val store = keys.protocolStore() ?: return null
             val address = SignalProtocolAddress(senderUserId, senderDeviceId)
             val bytes = Base64.decode(ciphertextB64, Base64.NO_WRAP)
-            runCatching {
+            val content = runCatching {
                 val cipher = SessionCipher(store, address)
                 val plaintext = when (type) {
                     CiphertextMessage.PREKEY_TYPE -> cipher.decrypt(PreKeySignalMessage(bytes))
@@ -121,6 +124,11 @@ class E2eeSessions(private val keys: E2eeKeyManager, private val api: KlicApi) {
             }.onFailure {
                 DebugLog.w(TAG, "decrypt from $senderUserId/$senderDeviceId failed", it)
             }.getOrNull()
+            // The caller persists the plaintext next and never re-decrypts it, so the
+            // session/ratchet advance (and any consumed prekey) must be durable first.
+            // A failed write stays pending and is retried by the next flush.
+            runCatching { keys.flush() }.onFailure { DebugLog.w(TAG, "protocol store flush failed", it) }
+            content
         }
 
     private fun address(entry: DeviceDirEntry) = SignalProtocolAddress(entry.userId, entry.deviceId)

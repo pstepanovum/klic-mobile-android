@@ -9,8 +9,8 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import java.security.SecureRandom
 import java.util.UUID
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.Serializable
@@ -100,10 +100,28 @@ private val Context.e2eeDataStore by preferencesDataStore(name = "klic_e2ee")
  *
  * [mutex] serializes every protocol operation — libsignal session state is
  * read-modify-write and must never interleave.
+ *
+ * Persistence is write-behind: libsignal's store callbacks are synchronous, so
+ * [KlicSignalStore] mutations only update the in-memory maps (authoritative) and
+ * park the new snapshot in [snapshotWriter]; one background writer on [scope]
+ * encrypts + writes it after a short debounce. Every protocol operation that
+ * produces state the outside world will rely on (sent ciphertext, a decrypted
+ * message about to be stored, freshly published prekeys) ends with [flush] while
+ * still holding [mutex], so a crash can only lose state nobody has observed yet.
  */
-class E2eeKeyManager(private val context: Context, private val api: KlicApi) {
+class E2eeKeyManager(
+    private val context: Context,
+    private val api: KlicApi,
+    scope: CoroutineScope,
+) {
     val mutex = Mutex()
     private val json = Json { ignoreUnknownKeys = true }
+
+    private val snapshotWriter = WriteBehind<E2eeStoreSnapshot>(scope, SNAPSHOT_DEBOUNCE_MS) { snapshot ->
+        context.e2eeDataStore.edit {
+            it[protocolStoreKey] = KeystoreCrypto.encrypt(json.encodeToString(snapshot))
+        }
+    }
 
     private val schemaKey = intPreferencesKey("schemaV")
     private val installIdKey = stringPreferencesKey("installId")
@@ -153,12 +171,18 @@ class E2eeKeyManager(private val context: Context, private val api: KlicApi) {
         }
     }
 
-    /** Write-through hook for [KlicSignalStore] — called from inside libsignal ops. */
-    private fun persistSnapshot(snapshot: E2eeStoreSnapshot) = runBlocking {
-        context.e2eeDataStore.edit {
-            it[protocolStoreKey] = KeystoreCrypto.encrypt(json.encodeToString(snapshot))
-        }
-    }
+    /**
+     * Persistence hook for [KlicSignalStore] — called synchronously from inside libsignal
+     * ops, so it only schedules the write (see [flush]).
+     */
+    private fun persistSnapshot(snapshot: E2eeStoreSnapshot) = snapshotWriter.offer(snapshot)
+
+    /**
+     * Make every protocol-store mutation so far durable. Callers that act on the result
+     * of a protocol operation (send ciphertext, persist a decrypted message, publish keys)
+     * call this first — ideally still under [mutex]. Also flushed when the app backgrounds.
+     */
+    suspend fun flush() = snapshotWriter.flush()
 
     /**
      * Bring this install's published bundle up to date. Called on every successful
@@ -174,6 +198,7 @@ class E2eeKeyManager(private val context: Context, private val api: KlicApi) {
                     // in schema 2): no sessions exist yet, so a clean regenerate is safe.
                     DebugLog.i(TAG, "key schema ${prefs[schemaKey] ?: 0} -> $SCHEMA: regenerating")
                     val preservedInstallId = prefs[installIdKey]
+                    snapshotWriter.discard()
                     context.e2eeDataStore.edit { p ->
                         p.clear()
                         if (preservedInstallId != null) p[installIdKey] = preservedInstallId
@@ -215,6 +240,8 @@ class E2eeKeyManager(private val context: Context, private val api: KlicApi) {
             ),
         )
 
+        // Any snapshot still pending belongs to the store being replaced.
+        snapshotWriter.discard()
         val snapshot = E2eeStoreSnapshot(
             preKeys = preKeys.associate { it.id.toString() to b64(it.serialize()) },
             signedPreKeys = mapOf("1" to b64(signedRecord.serialize())),
@@ -327,6 +354,8 @@ class E2eeKeyManager(private val context: Context, private val api: KlicApi) {
 
         preKeys.forEach { store.storePreKey(it.id, it) }
         kyberPreKeys.forEach { store.storeKyberPreKey(it.id, it) }
+        // One write for the whole batch (was one full-snapshot write per record).
+        flush()
         context.e2eeDataStore.edit { p ->
             p[nextPreKeyIdKey] = nextPre + PRE_KEY_BATCH
             p[nextKyberIdKey] = nextKyber + KYBER_BATCH
@@ -345,6 +374,7 @@ class E2eeKeyManager(private val context: Context, private val api: KlicApi) {
 
         // Keep superseded records: in-flight PreKey messages may still reference them.
         store.storeSignedPreKey(record.id, record)
+        flush()
         context.e2eeDataStore.edit { p ->
             p[currentSignedPreKeyIdKey] = record.id
             p[signedPreKeyCreatedAtKey] = now
@@ -356,6 +386,7 @@ class E2eeKeyManager(private val context: Context, private val api: KlicApi) {
     /** Local state is unusable (Keystore key lost, partial write): start over cleanly. */
     private suspend fun resetAndRegenerate(reason: String) {
         DebugLog.w(TAG, "resetting E2EE keys: $reason")
+        snapshotWriter.discard()
         context.e2eeDataStore.edit { it.clear() }
         cachedStore = null
         generateAndPublish()
@@ -390,5 +421,7 @@ class E2eeKeyManager(private val context: Context, private val api: KlicApi) {
         const val KYBER_BATCH = 50
         const val TOP_UP_THRESHOLD = 20
         const val SIGNED_PRE_KEY_MAX_AGE_MS = 7L * 24 * 60 * 60 * 1000
+        /** Quiet period before a background snapshot write; [flush] bypasses it. */
+        const val SNAPSHOT_DEBOUNCE_MS = 300L
     }
 }
