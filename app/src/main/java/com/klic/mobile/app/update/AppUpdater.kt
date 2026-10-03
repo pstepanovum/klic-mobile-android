@@ -2,6 +2,9 @@ package com.klic.mobile.app.update
 
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageInfo
+import android.content.pm.PackageManager
+import android.content.pm.Signature
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
@@ -9,22 +12,51 @@ import androidx.core.content.FileProvider
 import com.klic.mobile.app.BuildConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import okhttp3.HttpUrl
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONObject
 import java.io.File
+import java.io.IOException
+import java.security.MessageDigest
 
 /**
  * Self-update against the public GitHub releases of klic-mobile-android. No Play Store:
  * the app checks the latest release, downloads its APK, and hands it to the system
  * installer. The new APK must be signed with the same key (the project's debug key) to
  * update in place. The repo is public, so no auth/token is needed to read or download.
+ *
+ * Integrity: the APK is only fetched over https from github.com / *.githubusercontent.com
+ * (every redirect hop included), and before the installer is launched its package name
+ * and signing certificate must match this installed app — otherwise the file is deleted
+ * and [download] throws, surfacing through the callers' existing error paths.
  */
 object AppUpdater {
     private const val LATEST_URL =
         "https://api.github.com/repos/pstepanovum/klic-mobile-android/releases/latest"
 
     private val client = OkHttpClient()
+
+    /**
+     * APK download client: never downgrades https→http on redirect, and a network
+     * interceptor vets EVERY hop (original request + each redirect) before it is sent.
+     */
+    private val downloadClient = client.newBuilder()
+        .followSslRedirects(false)
+        .addNetworkInterceptor { chain ->
+            val url = chain.request().url
+            if (!isAllowedDownloadUrl(url)) throw IOException("Blocked update download from ${url.host}")
+            chain.proceed(chain.request())
+        }
+        .build()
+
+    /** https + github.com or a *.githubusercontent.com asset host (release CDN). */
+    internal fun isAllowedDownloadUrl(url: HttpUrl): Boolean {
+        if (!url.isHttps) return false
+        val host = url.host.lowercase()
+        return host == "github.com" || host.endsWith(".githubusercontent.com")
+    }
 
     data class Release(val versionName: String, val apkUrl: String, val notes: String)
 
@@ -78,9 +110,13 @@ object AppUpdater {
             val dir = File(context.cacheDir, "updates").apply { mkdirs() }
             val out = File(dir, "klic-update.apk")
             if (out.exists()) out.delete()
-            val req = Request.Builder().url(url).build()
-            client.newCall(req).execute().use { resp ->
+            val httpUrl = url.toHttpUrlOrNull()
+            if (httpUrl == null || !isAllowedDownloadUrl(httpUrl)) error("Untrusted update URL")
+            val req = Request.Builder().url(httpUrl).build()
+            downloadClient.newCall(req).execute().use { resp ->
                 if (!resp.isSuccessful) error("Download failed (${resp.code})")
+                // Belt and braces: the final (post-redirect) URL must be trusted too.
+                if (!isAllowedDownloadUrl(resp.request.url)) error("Untrusted update host")
                 val body = resp.body ?: error("Empty response")
                 val total = body.contentLength()
                 body.byteStream().use { input ->
@@ -96,8 +132,63 @@ object AppUpdater {
                     }
                 }
             }
+            if (!matchesInstalledApp(context, out)) {
+                out.delete()
+                error("Update signature mismatch — not installing")
+            }
             out
         }
+
+    /**
+     * True when the downloaded APK at [apk] declares this app's package name and is signed
+     * by this install's signing certificate (SHA-256 of the cert bytes). Fails closed: an
+     * unparseable archive or missing signer info is a mismatch.
+     */
+    private fun matchesInstalledApp(context: Context, apk: File): Boolean = runCatching {
+        val pm = context.packageManager
+        val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            PackageManager.GET_SIGNING_CERTIFICATES
+        } else {
+            @Suppress("DEPRECATION") PackageManager.GET_SIGNATURES
+        }
+        val archive = pm.getPackageArchiveInfo(apk.absolutePath, flags) ?: return false
+        if (archive.packageName != context.packageName) return false
+        val installed = pm.getPackageInfo(context.packageName, flags)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P && archive.signingInfo != null) {
+            val a = archive.signingInfo ?: return false
+            val i = installed.signingInfo ?: return false
+            if (a.hasMultipleSigners() || i.hasMultipleSigners()) {
+                // Multi-signer APKs have no rotation lineage: the signer SETS must match.
+                if (!a.hasMultipleSigners() || !i.hasMultipleSigners()) return false
+                val archiveSet = a.apkContentsSigners.digests()
+                archiveSet.isNotEmpty() && archiveSet == i.apkContentsSigners.digests()
+            } else {
+                // Single signer: the update's lineage (current cert + any certs it rotated
+                // from) must include the cert this install is signed with right now.
+                val current = i.apkContentsSigners.digests()
+                val lineage = a.signingCertificateHistory.digests()
+                current.size == 1 && lineage.containsAll(current)
+            }
+        } else {
+            // Pre-P, or a P+ build that didn't populate signingInfo for the archive: compare
+            // the legacy signature sets (re-queried with GET_SIGNATURES on P+).
+            @Suppress("DEPRECATION")
+            val legacy = PackageManager.GET_SIGNATURES
+            val a = if (flags == legacy) archive else pm.getPackageArchiveInfo(apk.absolutePath, legacy) ?: return false
+            val i = if (flags == legacy) installed else pm.getPackageInfo(context.packageName, legacy)
+            legacySignatureDigests(a).let { it.isNotEmpty() && it == legacySignatureDigests(i) }
+        }
+    }.getOrDefault(false)
+
+    @Suppress("DEPRECATION")
+    private fun legacySignatureDigests(info: PackageInfo): Set<String> = info.signatures.digests()
+
+    private fun Array<Signature>?.digests(): Set<String> = orEmpty()
+        .map { sig ->
+            MessageDigest.getInstance("SHA-256").digest(sig.toByteArray())
+                .joinToString("") { "%02x".format(it) }
+        }
+        .toSet()
 
     /** Whether the OS will let us install APKs (Android O+ requires a per-app grant). */
     fun canInstall(context: Context): Boolean =
