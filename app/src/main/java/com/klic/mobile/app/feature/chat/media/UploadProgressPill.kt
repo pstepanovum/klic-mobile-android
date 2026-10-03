@@ -25,7 +25,8 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -36,6 +37,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.klic.mobile.app.feature.UploadTask
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import com.klic.mobile.app.ui.theme.KlicIcons
 import androidx.compose.ui.res.stringResource
 import com.klic.mobile.app.R
@@ -155,19 +158,24 @@ private fun PillAction(label: String, onClick: () -> Unit, modifier: Modifier = 
     }
 }
 
-/** Downsampled thumbnail from the first image attachment's staged bytes, if any. */
+/** Downsampled thumbnail from the first image attachment's staged bytes, if any (decoded off main). */
 @Composable
-private fun rememberUploadPreview(task: UploadTask): Bitmap? = remember(task.id) {
-    val image = task.attachments.firstOrNull { it.kind == "IMAGE" && it.localBytes != null }
-        ?: return@remember null
-    val bytes = image.localBytes ?: return@remember null
-    runCatching {
-        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-        BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
-        val sample = (maxOf(bounds.outWidth, bounds.outHeight) / 256).coerceAtLeast(1)
-        val opts = BitmapFactory.Options().apply { inSampleSize = sample }
-        BitmapFactory.decodeByteArray(bytes, 0, bytes.size, opts)
-    }.getOrNull()
+private fun rememberUploadPreview(task: UploadTask): Bitmap? {
+    val preview by produceState<Bitmap?>(initialValue = null, task.id) {
+        val image = task.attachments.firstOrNull { it.kind == "IMAGE" && it.localBytes != null }
+            ?: return@produceState
+        val bytes = image.localBytes ?: return@produceState
+        value = withContext(Dispatchers.Default) {
+            runCatching {
+                val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+                val sample = (maxOf(bounds.outWidth, bounds.outHeight) / 256).coerceAtLeast(1)
+                val opts = BitmapFactory.Options().apply { inSampleSize = sample }
+                BitmapFactory.decodeByteArray(bytes, 0, bytes.size, opts)
+            }.getOrNull()
+        }
+    }
+    return preview
 }
 
 @Composable

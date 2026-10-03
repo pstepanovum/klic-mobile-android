@@ -48,6 +48,7 @@ import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -74,6 +75,8 @@ import androidx.compose.ui.window.DialogProperties
 import com.klic.mobile.app.R
 import com.klic.mobile.app.data.SettingsStore
 import java.io.ByteArrayOutputStream
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.util.UUID
 
 // ── Editor state types ──────────────────────────────────────────────────────
@@ -110,9 +113,15 @@ fun MediaEditorDialog(
     onDismiss: () -> Unit,
 ) {
     val isImage = !draft.isVideo && draft.attachment.localBytes != null
-    val source = remember(draft.id) {
-        draft.attachment.localBytes?.let { BitmapFactory.decodeByteArray(it, 0, it.size) }
-            ?: draft.previewBitmap
+    // Decoded off the main thread. The staged bytes were already bounded by the upload
+    // encode (2048px standard / 4096px HD), so the 4096px cap only guards against an
+    // oversized source — it never lowers the editor's output resolution.
+    val source by produceState(
+        initialValue = if (draft.attachment.localBytes == null) draft.previewBitmap else null,
+        draft.id,
+    ) {
+        val bytes = draft.attachment.localBytes ?: return@produceState
+        value = withContext(Dispatchers.Default) { decodeBounded(bytes, MAX_EDITOR_EDGE) } ?: draft.previewBitmap
     }
 
     var tool by remember { mutableStateOf(EditorTool.NONE) }
@@ -129,8 +138,10 @@ fun MediaEditorDialog(
     var canvasSize by remember { mutableStateOf(IntSize.Zero) }
 
     // Working bitmap = source with rotation + crop applied (overlays draw on top).
-    val working = remember(source, rotation, cropAspect) {
-        source?.let { transformBitmap(it, rotation, cropAspect) }
+    // Computed off the main thread; the previous result stays on screen meanwhile.
+    val working by produceState<Bitmap?>(initialValue = null, source, rotation, cropAspect) {
+        val base = source ?: return@produceState
+        value = withContext(Dispatchers.Default) { transformBitmap(base, rotation, cropAspect) }
     }
 
     Dialog(
@@ -170,6 +181,7 @@ fun MediaEditorDialog(
                     tool = if (tool == EditorTool.QUALITY) EditorTool.NONE else EditorTool.QUALITY
                 }
                 IconButton(onClick = {
+                    val working = working
                     if (isImage && working != null) {
                         val flattened = flatten(working, strokes, texts, hd)
                         onDone(
@@ -196,6 +208,7 @@ fun MediaEditorDialog(
 
             // Canvas area.
             Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                val working = working
                 if (working != null) {
                     val ratio = working.width.toFloat() / working.height.toFloat()
                     Box(
@@ -487,6 +500,18 @@ private fun normalize(point: Offset, size: IntSize): Offset =
         (point.x / size.width).coerceIn(0f, 1f),
         (point.y / size.height).coerceIn(0f, 1f),
     )
+
+/** Longest edge the editor decodes the staged image at — the HD upload encode limit. */
+private const val MAX_EDITOR_EDGE = 4096
+
+/** Decode [bytes], subsampling by powers of two until the long edge fits [maxEdge]. */
+private fun decodeBounded(bytes: ByteArray, maxEdge: Int): Bitmap? = runCatching {
+    val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+    BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+    var sample = 1
+    while (maxOf(bounds.outWidth, bounds.outHeight) / sample > maxEdge) sample *= 2
+    BitmapFactory.decodeByteArray(bytes, 0, bytes.size, BitmapFactory.Options().apply { inSampleSize = sample })
+}.getOrNull()
 
 /** Rotation (90° steps) + center-crop to an aspect preset. */
 private fun transformBitmap(source: Bitmap, quarterTurns: Int, aspect: Float?): Bitmap {
