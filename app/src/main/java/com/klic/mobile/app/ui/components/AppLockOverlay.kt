@@ -17,8 +17,10 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -29,6 +31,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.klic.mobile.app.R
 import com.klic.mobile.app.data.AppLockStore
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * §11.3 app-lock unlock surface: a Klic-styled bottom sheet card (PIN dots + rounded
@@ -41,15 +47,43 @@ import com.klic.mobile.app.data.AppLockStore
 @Composable
 fun AppLockOverlay() {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     var entered by remember { mutableStateOf("") }
     var wrong by remember { mutableStateOf(false) }
+    // PBKDF2 takes ~100 ms+ — run it off the main thread and ignore keys meanwhile.
+    var checking by remember { mutableStateOf(false) }
+    // Failed-attempt throttle (persisted in AppLockStore, so it survives restarts).
+    var lockoutMs by remember { mutableLongStateOf(AppLockStore.lockoutRemainingMs()) }
 
-    fun submit(code: String) {
-        if (AppLockStore.verify(code)) {
-            AppLockStore.unlock()
-        } else {
-            wrong = true
-            entered = ""
+    LaunchedEffect(lockoutMs > 0) {
+        while (lockoutMs > 0) {
+            delay(lockoutMs % 1_000L + 1L)
+            lockoutMs = AppLockStore.lockoutRemainingMs()
+        }
+    }
+
+    /**
+     * One passcode check. With a known passcode length the keypad checks once, at that
+     * length; legacy installs (length unknown until their first unlock) probe at every
+     * length 4–6 and only count a failure at 6, so probes don't burn throttle attempts.
+     */
+    fun submit(code: String, countFailure: Boolean) {
+        checking = true
+        scope.launch {
+            val result = withContext(Dispatchers.Default) { AppLockStore.verify(code, countFailure) }
+            checking = false
+            when (result) {
+                AppLockStore.VerifyResult.Success -> AppLockStore.unlock()
+                AppLockStore.VerifyResult.Wrong -> if (countFailure) {
+                    wrong = true
+                    entered = ""
+                }
+                is AppLockStore.VerifyResult.LockedOut -> {
+                    wrong = countFailure
+                    entered = ""
+                    lockoutMs = result.remainingMs
+                }
+            }
         }
     }
 
@@ -91,7 +125,14 @@ fun AppLockOverlay() {
                 style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
                 color = MaterialTheme.colorScheme.onBackground,
             )
-            if (wrong) {
+            if (lockoutMs > 0) {
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    stringResource(R.string.applock_try_again_in, ((lockoutMs + 999L) / 1_000L).toInt()),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.error,
+                )
+            } else if (wrong) {
                 Spacer(Modifier.height(6.dp))
                 Text(
                     stringResource(R.string.applock_wrong_passcode),
@@ -105,17 +146,18 @@ fun AppLockOverlay() {
             PasscodeKeypad(
                 showBiometric = AppLockStore.biometricEnabled && Build.VERSION.SDK_INT >= 28,
                 onDigit = { digit ->
-                    if (entered.length < 6) {
+                    if (!checking && lockoutMs <= 0 && entered.length < 6) {
                         wrong = false
                         entered += digit
-                        if (entered.length >= 4 && AppLockStore.verify(entered)) {
-                            AppLockStore.unlock()
-                        } else if (entered.length == 6) {
-                            submit(entered)
+                        val length = AppLockStore.passcodeLength
+                        when {
+                            length != null -> if (entered.length == length) submit(entered, countFailure = true)
+                            entered.length == 6 -> submit(entered, countFailure = true)
+                            entered.length >= 4 -> submit(entered, countFailure = false)
                         }
                     }
                 },
-                onDelete = { entered = entered.dropLast(1) },
+                onDelete = { if (!checking) entered = entered.dropLast(1) },
                 onBiometric = { tryBiometric() },
             )
             Spacer(Modifier.height(10.dp))

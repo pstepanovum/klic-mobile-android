@@ -82,6 +82,7 @@
     <string name="applock_passcodes_dont_match">Passcodes don\'t match.</string>
     <string name="applock_enter_passcode">Enter your passcode</string>
     <string name="applock_wrong_passcode">Wrong passcode. Try again.</string>
+    <string name="applock_try_again_in">Too many attempts. Try again in %1$d s</string>
     <string name="applock_unlock">Unlock</string>
     <string name="applock_biometric_title">Unlock Klic</string>
     <string name="applock_use_passcode">Use passcode</string>

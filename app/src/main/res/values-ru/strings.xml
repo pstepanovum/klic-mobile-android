@@ -74,6 +74,7 @@
     <string name="applock_passcodes_dont_match">Коды не совпадают.</string>
     <string name="applock_enter_passcode">Введите код-пароль</string>
     <string name="applock_wrong_passcode">Неверный код. Попробуйте ещё раз.</string>
+    <string name="applock_try_again_in">Слишком много попыток. Повторите через %1$d с</string>
     <string name="applock_unlock">Разблокировать</string>
     <string name="applock_biometric_title">Разблокировать Klic</string>
     <string name="applock_use_passcode">Использовать код-пароль</string>
