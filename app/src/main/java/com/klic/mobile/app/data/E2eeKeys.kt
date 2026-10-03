@@ -2,7 +2,6 @@ package com.klic.mobile.app.data
 
 import android.content.Context
 import android.util.Base64
-import android.util.Log
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
@@ -173,7 +172,7 @@ class E2eeKeyManager(private val context: Context, private val api: KlicApi) {
                 (prefs[schemaKey] ?: 0) != SCHEMA -> {
                     // Pre-session key layout (e.g. the last-resort id collision fixed
                     // in schema 2): no sessions exist yet, so a clean regenerate is safe.
-                    Log.i(TAG, "key schema ${prefs[schemaKey] ?: 0} -> $SCHEMA: regenerating")
+                    DebugLog.i(TAG, "key schema ${prefs[schemaKey] ?: 0} -> $SCHEMA: regenerating")
                     val preservedInstallId = prefs[installIdKey]
                     context.e2eeDataStore.edit { p ->
                         p.clear()
@@ -185,7 +184,7 @@ class E2eeKeyManager(private val context: Context, private val api: KlicApi) {
                 prefs[deviceIdKey] == null -> publishExisting()
                 else -> maintain(prefs[installIdKey]!!)
             }
-        }.onFailure { Log.w(TAG, "key upkeep failed (will retry on next auth)", it) }
+        }.onFailure { DebugLog.w(TAG, "key upkeep failed (will retry on next auth)", it) }
     }
 
     // ── Generation + publish ──────────────────────────────────────────────────
@@ -235,7 +234,7 @@ class E2eeKeyManager(private val context: Context, private val api: KlicApi) {
             p[nextKyberIdKey] = KYBER_BATCH + 1
         }
         cachedStore = null
-        Log.i(TAG, "published key bundle as device ${response.deviceId}")
+        DebugLog.i(TAG, "published key bundle as device ${response.deviceId}")
     }
 
     /** A publish failed after keygen (e.g. offline at first login): retry with stored keys. */
@@ -268,7 +267,7 @@ class E2eeKeyManager(private val context: Context, private val api: KlicApi) {
             ),
         )
         context.e2eeDataStore.edit { it[deviceIdKey] = response.deviceId }
-        Log.i(TAG, "re-published key bundle as device ${response.deviceId}")
+        DebugLog.i(TAG, "re-published key bundle as device ${response.deviceId}")
     }
 
     /** Like [protocolStore] but tolerates a missing deviceId (publish retry path). */
@@ -332,7 +331,7 @@ class E2eeKeyManager(private val context: Context, private val api: KlicApi) {
             p[nextPreKeyIdKey] = nextPre + PRE_KEY_BATCH
             p[nextKyberIdKey] = nextKyber + KYBER_BATCH
         }
-        Log.i(TAG, "topped up prekeys (+$PRE_KEY_BATCH EC, +$KYBER_BATCH kyber)")
+        DebugLog.i(TAG, "topped up prekeys (+$PRE_KEY_BATCH EC, +$KYBER_BATCH kyber)")
     }
 
     private suspend fun rotateSignedPreKey(installId: String) {
@@ -351,12 +350,12 @@ class E2eeKeyManager(private val context: Context, private val api: KlicApi) {
             p[signedPreKeyCreatedAtKey] = now
             p[nextSignedIdKey] = record.id + 1
         }
-        Log.i(TAG, "rotated signed prekey to id ${record.id}")
+        DebugLog.i(TAG, "rotated signed prekey to id ${record.id}")
     }
 
     /** Local state is unusable (Keystore key lost, partial write): start over cleanly. */
     private suspend fun resetAndRegenerate(reason: String) {
-        Log.w(TAG, "resetting E2EE keys: $reason")
+        DebugLog.w(TAG, "resetting E2EE keys: $reason")
         context.e2eeDataStore.edit { it.clear() }
         cachedStore = null
         generateAndPublish()

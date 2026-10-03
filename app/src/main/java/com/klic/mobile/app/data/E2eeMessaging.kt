@@ -1,6 +1,5 @@
 package com.klic.mobile.app.data
 
-import android.util.Log
 import kotlinx.serialization.json.Json
 import retrofit2.HttpException
 
@@ -68,7 +67,7 @@ class E2eeMessaging(
             } catch (e: HttpException) {
                 if (e.code() != 409 || attempt > 0) throw e
                 directory = staleDirectory(e) ?: api.conversationDevices(conversationId).devices
-                Log.i(TAG, "device directory was stale — re-encrypting for ${directory.size} devices")
+                DebugLog.i(TAG, "device directory was stale — re-encrypting for ${directory.size} devices")
             }
         }
         error("unreachable")

@@ -1,7 +1,6 @@
 package com.klic.mobile.app.data
 
 import android.util.Base64
-import android.util.Log
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
@@ -95,7 +94,7 @@ class E2eeSessions(private val keys: E2eeKeyManager, private val api: KlicApi) {
                         ciphertext = Base64.encodeToString(message.serialize(), Base64.NO_WRAP),
                     )
                 }.onFailure {
-                    Log.w(TAG, "encrypt to ${target.userId}/${target.deviceId} failed", it)
+                    DebugLog.w(TAG, "encrypt to ${target.userId}/${target.deviceId} failed", it)
                 }.getOrNull()
             }
             EncryptedFanOut(senderDeviceId = myDeviceId, envelopes = envelopes)
@@ -120,7 +119,7 @@ class E2eeSessions(private val keys: E2eeKeyManager, private val api: KlicApi) {
                 }
                 E2eeCodec.decode(plaintext)
             }.onFailure {
-                Log.w(TAG, "decrypt from $senderUserId/$senderDeviceId failed", it)
+                DebugLog.w(TAG, "decrypt from $senderUserId/$senderDeviceId failed", it)
             }.getOrNull()
         }
 
