@@ -1,6 +1,7 @@
 package com.klic.mobile.app.data
 
 import android.content.Context
+import android.os.Looper
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
@@ -14,6 +15,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeoutOrNull
 import java.time.Instant
 
 /**
@@ -112,11 +114,27 @@ object SettingsStore {
         }
     }
 
-    /** Blocks (briefly) until the first DataStore read lands — for the FCM/ringer path. */
+    /**
+     * The current snapshot for the FCM/ringer path, which can't suspend. Off the main
+     * thread it waits (at most [LOAD_TIMEOUT_MS]) for the first DataStore read on a cold
+     * start; on the main thread — the call service's collectors and the ringer backstop —
+     * it never blocks and serves whatever is loaded (the defaults until the first read).
+     * Either way an unreadable/slow DataStore degrades to defaults instead of hanging.
+     */
     fun snapshotBlocking(): Snapshot {
-        runBlocking { loaded.await() }
+        if (!loaded.isCompleted) {
+            if (Looper.myLooper() == Looper.getMainLooper()) {
+                DebugLog.w(TAG, "snapshotBlocking on main thread before settings loaded — using defaults")
+            } else {
+                val ok = runBlocking { withTimeoutOrNull(LOAD_TIMEOUT_MS) { loaded.await() } }
+                if (ok == null) DebugLog.w(TAG, "settings load timed out — using defaults")
+            }
+        }
         return _snapshot.value
     }
+
+    private const val TAG = "KlicSettings"
+    private const val LOAD_TIMEOUT_MS = 2_000L
 
     // ── Writers ──────────────────────────────────────────────────────────────
 

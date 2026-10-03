@@ -1,10 +1,12 @@
 package com.klic.mobile.app.data
 
 import android.content.Context
+import android.os.Looper
 import android.util.Base64
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.klic.mobile.app.BuildConfig
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
@@ -72,8 +74,22 @@ class TokenStore(private val context: Context) {
     suspend fun loadUser(): String? = context.dataStore.data.first()[userKey]
 
     // Synchronous variants for the OkHttp Authenticator, which runs off the main thread.
-    fun saveBlocking(access: String, refresh: String) = runBlocking { save(access, refresh) }
-    fun clearBlocking() = runBlocking { clear() }
+    fun saveBlocking(access: String, refresh: String) {
+        assertOffMainThread("saveBlocking")
+        runBlocking { save(access, refresh) }
+    }
+
+    fun clearBlocking() {
+        assertOffMainThread("clearBlocking")
+        runBlocking { clear() }
+    }
+
+    /** Debug builds fail fast if a blocking DataStore write ever lands on the UI thread. */
+    private fun assertOffMainThread(what: String) {
+        if (BuildConfig.DEBUG) {
+            check(Looper.myLooper() != Looper.getMainLooper()) { "TokenStore.$what must not run on the main thread" }
+        }
+    }
 }
 
 /**
