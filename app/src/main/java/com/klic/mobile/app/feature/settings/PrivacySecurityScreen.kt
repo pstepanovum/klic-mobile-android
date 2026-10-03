@@ -33,7 +33,6 @@ import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -60,6 +59,7 @@ import com.klic.mobile.app.ui.components.PillButton
 import kotlinx.coroutines.delay
 import com.klic.mobile.app.ui.theme.KlicIcons
 import kotlinx.coroutines.launch
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
 /** Sub-pages of Privacy and Security (§10.4, §18.2). */
 enum class PrivacySecuritySub { BLOCKED, APP_LOCK, PASSKEYS, CHANGE_PASSWORD, RECOVERY_EMAIL }
@@ -72,8 +72,8 @@ enum class PrivacySecuritySub { BLOCKED, APP_LOCK, PASSKEYS, CHANGE_PASSWORD, RE
 fun PrivacySecurityContent(vm: KlicViewModel, onOpenSub: (PrivacySecuritySub) -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val settings by SettingsStore.snapshot.collectAsState()
-    val lockEnabled by AppLockStore.enabled.collectAsState()
+    val settings by SettingsStore.snapshot.collectAsStateWithLifecycle()
+    val lockEnabled by AppLockStore.enabled.collectAsStateWithLifecycle()
 
     var showLinkSheet by remember { mutableStateOf(false) }
     var showClearCookies by remember { mutableStateOf(false) }
@@ -81,7 +81,7 @@ fun PrivacySecurityContent(vm: KlicViewModel, onOpenSub: (PrivacySecuritySub) ->
     var showDeleteDrafts by remember { mutableStateOf(false) }
     var showResetHidden by remember { mutableStateOf(false) }
     var showDeleteAccount by remember { mutableStateOf(false) }
-    val me by vm.currentUser.collectAsState()
+    val me by vm.currentUser.collectAsStateWithLifecycle()
     var awayMonths by remember(me?.deleteIfAwayMonths) { mutableStateOf(me?.deleteIfAwayMonths) }
     // §11.6: which visibility field the picker sheet currently edits (null = closed).
     var visibilityField by remember { mutableStateOf<String?>(null) }
@@ -454,7 +454,7 @@ private fun visibilityLabel(value: String): String = when (value) {
 /** Double confirm: first warning, then type-the-username, then DELETE /me. */
 @Composable
 private fun DeleteAccountDialog(vm: KlicViewModel, onDismiss: () -> Unit) {
-    val me by vm.currentUser.collectAsState()
+    val me by vm.currentUser.collectAsStateWithLifecycle()
     var step by remember { mutableStateOf(1) }
     var typed by remember { mutableStateOf("") }
     val username = me?.username.orEmpty()
@@ -511,7 +511,7 @@ private fun DeleteAccountDialog(vm: KlicViewModel, onDismiss: () -> Unit) {
 
 @Composable
 fun BlockedUsersContent(vm: KlicViewModel) {
-    val blocked by vm.blockedUsers.collectAsState()
+    val blocked by vm.blockedUsers.collectAsStateWithLifecycle()
     LaunchedEffect(Unit) { vm.loadBlocks() }
 
     if (blocked.isEmpty()) {
@@ -555,7 +555,7 @@ fun BlockedUsersContent(vm: KlicViewModel) {
 @Composable
 fun AppLockContent() {
     val context = LocalContext.current
-    val lockEnabled by AppLockStore.enabled.collectAsState()
+    val lockEnabled by AppLockStore.enabled.collectAsStateWithLifecycle()
     var showSetDialog by remember { mutableStateOf(false) }
     var showAutoLockSheet by remember { mutableStateOf(false) }
     var autoLock by remember { mutableStateOf(AppLockStore.autoLockMode) }
@@ -648,7 +648,7 @@ private fun autoLockLabel(mode: String): String = when (mode) {
 @Composable
 fun PasskeysContent(vm: KlicViewModel) {
     val context = LocalContext.current
-    val passkeys by vm.passkeyList.collectAsState()
+    val passkeys by vm.passkeyList.collectAsStateWithLifecycle()
     LaunchedEffect(Unit) { vm.loadPasskeys() }
 
     SettingsCard {
@@ -844,8 +844,8 @@ fun ChangePasswordContent(vm: KlicViewModel) {
 @Composable
 fun RecoveryEmailContent(vm: KlicViewModel) {
     val context = LocalContext.current
-    val me by vm.currentUser.collectAsState()
-    val status by vm.emailStatus.collectAsState()
+    val me by vm.currentUser.collectAsStateWithLifecycle()
+    val status by vm.emailStatus.collectAsStateWithLifecycle()
 
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }

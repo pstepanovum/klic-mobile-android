@@ -38,7 +38,6 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -67,6 +66,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import androidx.compose.ui.res.stringResource
 import com.klic.mobile.app.R
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
 private sealed class GroupInfoRoute {
     object Main : GroupInfoRoute()
@@ -87,8 +87,8 @@ fun GroupInfoScreen(
     onBack: () -> Unit,
     onOpenChat: () -> Unit,
 ) {
-    val conversations by vm.conversations.collectAsState()
-    val me by vm.currentUser.collectAsState()
+    val conversations by vm.conversations.collectAsStateWithLifecycle()
+    val me by vm.currentUser.collectAsStateWithLifecycle()
     val conversation = conversations.firstOrNull { it.id == conversationId }
     // The group vanished under us (e.g. we were removed, §9.3) — leave the page.
     if (conversation == null) {
@@ -232,7 +232,7 @@ private fun GroupInfoMain(
     // §12.1: member picked "Report" on the action sheet.
     var reportTarget by remember { mutableStateOf<Member?>(null) }
     // §14.3: friends list powers the member sheet's "Add friend" affordance.
-    val friends by vm.friends.collectAsState()
+    val friends by vm.friends.collectAsStateWithLifecycle()
     LaunchedEffect(Unit) { vm.loadFriends() }
     // §11.5: adjust step (pinch-zoom in a rounded-square mask) before the cover upload.
     var adjustCoverUri by remember { mutableStateOf<android.net.Uri?>(null) }

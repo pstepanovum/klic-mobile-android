@@ -30,7 +30,6 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -53,6 +52,7 @@ import com.klic.mobile.app.ui.components.PillButton
 import com.klic.mobile.app.ui.theme.KlicIcons
 import androidx.compose.ui.res.stringResource
 import com.klic.mobile.app.R
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -61,9 +61,9 @@ fun FriendsScreen(
     onOpenProfile: (String) -> Unit,
     onOpenChat: (Conversation) -> Unit,
 ) {
-    val friends by vm.friends.collectAsState()
-    val requests by vm.friendRequests.collectAsState()
-    val presenceMap by vm.presence.collectAsState()
+    val friends by vm.friends.collectAsStateWithLifecycle()
+    val requests by vm.friendRequests.collectAsStateWithLifecycle()
+    val presenceMap by vm.presence.collectAsStateWithLifecycle()
     var showAddFriendSheet by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) { vm.loadFriends() }
@@ -261,7 +261,7 @@ private fun FriendRow(friend: User, online: Boolean, onClick: () -> Unit) {
 @Composable
 private fun AddFriendSheet(vm: KlicViewModel, onDismiss: () -> Unit) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    val friendStatus by vm.friendStatus.collectAsState()
+    val friendStatus by vm.friendStatus.collectAsStateWithLifecycle()
     var username by remember { mutableStateOf("") }
 
     ModalBottomSheet(

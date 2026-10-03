@@ -26,7 +26,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -54,6 +53,7 @@ import kotlinx.coroutines.launch
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
 /**
  * §14.4: Settings → "Saved messages" — everything the user starred across ALL
@@ -67,7 +67,7 @@ fun SavedMessagesContent(
     vm: KlicViewModel,
     onOpenMessage: (conversationId: String, messageId: String) -> Unit,
 ) {
-    val conversations by vm.conversations.collectAsState()
+    val conversations by vm.conversations.collectAsStateWithLifecycle()
     var items by remember { mutableStateOf(vm.cachedStarred(null)?.items ?: emptyList()) }
     var cursor by remember { mutableStateOf<String?>(null) }
     var loading by remember { mutableStateOf(true) }

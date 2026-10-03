@@ -74,6 +74,7 @@ import com.klic.mobile.app.ui.theme.KlicIcons
 import com.klic.mobile.app.ui.theme.KlicTheme
 import kotlinx.coroutines.flow.MutableStateFlow
 import androidx.compose.ui.res.stringResource
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
 private data class Tab(
     val route: String,
@@ -133,8 +134,9 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             val vm: KlicViewModel = viewModel(factory = factory(container))
+            // Plain collectAsState: a background sign-out must stop CallSignalingService now.
             val isAuthed by vm.isAuthenticated.collectAsState()
-            val themeMode by vm.themeMode.collectAsState()
+            val themeMode by vm.themeMode.collectAsStateWithLifecycle()
             val systemDark = isSystemInDarkTheme()
             val isDark = when (themeMode) {
                 "light"  -> false
@@ -149,6 +151,8 @@ class MainActivity : ComponentActivity() {
             var showReliabilityDialog by remember { mutableStateOf(false) }
             // §7.4: keep the system's PiP params in sync — auto-enter (API 31+) only while a
             // call with live remote video is up, aspect ratio from the track when known.
+            // Plain collectAsState on purpose: these drive Activity-level PiP params, which
+            // must track the call even while the activity is stopped.
             val activeCallForPip by vm.activeCall.collectAsState()
             val remoteVideoForPip by container.callManager.remoteVideoTrack.collectAsState()
             val remoteVideoDims by container.callManager.remoteVideoDimensions.collectAsState()
@@ -199,6 +203,8 @@ class MainActivity : ComponentActivity() {
                 // content behind FULLY blurred (privacy). The in-call UI (incoming answers
                 // land in activeCall) bypasses the lock; the incoming ring itself lives in
                 // IncomingCallActivity, outside this overlay.
+                // Plain collectAsState on purpose: the lock must be applied from the very
+                // first frame after returning to foreground, never from a paused collector.
                 val appLocked by com.klic.mobile.app.data.AppLockStore.locked.collectAsState()
                 val lockEnabled by com.klic.mobile.app.data.AppLockStore.enabled.collectAsState()
                 val lockActive = isAuthed && lockEnabled && appLocked && activeCallForPip == null
@@ -328,14 +334,14 @@ class MainActivity : ComponentActivity() {
         // Navigate to the call UI when a call actually becomes active — not on the button tap.
         // startCall/acceptIncomingCall are async, so navigating eagerly landed on an empty
         // active_call that popped straight back (the "double-tap to open the call" bug).
-        val activeCall by vm.activeCall.collectAsState()
+        val activeCall by vm.activeCall.collectAsStateWithLifecycle()
         LaunchedEffect(activeCall?.callId) {
             if (activeCall?.callId != null) {
                 navController.navigate("active_call") { launchSingleTop = true }
             }
         }
 
-        val incoming by pendingCall.collectAsState()
+        val incoming by pendingCall.collectAsStateWithLifecycle()
         LaunchedEffect(incoming) {
             incoming?.let { invite ->
                 vm.acceptIncomingCall(invite.callId, invite.displayLabel, isGroup = invite.isGroup)
@@ -345,7 +351,7 @@ class MainActivity : ComponentActivity() {
 
         // §13.8: consume a pending friend link — land on the Friends tab and send the
         // request; the outcome surfaces through the global toast channel.
-        val addFriendLink by pendingAddFriend.collectAsState()
+        val addFriendLink by pendingAddFriend.collectAsStateWithLifecycle()
         LaunchedEffect(addFriendLink) {
             addFriendLink?.let { username ->
                 navController.navigate("friends") { launchSingleTop = true }
@@ -434,7 +440,7 @@ class MainActivity : ComponentActivity() {
                     val id = entry.arguments?.getString("conversationId").orEmpty()
                     // Reactive lookup: when the conversation drops out of the list
                     // (removed from the group, §9.3) the chat screen leaves itself.
-                    val convos by vm.conversations.collectAsState()
+                    val convos by vm.conversations.collectAsStateWithLifecycle()
                     val convo = convos.firstOrNull { it.id == id }
                     if (convo == null) {
                         LaunchedEffect(id) { navController.popBackStack() }
@@ -485,8 +491,8 @@ class MainActivity : ComponentActivity() {
                     )
                 }
                 composable("active_call") {
-                    val call by vm.activeCall.collectAsState()
-                    val peer by vm.callPeerName.collectAsState()
+                    val call by vm.activeCall.collectAsStateWithLifecycle()
+                    val peer by vm.callPeerName.collectAsStateWithLifecycle()
                     if (call == null) {
                         LaunchedEffect(Unit) { navController.popBackStack() }
                     } else {

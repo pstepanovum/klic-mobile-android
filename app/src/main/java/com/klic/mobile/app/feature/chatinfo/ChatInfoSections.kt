@@ -20,7 +20,6 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -45,6 +44,7 @@ import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
 import androidx.compose.ui.res.stringResource
 import com.klic.mobile.app.R
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
 /** Sub-pages reachable from a chat info screen (§8.4, §14.3). */
 enum class ChatInfoSub { MEDIA, STARRED, STORAGE, THEME, ENCRYPTION }
@@ -138,7 +138,7 @@ fun ChatInfoSectionsCard(
     showThemeRow: Boolean = true,
     onOpen: (ChatInfoSub) -> Unit,
 ) {
-    val settings by SettingsStore.snapshot.collectAsState()
+    val settings by SettingsStore.snapshot.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
     var showSaveSheet by remember { mutableStateOf(false) }
     val saveMode = settings.saveToPhotos[conversationId] ?: SettingsStore.SAVE_DEFAULT
@@ -217,7 +217,7 @@ fun ChatNotificationsCard(
     isGroup: Boolean,
 ) {
     val scope = rememberCoroutineScope()
-    val settings by SettingsStore.snapshot.collectAsState()
+    val settings by SettingsStore.snapshot.collectAsStateWithLifecycle()
     var prefs by remember(conversationId) { mutableStateOf(ConversationPrefs()) }
     var showMessagesMuteSheet by remember { mutableStateOf(false) }
     var showCallsMuteSheet by remember { mutableStateOf(false) }

@@ -26,7 +26,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -49,6 +48,7 @@ import com.klic.mobile.app.ui.components.KlicSheetOption
 import kotlinx.coroutines.launch
 import androidx.compose.ui.res.stringResource
 import com.klic.mobile.app.R
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
 /**
  * Settings → "Data and Storage" (§8.3): cache scan by category with a segmented bar,
@@ -59,9 +59,9 @@ import com.klic.mobile.app.R
 fun DataStorageContent(vm: KlicViewModel) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val settings by SettingsStore.snapshot.collectAsState()
-    val usage by DataUsage.totals.collectAsState()
-    val stickers by vm.stickers.collectAsState()
+    val settings by SettingsStore.snapshot.collectAsStateWithLifecycle()
+    val usage by DataUsage.totals.collectAsStateWithLifecycle()
+    val stickers by vm.stickers.collectAsStateWithLifecycle()
 
     var categories by remember { mutableStateOf<CacheStats.Categories?>(null) }
     var confirmClear by remember { mutableStateOf(false) }

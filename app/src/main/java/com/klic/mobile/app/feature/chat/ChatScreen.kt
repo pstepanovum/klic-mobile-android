@@ -61,7 +61,6 @@ import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -141,6 +140,7 @@ import kotlinx.coroutines.launch
 import java.io.File
 import androidx.compose.ui.res.stringResource
 import com.klic.mobile.app.R
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -151,11 +151,11 @@ fun ChatScreen(
     onCall: (String) -> Unit,
     onOpenProfile: () -> Unit = {},
 ) {
-    val allMessages by vm.messages.collectAsState()
+    val allMessages by vm.messages.collectAsStateWithLifecycle()
     // Messages hidden locally via the long-press "Hide" action never render (UGC filter);
     // "Reset hidden messages" in Privacy and Security brings them back.
     val hiddenMessageIds = com.klic.mobile.app.data.SettingsStore.snapshot
-        .collectAsState().value.hiddenMessageIds
+        .collectAsStateWithLifecycle().value.hiddenMessageIds
     val messages = remember(allMessages, hiddenMessageIds) {
         if (hiddenMessageIds.isEmpty()) allMessages
         else allMessages.filter { it.id !in hiddenMessageIds }
@@ -164,8 +164,8 @@ fun ChatScreen(
     // enrichment below is an O(1) lookup instead of an O(n) scan on every row that
     // carries a quote (previously O(n²) across the visible window while scrolling).
     val messagesById = remember(allMessages) { allMessages.associateBy { it.id } }
-    val me by vm.currentUser.collectAsState()
-    val presenceMap by vm.presence.collectAsState()
+    val me by vm.currentUser.collectAsStateWithLifecycle()
+    val presenceMap by vm.presence.collectAsStateWithLifecycle()
     // §10.4: composer drafts persist per conversation (restored here, saved on leave).
     var draft by remember(conversation.id) {
         val saved = com.klic.mobile.app.data.SettingsStore.snapshot.value.drafts[conversation.id].orEmpty()
@@ -203,13 +203,13 @@ fun ChatScreen(
     var tempCameraUri by remember { mutableStateOf<Uri?>(null) }
     var pendingMedia by remember(conversation.id) { mutableStateOf<List<PendingMediaDraft>>(emptyList()) }
     // §16.2: mic ↔ round-video mode persists per app session (VM-scoped).
-    val captureMode by vm.captureMode.collectAsState()
+    val captureMode by vm.captureMode.collectAsStateWithLifecycle()
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val stickerSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    val stickers by vm.stickers.collectAsState()
+    val stickers by vm.stickers.collectAsStateWithLifecycle()
 
-    val typingMap by vm.typing.collectAsState()
-    val replyingTo by vm.replyingTo.collectAsState()
+    val typingMap by vm.typing.collectAsStateWithLifecycle()
+    val replyingTo by vm.replyingTo.collectAsStateWithLifecycle()
     // §15.3: starting a reply (swipe or long-press) focuses the composer input.
     val composerFocus = remember { FocusRequester() }
     LaunchedEffect(replyingTo) {
@@ -230,8 +230,8 @@ fun ChatScreen(
     val displaySubtitle = if (peerTyping) stringResource(R.string.chat_typing) else headerSubtitle
 
     // Pagination
-    val isLoadingOlder by vm.isLoadingOlderMessages.collectAsState()
-    val hasMore by vm.hasMoreMessages.collectAsState()
+    val isLoadingOlder by vm.isLoadingOlderMessages.collectAsStateWithLifecycle()
+    val hasMore by vm.hasMoreMessages.collectAsStateWithLifecycle()
 
     // ── §16.2: hold-to-record (audio + round video) with the lock system ──────
     val recorder = remember { VoiceRecorder(context) }
@@ -367,7 +367,7 @@ fun ChatScreen(
     }
 
     // ── §16.4: edit mode — original body in the field, previous draft restored ──
-    val editingMessage by vm.editing.collectAsState()
+    val editingMessage by vm.editing.collectAsStateWithLifecycle()
     var editBackupDraft by remember { mutableStateOf<TextFieldValue?>(null) }
     var shakeTrigger by remember { mutableIntStateOf(0) }
     LaunchedEffect(editingMessage?.id) {
@@ -444,8 +444,8 @@ fun ChatScreen(
     }
 
     // ── §16.3: pins ───────────────────────────────────────────────────────────
-    val pinnedMessages by vm.pinnedMessages.collectAsState()
-    val pinBarHiddenAt by vm.pinBarHiddenAt.collectAsState()
+    val pinnedMessages by vm.pinnedMessages.collectAsStateWithLifecycle()
+    val pinBarHiddenAt by vm.pinBarHiddenAt.collectAsStateWithLifecycle()
     var pinStep by remember(conversation.id) { mutableIntStateOf(0) }
     var pinTarget by remember { mutableStateOf<Message?>(null) }
     var unpinTargetId by remember { mutableStateOf<String?>(null) }
@@ -502,7 +502,7 @@ fun ChatScreen(
     }
 
     // §16.6: when the DM peer is blocked BY ME the composer swaps for a banner.
-    val blockedUsers by vm.blockedUsers.collectAsState()
+    val blockedUsers by vm.blockedUsers.collectAsStateWithLifecycle()
     val peerBlockedByMe = isDirect && peer != null && blockedUsers.any { it.user.id == peer.id }
 
     // §9.7: re-verify the "Ongoing call" banner whenever the app returns to the
@@ -517,7 +517,7 @@ fun ChatScreen(
     }
 
     // Optimistic upload pills for this conversation (§9.1).
-    val allUploadTasks by vm.uploadTasks.collectAsState()
+    val allUploadTasks by vm.uploadTasks.collectAsStateWithLifecycle()
     val uploadsHere = allUploadTasks.filter { it.conversationId == conversation.id }
 
     // Initial open: instant scroll to bottom (no animation).
@@ -579,7 +579,7 @@ fun ChatScreen(
 
     // Jump-to-message (§8.4): search results / starred taps land here. Fetch back
     // through history (bounded) until the target is loaded, then scroll to it.
-    val pendingJump by vm.pendingJumpMessageId.collectAsState()
+    val pendingJump by vm.pendingJumpMessageId.collectAsStateWithLifecycle()
     LaunchedEffect(pendingJump, initialScrollDone) {
         val targetId = pendingJump ?: return@LaunchedEffect
         if (!initialScrollDone) return@LaunchedEffect
@@ -598,8 +598,8 @@ fun ChatScreen(
     // §12.3: chat theme — bubble color becomes `primary` inside, and the scaffold body
     // turns transparent over the background → gradient → pattern layer stack.
     // §14.3 precedence: group theme (server) > per-chat local override > global.
-    val globalTheme by com.klic.mobile.app.data.ChatThemeStore.snapshot.collectAsState()
-    val themeOverrides by com.klic.mobile.app.data.ChatThemeStore.overrides.collectAsState()
+    val globalTheme by com.klic.mobile.app.data.ChatThemeStore.snapshot.collectAsStateWithLifecycle()
+    val themeOverrides by com.klic.mobile.app.data.ChatThemeStore.overrides.collectAsStateWithLifecycle()
     val chatTheme = remember(globalTheme, themeOverrides, conversation.id, conversation.theme) {
         com.klic.mobile.app.data.ChatThemeStore.resolve(
             globalTheme, themeOverrides[conversation.id], conversation.theme,
@@ -773,8 +773,8 @@ fun ChatScreen(
                 .windowInsetsPadding(WindowInsets.navigationBars.union(WindowInsets.ime)),
         ) {
             // "Join call" banner: the conversation has a live call we're not part of yet.
-            val chatCall by vm.chatActiveCall.collectAsState()
-            val ownCall by vm.activeCall.collectAsState()
+            val chatCall by vm.chatActiveCall.collectAsStateWithLifecycle()
+            val ownCall by vm.activeCall.collectAsStateWithLifecycle()
             chatCall?.let { info ->
                 if (info.conversationId == conversation.id && ownCall?.callId != info.callId) {
                     JoinCallBanner(

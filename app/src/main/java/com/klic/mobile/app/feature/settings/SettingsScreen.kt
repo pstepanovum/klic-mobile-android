@@ -31,7 +31,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -60,6 +59,7 @@ import com.klic.mobile.app.ui.theme.KlicIcons
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
 private sealed class SettingsRoute {
     object Main : SettingsRoute()
@@ -95,8 +95,8 @@ fun SettingsScreen(
     /** §14.4: a saved-messages row was tapped — open its conversation at the message. */
     onOpenMessage: (conversationId: String, messageId: String) -> Unit = { _, _ -> },
 ) {
-    val user by vm.currentUser.collectAsState()
-    val themeMode by vm.themeMode.collectAsState()
+    val user by vm.currentUser.collectAsStateWithLifecycle()
+    val themeMode by vm.themeMode.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val versionName = remember {
@@ -649,8 +649,8 @@ fun SettingsScreen(
  */
 @Composable
 private fun EmailRow(vm: KlicViewModel) {
-    val user by vm.currentUser.collectAsState()
-    val busy by vm.emailBusy.collectAsState()
+    val user by vm.currentUser.collectAsStateWithLifecycle()
+    val busy by vm.emailBusy.collectAsStateWithLifecycle()
     val context = LocalContext.current
     var confirmRemove by remember { mutableStateOf(false) }
     val email = user?.email

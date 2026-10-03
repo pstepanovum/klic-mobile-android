@@ -49,7 +49,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -84,6 +83,7 @@ import com.klic.mobile.app.ui.components.rememberStableImageRequest
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
 /**
  * Full-screen media viewer (§10.9). Type detection keys STRICTLY on the attachment
@@ -118,7 +118,7 @@ fun MediaViewerOverlay(
     val isVideo = current.kind == "VIDEO"
 
     // Live star state — follows the message in the open list.
-    val messages by vm.messages.collectAsState()
+    val messages by vm.messages.collectAsStateWithLifecycle()
     val starred = messages.firstOrNull { it.id == message.id }?.starred ?: message.starred
 
     Box(Modifier.fillMaxSize().background(Color.Black)) {
@@ -408,7 +408,7 @@ fun ForwardPickerSheet(
     onDismiss: () -> Unit,
     onSend: (List<String>) -> Unit,
 ) {
-    val conversations by vm.conversations.collectAsState()
+    val conversations by vm.conversations.collectAsStateWithLifecycle()
     var selected by remember { mutableStateOf(setOf<String>()) }
 
     // §10.4: "Frequent" — most-messaged friends' DMs on top, when enabled.

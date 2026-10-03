@@ -40,7 +40,6 @@ import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -68,6 +67,7 @@ import com.klic.mobile.app.ui.components.KlicSheetOption
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
 /** §11.4: server-side username rules, mirrored for instant inline validation. */
 private val USERNAME_REGEX = Regex("^[a-z0-9_.]{3,32}$")
@@ -88,7 +88,7 @@ private fun linkValid(value: String): Boolean =
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun EditProfileScreen(vm: KlicViewModel, onDone: () -> Unit) {
-    val user by vm.currentUser.collectAsState()
+    val user by vm.currentUser.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 

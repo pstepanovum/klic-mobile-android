@@ -53,7 +53,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
@@ -89,6 +88,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import androidx.compose.ui.res.stringResource
 import com.klic.mobile.app.R
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
 @Composable
 fun CallScreen(
@@ -101,22 +101,22 @@ fun CallScreen(
     val scope = rememberCoroutineScope()
     val haptic = LocalHapticFeedback.current
     val manager = vm.callManager
-    val callStatus by vm.callStatus.collectAsState()
-    val micEnabled by manager.micEnabled.collectAsState()
-    val cameraEnabled by manager.cameraEnabled.collectAsState()
-    val screenShareEnabled by manager.screenShareEnabled.collectAsState()
-    val hasHeldCall by manager.hasHeldCall.collectAsState()
-    val speakerOn by manager.speakerOn.collectAsState()
-    val remoteVideo by manager.remoteVideoTrack.collectAsState()
-    val screenShare by manager.screenShareTrack.collectAsState()
-    val localVideo by manager.localVideoTrack.collectAsState()
-    val participants by manager.participants.collectAsState()
-    val localSpeaking by manager.localSpeaking.collectAsState()
-    val frontCamera by manager.frontCamera.collectAsState()
-    val me by vm.currentUser.collectAsState()
-    val peerId by vm.callPeerId.collectAsState()
-    val isGroupCall by vm.callIsGroup.collectAsState()
-    val connectedAt by vm.callConnectedAt.collectAsState()
+    val callStatus by vm.callStatus.collectAsStateWithLifecycle()
+    val micEnabled by manager.micEnabled.collectAsStateWithLifecycle()
+    val cameraEnabled by manager.cameraEnabled.collectAsStateWithLifecycle()
+    val screenShareEnabled by manager.screenShareEnabled.collectAsStateWithLifecycle()
+    val hasHeldCall by manager.hasHeldCall.collectAsStateWithLifecycle()
+    val speakerOn by manager.speakerOn.collectAsStateWithLifecycle()
+    val remoteVideo by manager.remoteVideoTrack.collectAsStateWithLifecycle()
+    val screenShare by manager.screenShareTrack.collectAsStateWithLifecycle()
+    val localVideo by manager.localVideoTrack.collectAsStateWithLifecycle()
+    val participants by manager.participants.collectAsStateWithLifecycle()
+    val localSpeaking by manager.localSpeaking.collectAsStateWithLifecycle()
+    val frontCamera by manager.frontCamera.collectAsStateWithLifecycle()
+    val me by vm.currentUser.collectAsStateWithLifecycle()
+    val peerId by vm.callPeerId.collectAsStateWithLifecycle()
+    val isGroupCall by vm.callIsGroup.collectAsStateWithLifecycle()
+    val connectedAt by vm.callConnectedAt.collectAsStateWithLifecycle()
     val isVideo = call.kind == "VIDEO"
     // Someone sharing their screen takes over as the big tile — camera feeds become secondary,
     // so the equal grid steps aside in favour of the fullscreen screen-share presentation.

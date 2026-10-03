@@ -30,7 +30,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Alignment
@@ -43,6 +42,7 @@ import com.klic.mobile.app.MainActivity
 import com.klic.mobile.app.ui.theme.KlicIcons
 import com.klic.mobile.app.ui.theme.KlicTheme
 import kotlinx.coroutines.launch
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
 class IncomingCallActivity : ComponentActivity() {
 
@@ -103,8 +103,8 @@ class IncomingCallActivity : ComponentActivity() {
                 invite.value?.let { current ->
                     // Already in (or parking) a call → this is call-waiting: answering holds the
                     // current call rather than ending it (the ViewModel does the hold on accept).
-                    val inCall by callManager.isConnected.collectAsState()
-                    val hasHeld by callManager.hasHeldCall.collectAsState()
+                    val inCall by callManager.isConnected.collectAsStateWithLifecycle()
+                    val hasHeld by callManager.hasHeldCall.collectAsStateWithLifecycle()
                     IncomingCallScreen(
                         callerName = current.displayLabel,
                         isVideo = current.kind == "VIDEO",

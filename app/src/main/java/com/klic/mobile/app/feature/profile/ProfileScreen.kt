@@ -29,7 +29,6 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -65,6 +64,7 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -76,12 +76,12 @@ fun ProfileScreen(
     onMessage: (() -> Unit)? = null,
     onOpenGroup: ((String) -> Unit)? = null,
 ) {
-    val conversations by vm.conversations.collectAsState()
+    val conversations by vm.conversations.collectAsStateWithLifecycle()
     val member = conversations.firstOrNull { it.id == conversationId }?.members?.firstOrNull()
-    val presenceMap by vm.presence.collectAsState()
-    val me by vm.currentUser.collectAsState()
+    val presenceMap by vm.presence.collectAsStateWithLifecycle()
+    val me by vm.currentUser.collectAsStateWithLifecycle()
     // §16.6: friendship drives the Remove Friend ↔ Add friend fallback.
-    val friends by vm.friends.collectAsState()
+    val friends by vm.friends.collectAsStateWithLifecycle()
     var profile by remember { mutableStateOf<UserProfile?>(null) }
     var sub by remember { mutableStateOf<ChatInfoSub?>(null) }
 

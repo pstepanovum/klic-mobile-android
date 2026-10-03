@@ -24,7 +24,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -50,6 +49,7 @@ import com.klic.mobile.app.ui.theme.KlicIcons
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
 /**
  * Chat theme page (§12.3): live mini-chat preview, pattern grid (default = 1),
@@ -59,7 +59,7 @@ import kotlinx.coroutines.launch
  */
 @Composable
 fun ChatThemeContent() {
-    val theme by ChatThemeStore.snapshot.collectAsState()
+    val theme by ChatThemeStore.snapshot.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
     ChatThemeEditor(
         theme = theme,
@@ -77,8 +77,8 @@ fun ChatThemeContent() {
  */
 @Composable
 fun ConversationThemeContent(conversationId: String) {
-    val global by ChatThemeStore.snapshot.collectAsState()
-    val overrides by ChatThemeStore.overrides.collectAsState()
+    val global by ChatThemeStore.snapshot.collectAsStateWithLifecycle()
+    val overrides by ChatThemeStore.overrides.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
     val override = overrides[conversationId]
     ChatThemeEditor(
@@ -97,7 +97,7 @@ fun ConversationThemeContent(conversationId: String) {
  */
 @Composable
 fun GroupThemeContent(vm: KlicViewModel, conversationId: String) {
-    val conversations by vm.conversations.collectAsState()
+    val conversations by vm.conversations.collectAsStateWithLifecycle()
     val serverTheme = conversations.firstOrNull { it.id == conversationId }?.theme
     val scope = rememberCoroutineScope()
     // Local draft for instant feedback; the PATCH is debounced so slider drags

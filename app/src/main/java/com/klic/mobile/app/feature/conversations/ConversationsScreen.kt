@@ -41,7 +41,6 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -72,12 +71,13 @@ import com.klic.mobile.app.ui.theme.KlicIcons
 import kotlinx.coroutines.launch
 import androidx.compose.ui.res.stringResource
 import com.klic.mobile.app.R
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ConversationsScreen(vm: KlicViewModel, onOpenChat: (Conversation) -> Unit) {
-    val conversations by vm.conversations.collectAsState()
-    val presenceMap by vm.presence.collectAsState()
+    val conversations by vm.conversations.collectAsStateWithLifecycle()
+    val presenceMap by vm.presence.collectAsStateWithLifecycle()
     var searchText by remember { mutableStateOf("") }
     var showNewMessageSheet by remember { mutableStateOf(false) }
     // §18.4: server-side message search (grouped by conversation), debounced.
@@ -556,8 +556,8 @@ private fun NewMessageSheet(
     onOpenChat: (Conversation) -> Unit,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    val friends by vm.friends.collectAsState()
-    val friendStatus by vm.friendStatus.collectAsState()
+    val friends by vm.friends.collectAsStateWithLifecycle()
+    val friendStatus by vm.friendStatus.collectAsStateWithLifecycle()
 
     var screen by remember { mutableStateOf(NewMsgScreen.MAIN) }
     var searchText by remember { mutableStateOf("") }

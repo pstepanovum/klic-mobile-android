@@ -31,7 +31,6 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
@@ -96,6 +95,7 @@ import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import androidx.compose.ui.res.stringResource
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
 // MARK: - Message bubble
 
@@ -528,7 +528,7 @@ private fun BentoMediaGrid(
         // Coil-cached images always render (no network needed).
         val context = LocalContext.current
         val isVideo = att.kind == "VIDEO"
-        val settings by SettingsStore.snapshot.collectAsState()
+        val settings by SettingsStore.snapshot.collectAsStateWithLifecycle()
         var manuallyRequested by remember(att.id) { mutableStateOf(false) }
         // §9.9: the disk cache is keyed on the presign-stable URL. openSnapshot does
         // filesystem I/O, so it runs off the composition thread; the placeholder shows

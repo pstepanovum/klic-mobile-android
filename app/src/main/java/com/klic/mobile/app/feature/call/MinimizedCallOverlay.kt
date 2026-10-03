@@ -25,7 +25,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -49,6 +48,7 @@ import com.klic.mobile.app.calling.LiveKitVideo
 import com.klic.mobile.app.feature.KlicViewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
 private val CallAccentGreen = Color(0xFF10B981)
 
@@ -60,15 +60,15 @@ private val CallAccentGreen = Color(0xFF10B981)
  */
 @Composable
 fun MinimizedCallOverlay(vm: KlicViewModel, onRestore: () -> Unit) {
-    val call by vm.activeCall.collectAsState()
-    val minimized by vm.callMinimized.collectAsState()
+    val call by vm.activeCall.collectAsStateWithLifecycle()
+    val minimized by vm.callMinimized.collectAsStateWithLifecycle()
     if (call == null || !minimized) return
 
     val manager = vm.callManager
-    val remoteVideo by manager.remoteVideoTrack.collectAsState()
-    val peerName by vm.callPeerName.collectAsState()
-    val connectedAt by vm.callConnectedAt.collectAsState()
-    val callStatus by vm.callStatus.collectAsState()
+    val remoteVideo by manager.remoteVideoTrack.collectAsStateWithLifecycle()
+    val peerName by vm.callPeerName.collectAsStateWithLifecycle()
+    val connectedAt by vm.callConnectedAt.collectAsStateWithLifecycle()
+    val callStatus by vm.callStatus.collectAsStateWithLifecycle()
 
     // §7.4: while the whole app is compacted into the system PiP window, this minimized
     // call renders ONLY the remote feed, full-bleed — no widget, no app chrome behind it.

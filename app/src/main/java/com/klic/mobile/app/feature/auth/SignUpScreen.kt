@@ -19,7 +19,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -43,6 +42,7 @@ import com.klic.mobile.app.ui.components.KlicCheckbox
 import com.klic.mobile.app.ui.components.PillButton
 import com.klic.mobile.app.ui.theme.TikTokSans
 import com.klic.mobile.app.ui.theme.TikTokSansExpanded
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
 /**
  * Sign Up page — same circle-container language as Login, but the circle sits higher since
@@ -52,7 +52,7 @@ import com.klic.mobile.app.ui.theme.TikTokSansExpanded
 @Composable
 fun SignUpScreen(vm: KlicViewModel, onHaveAccount: () -> Unit) {
     val isDark = MaterialTheme.colorScheme.background.luminance() < 0.5f
-    val error by vm.error.collectAsState()
+    val error by vm.error.collectAsStateWithLifecycle()
     val focusManager = LocalFocusManager.current
 
     var username by remember { mutableStateOf("") }

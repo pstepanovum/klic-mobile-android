@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -31,6 +30,7 @@ import com.klic.mobile.app.feature.KlicViewModel
 import com.klic.mobile.app.ui.components.PillButton
 import com.klic.mobile.app.ui.theme.TikTokSans
 import com.klic.mobile.app.ui.theme.TikTokSansExpanded
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
 /**
  * §18.2 forgot-password page. The user enters their recovery email; we fire Firebase's
@@ -42,7 +42,7 @@ import com.klic.mobile.app.ui.theme.TikTokSansExpanded
 fun ForgotPasswordScreen(vm: KlicViewModel, onBack: () -> Unit) {
     val isDark = MaterialTheme.colorScheme.background.luminance() < 0.5f
     val focusManager = LocalFocusManager.current
-    val busy by vm.recoveryBusy.collectAsState()
+    val busy by vm.recoveryBusy.collectAsStateWithLifecycle()
 
     var email by remember { mutableStateOf("") }
     var sent by remember { mutableStateOf(false) }

@@ -21,7 +21,6 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -43,6 +42,7 @@ import com.klic.mobile.app.R
 import com.klic.mobile.app.feature.KlicViewModel
 import com.klic.mobile.app.ui.components.AvatarView
 import java.io.File
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
 /**
  * Settings → QR Code (§10.7/§13.8): a card with the user's avatar/name and a locally
@@ -52,8 +52,8 @@ import java.io.File
 @Composable
 fun QrCodeContent(vm: KlicViewModel) {
     val context = LocalContext.current
-    val me by vm.currentUser.collectAsState()
-    val friendStatus by vm.friendStatus.collectAsState()
+    val me by vm.currentUser.collectAsStateWithLifecycle()
+    val friendStatus by vm.friendStatus.collectAsStateWithLifecycle()
     val username = me?.username.orEmpty()
     // §13.8: the friend-link web surface — /u/<username> on klic.pstepanov.dev.
     val link = "https://klic.pstepanov.dev/u/$username"

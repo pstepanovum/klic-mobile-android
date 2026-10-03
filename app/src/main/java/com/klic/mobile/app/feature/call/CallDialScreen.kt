@@ -19,7 +19,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -42,11 +41,12 @@ import java.time.Duration
 import java.time.Instant
 import androidx.compose.ui.res.stringResource
 import com.klic.mobile.app.R
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
 @Composable
 fun CallDialScreen(vm: KlicViewModel) {
-    val friends by vm.friends.collectAsState()
-    val recents by vm.recentCalls.collectAsState()
+    val friends by vm.friends.collectAsStateWithLifecycle()
+    val recents by vm.recentCalls.collectAsStateWithLifecycle()
     var searchText by remember { mutableStateOf("") }
 
     LaunchedEffect(Unit) { vm.loadFriends(); vm.loadRecentCalls() }
@@ -138,7 +138,7 @@ private fun FriendCallRow(friend: User, onAudioCall: () -> Unit, onVideoCall: ()
  */
 @Composable
 fun RecentCallsList(vm: KlicViewModel) {
-    val recents by vm.recentCalls.collectAsState()
+    val recents by vm.recentCalls.collectAsStateWithLifecycle()
     LaunchedEffect(Unit) { vm.loadRecentCalls() }
     Column(Modifier.fillMaxWidth()) {
         if (recents.isEmpty()) {
